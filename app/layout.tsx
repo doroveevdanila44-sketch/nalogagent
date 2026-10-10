@@ -27,7 +27,8 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
   },
-  appleWebApp: { capable: true, title: 'НДС', statusBarStyle: 'default' },
+  // black-translucent: страница рисуется под часами, цвет полосы задают шапка и экраны входа
+  appleWebApp: { capable: true, title: 'НДС', statusBarStyle: 'black-translucent' },
   other: { 'apple-mobile-web-app-capable': 'yes', 'mobile-web-app-capable': 'yes' },
   formatDetection: { telephone: false },
 };

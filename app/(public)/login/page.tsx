@@ -1,8 +1,12 @@
+import type { Viewport } from 'next';
 import { redirect } from 'next/navigation';
 import { LoginFlow } from '@/components/auth/LoginFlow';
 import { getServerAuth } from '@/lib/auth/server';
 
 export const dynamic = 'force-dynamic';
+
+/** Вход и PIN коричневые целиком: полоса под часами с первого кадра совпадает с экраном */
+export const viewport: Viewport = { themeColor: '#594C3D' };
 
 const ALLOWED_NEXT = new Set(['/agent', '/dashboard']);
 

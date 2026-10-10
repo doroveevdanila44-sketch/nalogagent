@@ -6,6 +6,7 @@ import { AUTH } from '@/lib/auth/config';
 import { api, ApiError, setCsrf } from '@/lib/client/api';
 import { Wordmark } from '@/components/Wordmark';
 import { useHydrated } from '@/lib/client/hydrated';
+import { THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { PinPad, type PinResult } from './PinPad';
 
 type Step = 'password' | 'pin' | 'setup' | 'confirm';
@@ -20,6 +21,8 @@ const BLOCKED_NOTICE = 'PIN заблокирован. Войдите по пар
  */
 export function LoginFlow({ initial, next, notice }: { initial: Initial; next: string; notice?: string }) {
   const router = useRouter();
+  // верхняя полоса под часами коричневая на пароле и на всех шагах PIN
+  useThemeColor(THEME_AUTH);
   const [step, setStep] = useState<Step>(
     initial === 'locked' ? 'pin' : initial === 'needPinSetup' ? 'setup' : 'password',
   );

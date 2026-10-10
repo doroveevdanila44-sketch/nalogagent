@@ -546,7 +546,9 @@ test('Карточки группы: четыре отдельные, раскл
   await expect(page.locator('.sum-card').nth(1)).toContainText(/можно сэкономить .* в год|ставки уже лучшие/);
 });
 
-test('Карточки группы нажимаются: расшифровка по юрлицам и переход к карточкам юрлиц', async ({ page }) => {
+test('Карточки группы нажимаются: расшифровка под карточкой, одна раскрыта, переход к карточкам юрлиц', async ({
+  page,
+}) => {
   await firstLogin(page, PIN);
   await page.setViewportSize({ width: 1440, height: 800 });
   await page.getByRole('link', { name: 'Дашборд' }).click();
@@ -556,21 +558,26 @@ test('Карточки группы нажимаются: расшифровка
   await expect(profit).toHaveAttribute('aria-expanded', 'false');
   await profit.click();
   await expect(profit).toHaveAttribute('aria-expanded', 'true');
-  const detail = page.locator('#sum-detail');
+  const detail = page.locator('#sum-detail-profit');
   await expect(detail).toBeVisible();
   await expect(detail.locator('li')).toHaveCount(5);
   await expect(detail).toContainText('ООО «Эпсилон»');
   await expect(detail).toContainText('ОСНО, 25%');
 
+  // открыли другую: прежняя закрылась, раскрыта одна
   await page.locator('.sum-card').nth(0).click();
-  await expect(detail.locator('li')).toHaveCount(5);
-  await expect(detail).toContainText('Выручка с начала года по юрлицам');
-  await page.locator('.sum-card').nth(0).click();
+  const revenue = page.locator('#sum-detail-revenue');
+  await expect(revenue.locator('li')).toHaveCount(5);
+  await expect(revenue).toContainText('Выручка с начала года по юрлицам');
+  await expect(profit).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.sum-item.open')).toHaveCount(1);
   await expect(detail).toBeHidden();
+  await page.locator('.sum-card').nth(0).click();
+  await expect(revenue).toBeHidden();
 
   await profit.click();
   const before = await page.evaluate(() => window.scrollY);
-  await page.getByRole('button', { name: 'К карточкам юрлиц' }).click();
+  await detail.getByRole('button', { name: 'К карточкам юрлиц' }).click();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before + 100);
 });
 

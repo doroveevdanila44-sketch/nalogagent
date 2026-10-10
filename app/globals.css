@@ -16,6 +16,7 @@
   --color-cream: #f6ebdd; /* текст на баннере */
   --color-sand: #e9d9c3; /* невыбранная вкладка */
   --color-sand-soft: #e7d2b5; /* подписи на баннере */
+  --color-tea-soft: #695c4d; /* строки расшифровки внутри баннера: на тон светлее Afternoon Tea */
 
   --color-good: #1d7a4b;
   --color-good-soft: #e3f3ea;
@@ -36,17 +37,24 @@
   --t: 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* раскрытие карточек и предупреждений: 450 мс, плавное замедление в конце */
+  --acc: 450ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
+  /* Фон html янтарный: под часами и при оттягивании сверху виден цвет шапки, а не белое. Страница
+     (body) белая и занимает всю высоту окна. Экраны входа ниже перекрашивают html в коричневый. */
   html {
-    background: #fff;
+    background: var(--color-amber);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    overscroll-behavior-y: none;
   }
 
   body {
     margin: 0;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
     background: #fff;
     color: var(--color-river);
     font-family: var(--font-sans);
@@ -387,6 +395,8 @@
     grid-template-columns: 1fr;
     gap: 12px;
     margin-top: 14px;
+    /* раскрытая расшифровка растягивает только свою ячейку, соседи по ряду не вытягиваются */
+    align-items: start;
   }
   @media (min-width: 640px) {
     .sum-cards {
@@ -403,6 +413,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    width: 100%;
     min-width: 0;
     padding: 16px;
     border: 0;
@@ -420,9 +431,12 @@
     padding-right: 24px;
   }
   @media (min-width: 1024px) {
-    /* подпись может занять две строки: числа в ряду карточек стоят на одной линии */
+    /* подпись и пояснение могут занять две строки: числа и высота карточек в ряду одинаковы */
     .sum-label {
-      min-height: 2.7em;
+      min-height: 2.9em; /* две строки при line-height 1.45 */
+    }
+    .sum-sub {
+      min-height: 2.7em; /* две строки при line-height 1.35 */
     }
   }
   .sum-value {
@@ -450,47 +464,100 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    transition: transform var(--t);
+    transition: transform var(--acc);
   }
-  .sum-card.open {
-    box-shadow: 0 0 0 2px var(--color-amber);
-  }
-  .sum-card.open .sum-chev {
+  .sum-item.open .sum-chev {
     transform: rotate(180deg);
   }
   .sum-card:focus-visible {
     outline: 2px solid var(--color-amber);
     outline-offset: 2px;
   }
-  .sum-detail {
-    margin-top: 12px;
-    padding: 16px;
-    border: 1px solid var(--color-line);
+
+  /* Карточка и её расшифровка в одной ячейке списка. Раскрытая часть продолжает карточку вниз, поэтому
+     нижние углы карточки при открытии становятся прямыми, а обводка охватывает обе части. */
+  .sum-item {
+    min-width: 0;
     border-radius: 16px;
-    background: var(--color-paper);
+  }
+  .sum-item.open {
+    box-shadow: 0 0 0 2px var(--color-amber);
+  }
+  .sum-card {
+    transition:
+      border-radius var(--acc),
+      background-color var(--t),
+      color var(--t);
+  }
+  .sum-item.open > .sum-card {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* Плавное раскрытие: высота через grid-template-rows 0fr к 1fr, содержимое лёгко проявляется и
+     сдвигается на 8 px снизу вверх. Свёрнутое содержимое неактивно (inert) и недоступно с клавиатуры. */
+  .acc {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--acc);
+  }
+  .acc[data-open='true'] {
+    grid-template-rows: 1fr;
+  }
+  .acc-in {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .acc-body {
+    opacity: 0;
+    transform: translateY(8px);
+    transition:
+      opacity var(--acc),
+      transform var(--acc);
+  }
+  .acc[data-open='true'] .acc-body {
+    opacity: 1;
+    transform: none;
+  }
+
+  .sum-detail {
+    padding: 4px 14px 14px;
+    border-radius: 0 0 16px 16px;
+    background: var(--color-tea);
+    color: var(--color-cream);
   }
   .sum-detail h3 {
+    padding: 4px 2px 0;
     font-size: 15px;
+    color: var(--color-cream);
   }
   .sum-detail ul {
     list-style: none;
     margin: 10px 0 0;
     padding: 0;
+    display: grid;
+    gap: 6px;
   }
+  /* В узкой ячейке (четыре карточки в ряд) сумма переходит под название, а не сжимает его */
   .sum-detail li {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 0;
-    border-top: 1px solid var(--color-line);
+    gap: 4px 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--color-tea-soft);
+    color: var(--color-cream);
   }
   .sum-detail li b {
+    margin-left: auto;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
   .sum-row-name {
     display: flex;
+    flex: 1 1 120px;
     align-items: center;
     gap: 10px;
     min-width: 0;
@@ -500,47 +567,115 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
-    border: 1px solid rgb(19 25 31 / 0.3);
+    border: 1px solid rgb(246 235 221 / 0.55);
   }
   .sum-row-name small {
     display: block;
     font-size: 12px;
-    color: var(--color-muted);
+    color: var(--color-cream);
   }
   .sum-note {
     margin-top: 10px;
+    padding-inline: 2px;
     font-size: 13px;
-    color: var(--color-muted);
+    color: var(--color-cream);
   }
   .sum-more {
-    margin-top: 6px;
-    padding-left: 0;
+    min-height: 44px;
+    margin-top: 4px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--color-cream);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .sum-more:focus-visible {
+    outline-offset: -2px;
   }
 
+  /* Предупреждения: в списке заголовок, метка и стрелка, пояснение раскрывается по строке. Список
+     выступает на 8 px за поля, чтобы фон открытой строки не прилегал к тексту вплотную. */
   .warns {
     list-style: none;
-    margin: 0;
+    margin: 0 -8px;
     padding: 0;
     border-top: 1px solid var(--color-river);
   }
-  .warn {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 4px 16px;
-    padding: 14px 0;
+  li.warn {
     border-bottom: 1px solid var(--color-line);
+    transition: background-color var(--acc);
   }
-  .warn p {
-    grid-column: 1;
+  li.warn.open {
+    background: var(--color-beige);
+  }
+  /* Телефон: заголовок на всю ширину до стрелки (одна-две строки без обрезки), метка под ним.
+     От 640 px метка стоит справа от заголовка. */
+  .warn-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    grid-template-areas:
+      'title chev'
+      'pill chev';
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 6px;
+    width: 100%;
+    min-height: 44px;
+    padding: 12px 8px;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+  }
+  .warn-head:focus-visible {
+    outline-offset: -2px;
+  }
+  .warn-head .warn-title {
+    grid-area: title;
+  }
+  .warn-head .pill {
+    grid-area: pill;
+    justify-self: start;
+  }
+  .warn-title {
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  @media (min-width: 640px) {
+    .warn-head {
+      grid-template-columns: minmax(0, 1fr) auto 20px;
+      grid-template-areas: 'title pill chev';
+    }
+    .warn-head .pill {
+      justify-self: end;
+    }
+  }
+  .warn-chev {
+    grid-area: chev;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: var(--color-muted);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--acc);
+  }
+  li.warn.open .warn-chev {
+    transform: rotate(180deg);
+  }
+  .warn-text {
+    padding: 0 8px 14px;
     color: var(--color-muted);
     font-size: 14px;
     max-width: 70ch;
   }
   .pill {
-    align-self: start;
-    justify-self: end;
-    grid-row: 1;
-    grid-column: 2;
+    align-self: center;
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.04em;
@@ -619,6 +754,7 @@
     );
   }
   .col {
+    position: relative;
     display: flex;
     flex-direction: column-reverse;
     height: 100%;
@@ -626,6 +762,30 @@
     scroll-snap-align: center;
     /* перспектива нужна, чтобы смещение сегмента по оси z давало заметное приближение */
     perspective: 420px;
+    transform-origin: 50% 100%;
+    transition:
+      opacity 300ms ease,
+      transform 300ms cubic-bezier(0.2, 0.7, 0.3, 1),
+      filter 300ms ease;
+  }
+  /* Пустая область над сегментами на всю высоту столбца: нажатие выделяет весь столбец */
+  .col-hit {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+  }
+  /* Выделен весь столбец: остальные приглушены до 45 процентов, выбранный плавно увеличен, а его
+     сегменты показаны в полную силу (у прогнозных штриховка остаётся) */
+  .plot[data-col='true'] .col:not(.sel) {
+    opacity: 0.45;
+  }
+  .col.sel {
+    z-index: 3;
+    transform: scale(1.1, 1.03);
+    filter: drop-shadow(0 6px 10px rgb(19 25 31 / 0.3));
+  }
+  .col.sel .seg {
+    opacity: 1;
   }
   .seg {
     position: relative;
@@ -670,15 +830,48 @@
     display: grid;
     grid-template-columns: repeat(12, minmax(40px, 1fr));
     gap: 4px;
-    margin-top: 6px;
+    margin-top: 4px;
     font-size: 11px;
     color: var(--color-muted);
     text-align: center;
     white-space: nowrap;
   }
+  /* Подпись месяца это кнопка: нажатие выделяет весь столбец */
+  .mon-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 4px 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    font-size: 11px;
+    transition:
+      background-color var(--t),
+      color var(--t);
+  }
+  @media (pointer: coarse) {
+    .mon-btn {
+      min-height: 40px;
+    }
+  }
+  .mon-btn:hover {
+    background: var(--color-beige);
+    color: var(--color-river);
+  }
+  .mon-btn[aria-pressed='true'] {
+    background: var(--color-river);
+    color: #fff;
+  }
   .mon .now {
     color: var(--color-river);
     font-weight: 600;
+  }
+  .mon-btn[aria-pressed='true'] .now {
+    color: #fff;
   }
   /* Текущий месяц отмечен точкой над подписью, обводки столбца нет */
   .mon .now::before {
@@ -689,6 +882,9 @@
     margin: 0 auto 2px;
     border-radius: 50%;
     background: var(--color-river);
+  }
+  .mon-btn[aria-pressed='true'] .now::before {
+    background: #fff;
   }
   .legend {
     display: grid;
@@ -762,6 +958,51 @@
   .seg-hint {
     font-size: 13px;
     color: var(--color-muted);
+  }
+  /* Выбран весь столбец: месяц, итог и разбивка по юрлицам */
+  .seg-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+  .seg-col-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .seg-split {
+    list-style: none;
+    margin: 0;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--color-line);
+    display: grid;
+    gap: 6px;
+  }
+  .seg-split li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+  }
+  .seg-split b {
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .seg-split-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .seg-split-name i {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgb(19 25 31 / 0.3);
   }
 
   .ents {
@@ -1244,6 +1485,18 @@
     background: var(--color-tea);
     color: var(--a-ink);
   }
+  /* Область под часами и батареей закрашена тем же коричневым, что экран: песочный не мелькает,
+     даже если страница прокручена или фон html ещё не сменился */
+  .auth-screen::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-top);
+    background: var(--color-tea);
+    pointer-events: none;
+  }
   .auth-overlay {
     position: fixed;
     inset: 0;
@@ -1642,7 +1895,7 @@
   .btn,
   .tab,
   .icon-btn,
-  .sum-card,
+  .sum-item,
   .sug button,
   .rate,
   .composer button,
@@ -1691,14 +1944,18 @@
     transform: translateY(-2px);
     box-shadow: 0 8px 18px rgb(19 25 31 / 0.14);
   }
-  .sum-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 22px rgb(19 25 31 / 0.22);
+  /* Подъём при наведении только там, где есть мышь: на телефоне после касания :hover залипает, и
+     раскрытая карточка вместе с расшифровкой оставалась бы приподнятой */
+  @media (hover: hover) {
+    .sum-item:has(> .sum-card:hover) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px rgb(19 25 31 / 0.22);
+    }
+    .sum-item.open:has(> .sum-card:hover) {
+      box-shadow: 0 0 0 2px var(--color-amber), 0 10px 22px rgb(19 25 31 / 0.22);
+    }
   }
-  .sum-card.open:hover {
-    box-shadow: 0 0 0 2px var(--color-amber), 0 10px 22px rgb(19 25 31 / 0.22);
-  }
-  .sum-card:active {
+  .sum-item:has(> .sum-card:active) {
     transform: scale(0.99);
   }
   .rate:active {
@@ -1736,7 +1993,8 @@
     .btn:hover,
     .sug button:hover,
     .rate:hover,
-    .sum-card:hover,
+    .sum-item:has(> .sum-card:hover),
+    .col.sel,
     .composer button:hover,
     .tab:active,
     .key.pressed,

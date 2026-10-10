@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { watchKeyboard } from '@/lib/client/keyboard';
+import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
@@ -27,6 +28,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
+  // Полоса под часами: коричневая на экране блокировки и смены PIN, янтарная на остальных
+  useThemeColor(locked || sheet === 'changePin' ? THEME_AUTH : THEME_APP);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
