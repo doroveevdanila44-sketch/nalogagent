@@ -235,7 +235,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
       <div hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
         <header className="top" ref={headerRef}>
           <div className="wrap top-in">
-            <span />
             <Wordmark />
             <div className="top-actions">
               <button

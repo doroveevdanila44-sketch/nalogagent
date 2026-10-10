@@ -18,9 +18,9 @@ test('Дашборд: четыре юрлица, три ставки, живые
   await toDashboard(page);
 
   await expect(page.getByText('5 юрлиц · УСН и ОСНО')).toBeVisible();
-  // 1280 px: один широкий баннер группы с четырьмя показателями, отдельных баннеров нет
-  await expect(page.locator('.band .metric')).toHaveCount(4);
-  await expect(page.locator('.sum-card')).toHaveCount(0);
+  // четыре отдельных баннера группы на всех ширинах, общего баннера нет
+  await expect(page.locator('.sum-card')).toHaveCount(4);
+  await expect(page.locator('.band')).toHaveCount(0);
   await expect(page.locator('article.ent')).toHaveCount(5);
   await expect(page.locator('.plot .col')).toHaveCount(12);
   await expect(page.getByText(/Срочных: \d+, всего: \d+/)).toBeVisible();
@@ -43,8 +43,7 @@ test('Дашборд: четыре юрлица, три ставки, живые
   }
 
   // живая выручка меняется раз в секунду
-  // 1280 px: показатель в широком баннере группы
-  const metric = page.locator('.band .metric strong').first();
+  const metric = page.locator('.sum-value').first();
   const first = await metric.innerText();
   await page.waitForTimeout(2500);
   expect(await metric.innerText()).not.toBe(first);

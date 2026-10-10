@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useMediaQuery } from '@/lib/client/media';
 import { entityColor } from '@/lib/theme';
 import {
   dateRu,
@@ -25,13 +26,58 @@ interface Props {
 }
 
 /**
- * Четыре отдельные карточки группы. Нажатие раскрывает расшифровку по юрлицам прямо под нажатой
- * карточкой, как часть списка: остальные карточки плавно съезжают вниз. Раскрыта может быть одна,
- * при открытии другой прежняя закрывается одновременно. Из расшифровки можно перейти к карточкам
- * юрлиц. Живые значения идут из LiveModel.
+ * Общая панель расшифровки под рядом карточек (компьютер, от 1024 px). Высота плавно растёт и
+ * сворачивается за 450 мс: панель измеряет содержимое и ставит его высоту, поэтому при переходе от
+ * одной карточки к другой высота тоже меняется плавно, а новое содержимое мягко проявляется.
+ * Пока панель закрывается, показывается последнее содержимое: оно обрезается высотой.
+ */
+function SumPanel({ openId, render }: { openId: CardId | null; render: (id: CardId) => ReactNode }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  const [shown, setShown] = useState<CardId | null>(openId);
+  if (openId !== null && openId !== shown) setShown(openId);
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => setHeight(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shown]);
+
+  return (
+    <div
+      id="sum-panel"
+      className="sum-panel"
+      role="region"
+      aria-labelledby={shown ? `sum-btn-${shown}` : undefined}
+      inert={openId === null}
+      style={{ height: openId === null ? 0 : height }}
+    >
+      {shown ? (
+        <div key={shown} ref={bodyRef} className="sum-panel-in">
+          {render(shown)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Четыре отдельные карточки группы на всех ширинах: на телефоне колонкой, на планшете два на два,
+ * от 1024 px в один ряд. Над ними строка «Группа на <дата>» и «5 юрлиц · режимы» без фона.
+ *
+ * Раскрытие: на телефоне и планшете расшифровка по юрлицам раскрывается по месту, прямо под нажатой
+ * карточкой (остальные съезжают вниз); на компьютере одной широкой панелью под рядом карточек.
+ * Раскрыта одна, повторное нажатие закрывает, при нажатии на другую открывается она. Из расшифровки
+ * можно перейти к карточкам юрлиц. Живые значения идут из LiveModel.
  */
 export function GroupSummary({ moment, input, live, stat }: Props) {
   const [open, setOpen] = useState<CardId | null>(null);
+  const wide = useMediaQuery('(min-width: 1024px)');
   const { entities } = input;
 
   const toggle = useCallback((id: CardId) => setOpen((cur) => (cur === id ? null : id)), []);
@@ -108,18 +154,45 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
       .join('; ') +
     '. Суммы ориентировочные, проверьте с бухгалтером.';
 
-  /** Карточка и её расшифровка в одной ячейке списка */
-  const item = ({ id, label, value, sub }: { id: CardId; label: string; value: string; sub: string }) => {
-    const isOpen = open === id;
+  /** Содержимое расшифровки: общее для панели под рядом и для раскрытия по месту */
+  const renderDetail = (id: CardId, inCell: boolean) => {
     const d = detail[id];
     return (
-      <div key={id} className={`sum-item ${isOpen ? 'open' : ''}`}>
+      <div className={inCell ? 'sum-detail acc-body' : 'sum-detail'}>
+        <h3>{d.title}</h3>
+        <ul>
+          {d.rows.map((r) => (
+            <li key={r.id}>
+              <span className="sum-row-name">
+                <i style={{ background: r.color }} />
+                <span>
+                  {r.name}
+                  <small>{r.tag}</small>
+                </span>
+              </span>
+              <b>{r.value}</b>
+            </li>
+          ))}
+        </ul>
+        {id === 'profit' && <p className="sum-note">{profitNote}</p>}
+        <button type="button" className="sum-more" onClick={scrollToEntities}>
+          К карточкам юрлиц
+        </button>
+      </div>
+    );
+  };
+
+  /** Карточка; на телефоне и планшете вместе с расшифровкой в одной ячейке списка */
+  const item = ({ id, label, value, sub }: { id: CardId; label: string; value: string; sub: string }) => {
+    const isOpen = open === id;
+    return (
+      <div key={id} className={`sum-item ${!wide && isOpen ? 'open' : ''}`}>
         <button
           type="button"
           id={`sum-btn-${id}`}
           className={`sum-card ${isOpen ? 'open' : ''}`}
           aria-expanded={isOpen}
-          aria-controls={`sum-detail-${id}`}
+          aria-controls={wide ? 'sum-panel' : `sum-detail-${id}`}
           onClick={() => toggle(id)}
         >
           <span className="sum-label">{label}</span>
@@ -129,37 +202,19 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
             <path d="m7 10 5 5 5-5" />
           </svg>
         </button>
-        <div
-          id={`sum-detail-${id}`}
-          className="acc"
-          data-open={isOpen}
-          role="region"
-          aria-labelledby={`sum-btn-${id}`}
-        >
-          <div className="acc-in" inert={!isOpen}>
-            <div className="sum-detail acc-body">
-              <h3>{d.title}</h3>
-              <ul>
-                {d.rows.map((r) => (
-                  <li key={r.id}>
-                    <span className="sum-row-name">
-                      <i style={{ background: r.color }} />
-                      <span>
-                        {r.name}
-                        <small>{r.tag}</small>
-                      </span>
-                    </span>
-                    <b>{r.value}</b>
-                  </li>
-                ))}
-              </ul>
-              {id === 'profit' && <p className="sum-note">{profitNote}</p>}
-              <button type="button" className="sum-more" onClick={scrollToEntities}>
-                К карточкам юрлиц
-              </button>
+        {wide ? null : (
+          <div
+            id={`sum-detail-${id}`}
+            className="acc"
+            data-open={isOpen}
+            role="region"
+            aria-labelledby={`sum-btn-${id}`}
+          >
+            <div className="acc-in" inert={!isOpen}>
+              {renderDetail(id, true)}
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -172,6 +227,8 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
       </div>
 
       <div className="sum-cards">{groupMetrics(live, stat, entities).map((m) => item(m))}</div>
+
+      {wide ? <SumPanel openId={open} render={(id) => renderDetail(id, false)} /> : null}
     </section>
   );
 }

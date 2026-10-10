@@ -475,7 +475,9 @@ test('Вход: ошибка и поля читаемы на бордовом, �
 
 // ===== Дашборд: карточки группы, график на телефоне, режимы налогообложения =====
 
-test('Баннеры группы до 1024 px: четыре отдельные, раскладка 1 и 2 на 2, числа не переносятся', async ({ page }) => {
+test('Баннеры группы: четыре отдельные на всех ширинах, 1 колонка, 2 на 2, от 1024 px в ряд, числа не переносятся', async ({
+  page,
+}) => {
   await firstLogin(page, PIN);
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.getByRole('heading', { name: /Группа на \d+ \S+ \d{4}/ })).toBeVisible();
@@ -484,7 +486,7 @@ test('Баннеры группы до 1024 px: четыре отдельные,
   const layout = async (width: number) => {
     await page.setViewportSize({ width, height: 900 });
     await page.mouse.move(1, 1); // курсор не над карточкой: нет подъёма при наведении
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(700); // радиус карточки меняется плавно, 450 мс
     return page.evaluate(() => {
       const els = [...document.querySelectorAll('.sum-card')] as HTMLElement[];
       const boxes = els.map((e) => e.getBoundingClientRect());
@@ -493,7 +495,11 @@ test('Баннеры группы до 1024 px: четыре отдельные,
         count: els.length,
         xs: [...new Set(boxes.map((b) => Math.round(b.left)))].length,
         ys: [...new Set(boxes.map((b) => Math.round(b.top)))].length,
-        gap: Math.round(boxes[1]!.top - boxes[0]!.bottom) || Math.round(boxes[1]!.left - boxes[0]!.right),
+        // между карточками: по вертикали в колонке, по горизонтали, если они в одном ряду
+        gap:
+          Math.round(boxes[1]!.top) === Math.round(boxes[0]!.top)
+            ? Math.round(boxes[1]!.left - boxes[0]!.right)
+            : Math.round(boxes[1]!.top - boxes[0]!.bottom),
         bg: cs.backgroundColor,
         radius: cs.borderTopLeftRadius,
         padding: cs.paddingTop,
@@ -533,12 +539,25 @@ test('Баннеры группы до 1024 px: четыре отдельные,
   expect(tablet.ys).toBe(2);
   expect(tablet.overflow).toBe(false);
 
-  // последний размер с отдельными баннерами: 1023 px, всё ещё два на два
+  // 1023 px: ещё два на два
   const edge = await layout(1023);
   expect(edge.count).toBe(4);
   expect(edge.xs).toBe(2);
   expect(edge.ys).toBe(2);
   expect(edge.overflow).toBe(false);
+
+  // от 1024 px: четыре отдельные карточки в одном ряду, зазор 16 px, радиус 22 px, свой фон у каждой
+  for (const width of [1024, 1440]) {
+    const row = await layout(width);
+    expect(row.count, `${width}`).toBe(4);
+    expect(row.xs, `${width}`).toBe(4);
+    expect(row.ys, `${width}`).toBe(1);
+    expect(row.gap, `${width}`).toBe(16);
+    expect(row.bg, `${width}`).toBe('rgb(120, 66, 68)');
+    expect(row.radius, `${width}`).toBe('22px');
+    expect(row.overflow, `${width}`).toBe(false);
+    expect(row.labels, `${width}`).toEqual(phone.labels);
+  }
   await layout(360).then((r) => expect(r.overflow).toBe(false));
 
   // «можно сэкономить» внутри карточки НДС

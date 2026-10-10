@@ -12,9 +12,7 @@ import {
 } from '@/lib/calc';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
-import { useMediaQuery } from '@/lib/client/media';
 import { EntityCard } from './EntityCard';
-import { GroupBanner } from './GroupBanner';
 import { GroupSummary } from './GroupSummary';
 import { RevenueChart } from './RevenueChart';
 import { Skeletons } from './Skeletons';
@@ -31,8 +29,6 @@ export function DashboardView() {
   const [clockOffset, setClockOffset] = useState(0);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // От 1024 px один широкий баннер группы, ниже четыре отдельных баннера с раскрытием по месту
-  const wide = useMediaQuery('(min-width: 1024px)');
 
   const load = useCallback(async () => {
     setError(null);
@@ -117,11 +113,7 @@ export function DashboardView() {
 
   return (
     <div>
-      {wide ? (
-        <GroupBanner moment={moment} input={input} live={live} stat={stat} />
-      ) : (
-        <GroupSummary moment={moment} input={input} live={live} stat={stat} />
-      )}
+      <GroupSummary moment={moment} input={input} live={live} stat={stat} />
       {notice ? (
         <p role="status" className="form-error" style={{ marginTop: 12 }}>
           {notice}

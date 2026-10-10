@@ -512,74 +512,242 @@ test.describe('Компьютер', () => {
     await expect(page.locator('.col.sel')).toHaveCount(0);
   });
 
-  test('1440 px: один широкий баннер группы, четыре показателя в одном ряду, баннер не раскрывается', async ({
+  test('1440 px: четыре отдельные карточки в одном ряду, общего баннера нет, строка заголовка без фона', async ({
     page,
   }) => {
     await firstLogin(page, PIN);
     await page.setViewportSize({ width: 1440, height: 900 });
     await toDashboard(page);
 
-    // один баннер группы вместо четырёх отдельных
-    await expect(page.locator('.band')).toHaveCount(1);
-    await expect(page.locator('.sum-card')).toHaveCount(0);
-    await expect(page.locator('.sum-cards')).toHaveCount(0);
+    await expect(page.locator('.band')).toHaveCount(0);
+    await expect(page.locator('.sum-card')).toHaveCount(4);
     await expect(page.getByRole('heading', { name: /^Группа на \d+ \S+ \d{4}$/ })).toHaveCount(1);
-    await expect(page.locator('.band-h span')).toHaveText('5 юрлиц · УСН и ОСНО');
+    await expect(page.locator('.sum-head p')).toHaveText('5 юрлиц · УСН и ОСНО');
 
     const m = await page.evaluate(() => {
-      const band = document.querySelector('.band')!;
-      const bandBox = band.getBoundingClientRect();
-      const metrics = [...band.querySelectorAll('.metric')] as HTMLElement[];
-      const boxes = metrics.map((e) => e.getBoundingClientRect());
-      const cs = getComputedStyle(band);
+      const cards = [...document.querySelectorAll('.sum-card')] as HTMLElement[];
+      const boxes = cards.map((e) => e.getBoundingClientRect());
+      const list = document.querySelector('.sum-cards')!.getBoundingClientRect();
+      const head = document.querySelector('.sum-head')!;
+      const hb = head.getBoundingClientRect();
+      const hcs = getComputedStyle(head);
+      const widths = boxes.map((b) => Math.round(b.width));
       return {
-        labels: metrics.map((e) => e.querySelector('.eyebrow')!.textContent),
-        values: metrics.map((e) => e.querySelector('strong')!.textContent),
-        tops: boxes.map((b) => Math.round(b.top)),
-        lefts: boxes.map((b) => Math.round(b.left)),
-        inside: boxes.every((b) => b.left >= bandBox.left && b.right <= bandBox.right),
-        valueTops: metrics.map((e) => Math.round(e.querySelector('strong')!.getBoundingClientRect().top)),
-        clipped: metrics.some((e) => {
-          const v = e.querySelector('strong') as HTMLElement;
-          return v.scrollWidth > e.clientWidth;
-        }),
-        bg: cs.backgroundColor,
-        color: cs.color,
-        radius: cs.borderTopLeftRadius,
-        sub: getComputedStyle(band.querySelector('.metric small')!).color,
-        interactive: band.querySelectorAll('button, a, [role="button"], [aria-expanded]').length,
+        tops: new Set(boxes.map((b) => Math.round(b.top))).size,
+        lefts: new Set(boxes.map((b) => Math.round(b.left))).size,
+        widths,
+        gaps: boxes.slice(1).map((b, i) => Math.round(b.left - boxes[i]!.right)),
+        heights: new Set(boxes.map((b) => Math.round(b.height))).size,
+        bgs: cards.map((e) => getComputedStyle(e).backgroundColor),
+        radii: cards.map((e) => getComputedStyle(e).borderTopLeftRadius),
+        labels: cards.map((e) => e.querySelector('.sum-label')!.textContent),
+        values: cards.map((e) => e.querySelector('.sum-value')!.textContent),
+        subs: cards.map((e) => e.querySelector('.sum-sub')!.textContent),
+        headBg: hcs.backgroundColor,
+        headAbove: hb.bottom <= list.top,
+        listLeft: Math.round(list.left),
+        listRight: Math.round(list.right),
+        clipped: cards.some((e) => (e.querySelector('.sum-value') as HTMLElement).scrollWidth > e.clientWidth - 24),
         scrollX: document.documentElement.scrollWidth - window.innerWidth,
       };
     });
+    expect(m.tops).toBe(1); // один ряд
+    expect(m.lefts).toBe(4);
+    expect(Math.max(...m.widths) - Math.min(...m.widths)).toBeLessThanOrEqual(1); // четыре равные колонки
+    expect(m.gaps).toEqual([16, 16, 16]);
+    expect(m.heights).toBe(1);
+    expect(m.bgs).toEqual([WINE, WINE, WINE, WINE]); // у каждой свой фон
+    expect(m.radii).toEqual(['22px', '22px', '22px', '22px']);
     expect(m.labels).toEqual([
       'Выручка с начала года',
       'НДС начислен',
       'Прогноз НДС за год',
       'Налог на прибыль: прогноз за год',
     ]);
-    expect(m.values.every((v) => v && v.length > 0)).toBe(true);
-    expect(new Set(m.tops).size).toBe(1); // один ряд
-    expect(new Set(m.valueTops).size).toBe(1); // числа на одной линии
-    expect(new Set(m.lefts).size).toBe(4); // четыре столбца
-    expect(m.inside).toBe(true);
+    for (const v of m.values) expect(v && v.length > 0).toBe(true);
+    for (const v of m.subs) expect(v && v.length > 0).toBe(true);
+    expect(m.headBg).toBe('rgba(0, 0, 0, 0)'); // строка заголовка без фона
+    expect(m.headAbove).toBe(true);
     expect(m.clipped).toBe(false);
-    expect(m.bg).toBe(WINE);
-    expect(m.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
-    expect(m.sub).toBe('rgb(232, 207, 203)'); // #E8CFCB
-    expect(m.radius).toBe('22px');
-    expect(m.interactive).toBe(0); // как в первой версии: баннер не раскрывается
     expect(m.scrollX).toBeLessThanOrEqual(0);
+  });
 
-    // живая выручка тикает
-    const before = await page.locator('.band .metric strong').first().textContent();
-    await expect.poll(async () => page.locator('.band .metric strong').first().textContent(), { timeout: 5000 }).not.toBe(before);
+  test('1440 px: нажатие открывает одну общую панель под рядом, смена карточки, повторное закрывает', async ({ page }) => {
+    await firstLogin(page, PIN);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await toDashboard(page);
 
-    // 1024 px: ещё баннер группы; 1023 px: уже четыре отдельных
-    await page.setViewportSize({ width: 1024, height: 800 });
-    await expect(page.locator('.band .metric')).toHaveCount(4);
-    await expect(page.locator('.sum-card')).toHaveCount(0);
-    await page.setViewportSize({ width: 1023, height: 800 });
-    await expect(page.locator('.sum-card')).toHaveCount(4);
-    await expect(page.locator('.band')).toHaveCount(0);
+    const cards = page.locator('.sum-card');
+    const panel = page.locator('#sum-panel');
+    const geo = () =>
+      page.evaluate(() => {
+        const list = document.querySelector('.sum-cards')!.getBoundingClientRect();
+        const p = document.getElementById('sum-panel')!.getBoundingClientRect();
+        const cs = [...document.querySelectorAll('.sum-card')].map((e) => e.getBoundingClientRect());
+        return {
+          listBottom: Math.round(list.bottom),
+          listLeft: Math.round(list.left),
+          listRight: Math.round(list.right),
+          panelTop: Math.round(p.top),
+          detailTop: Math.round(document.querySelector('#sum-panel .sum-detail')?.getBoundingClientRect().top ?? 0),
+          panelLeft: Math.round(p.left),
+          panelRight: Math.round(p.right),
+          panelH: Math.round(p.height),
+          cardTops: cs.map((b) => Math.round(b.top)),
+        };
+      });
+
+    // закрыта: панели нет по высоте, ни у одной карточки нет обводки
+    await expect(panel).toBeHidden();
+    await expect(cards.nth(0)).toHaveAttribute('aria-expanded', 'false');
+    await expect(cards.nth(0)).toHaveAttribute('aria-controls', 'sum-panel');
+    expect(await page.locator('.sum-item .acc').count()).toBe(0); // в ячейках расшифровок нет
+    const closed = await geo();
+
+    // нажатие: одна панель на всю ширину ряда сразу под рядом, карточки на месте
+    await cards.nth(3).click();
+    await page.mouse.move(2, 2);
+    await settle(page);
+    await expect(cards.nth(3)).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel).toBeVisible();
+    await expect(page.locator('#sum-panel .sum-detail h3')).toHaveText('Налог на прибыль и УСН за год по юрлицам');
+    const open = await geo();
+    expect(open.cardTops).toEqual(closed.cardTops);
+    expect(Math.abs(open.panelTop - open.listBottom)).toBeLessThanOrEqual(1); // сразу под рядом
+    expect(Math.abs(open.detailTop - open.listBottom - 16)).toBeLessThanOrEqual(1); // отступ от ряда 16 px
+    expect(open.panelLeft).toBe(open.listLeft);
+    expect(open.panelRight).toBe(open.listRight);
+    expect(open.panelH).toBeGreaterThan(100);
+
+    const look = await page.evaluate(() => {
+      const d = document.querySelector('#sum-panel .sum-detail')!;
+      const li = d.querySelector('li')!;
+      const card = document.querySelector('.sum-card.open') as HTMLElement;
+      const chev = getComputedStyle(card.querySelector('.sum-chev')!).transform;
+      const p = document.getElementById('sum-panel')!;
+      const cs = getComputedStyle(p);
+      return {
+        bg: getComputedStyle(d).backgroundColor,
+        color: getComputedStyle(d).color,
+        rowBg: getComputedStyle(li).backgroundColor,
+        ring: getComputedStyle(card).boxShadow,
+        chev,
+        panelAnim: { prop: cs.transitionProperty, dur: cs.transitionDuration, fn: cs.transitionTimingFunction },
+        openCount: document.querySelectorAll('.sum-card.open').length,
+        regions: document.querySelectorAll('[role="region"][id^="sum-"]').length,
+      };
+    });
+    expect(look.bg).toBe(WINE);
+    expect(look.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
+    expect(look.rowBg).not.toBe(WINE); // строки на тон светлее
+    expect(look.ring).toContain('rgb(255, 243, 178)'); // обводка #FFF3B2
+    expect(look.ring).toContain('2px');
+    expect(look.chev).toMatch(/^matrix\(-1,/); // стрелка повёрнута
+    expect(look.panelAnim).toEqual({ prop: 'height', dur: '0.45s', fn: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    expect(look.openCount).toBe(1);
+    expect(look.regions).toBe(1); // одна панель, а не по одной на карточку
+
+    // нажали другую карточку: содержимое сменилось, панель одна, высота меняется плавно (в середине между)
+    await cards.nth(0).click();
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(120);
+    const mid = await geo();
+    await settle(page);
+    const second = await geo();
+    await expect(cards.nth(0)).toHaveAttribute('aria-expanded', 'true');
+    await expect(cards.nth(3)).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#sum-panel .sum-detail h3')).toHaveText('Выручка с начала года по юрлицам');
+    await expect(page.locator('.sum-card.open')).toHaveCount(1);
+    // у карточки налога на прибыль есть абзац с платежами, поэтому панель выручки ниже: высота
+    // меняется плавно, в середине перехода она между двумя значениями
+    expect(second.panelH).toBeLessThan(open.panelH);
+    expect(mid.panelH).toBeLessThanOrEqual(open.panelH + 1);
+    expect(mid.panelH).toBeGreaterThanOrEqual(second.panelH - 1);
+    expect(second.cardTops).toEqual(closed.cardTops);
+
+    // повторное нажатие закрывает панель
+    await cards.nth(0).click();
+    await page.mouse.move(2, 2);
+    await settle(page);
+    await expect(cards.nth(0)).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toBeHidden();
+    await expect(page.locator('.sum-card.open')).toHaveCount(0);
+    expect(await page.locator('#sum-panel').evaluate((e) => e.hasAttribute('inert'))).toBe(true);
+
+    // с клавиатуры: Enter открывает, Enter закрывает
+    await cards.nth(3).focus();
+    await page.keyboard.press('Enter');
+    await settle(page);
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Enter');
+    await settle(page);
+    await expect(panel).toBeHidden();
+
+    // на ширине 1023 раскрытие снова по месту, под нужной карточкой
+    await cards.nth(2).click();
+    await settle(page);
+    await page.setViewportSize({ width: 1023, height: 900 });
+    await expect(page.locator('#sum-detail-vatForecast')).toBeVisible();
+    await expect(page.locator('#sum-panel')).toHaveCount(0);
+  });
+
+  test('Меню из трёх точек у правого края окна: 16 px от края на компьютере, выпадающее меню по правому краю', async ({
+    page,
+  }) => {
+    await firstLogin(page, PIN);
+    for (const width of [1440, 1024, 800]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(150);
+      const m = await page.evaluate(() => {
+        const b = document.querySelector('.top-actions .icon-btn')!.getBoundingClientRect();
+        const top = document.querySelector('.top')!.getBoundingClientRect();
+        const mark = document.querySelector('.top .wordmark')!.getBoundingClientRect();
+        return {
+          right: Math.round(window.innerWidth - b.right),
+          w: Math.round(b.width),
+          h: Math.round(b.height),
+          topW: Math.round(top.width),
+          vw: window.innerWidth,
+          markCx: Math.round(mark.left + mark.width / 2),
+          cy: Math.round(b.top + b.height / 2),
+          headH: Math.round(top.height),
+        };
+      });
+      expect(m.right, `${width}`).toBe(16);
+      expect(m.w).toBe(44);
+      expect(m.h).toBe(44);
+      expect(m.topW).toBe(m.vw); // шапка на всю ширину окна
+      expect(Math.abs(m.markCx - m.vw / 2)).toBeLessThanOrEqual(1); // знак по центру окна
+      expect(Math.abs(m.cy - m.headH / 2)).toBeLessThanOrEqual(1); // кнопка по центру строки шапки
+    }
+
+    // выпадающее меню: правый край совпадает с правым краем кнопки, не выходит за экран
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Меню' }).click();
+    const sheet = await page.evaluate(() => {
+      const s = document.querySelector('.sheet')!.getBoundingClientRect();
+      const b = document.querySelector('.top-actions .icon-btn')!.getBoundingClientRect();
+      return { sheetRight: Math.round(s.right), btnRight: Math.round(b.right), left: s.left, vw: window.innerWidth };
+    });
+    expect(sheet.sheetRight).toBe(sheet.btnRight);
+    expect(sheet.left).toBeGreaterThanOrEqual(0);
+    expect(sheet.sheetRight).toBeLessThanOrEqual(sheet.vw);
+    await page.keyboard.press('Escape');
+
+    // телефон: 12 px
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(150);
+    const phone = await page.evaluate(() => {
+      const b = document.querySelector('.top-actions .icon-btn')!.getBoundingClientRect();
+      return { right: Math.round(window.innerWidth - b.right), w: Math.round(b.width), h: Math.round(b.height) };
+    });
+    expect(phone).toEqual({ right: 12, w: 44, h: 44 });
+
+    // вырез: отступ справа плюс safe-area-inset-right
+    await page.evaluate(() => document.documentElement.style.setProperty('--menu-right', 'calc(12px + 47px)'));
+    const notch = await page.evaluate(() =>
+      Math.round(window.innerWidth - document.querySelector('.top-actions .icon-btn')!.getBoundingClientRect().right),
+    );
+    expect(notch).toBe(59);
   });
 });
