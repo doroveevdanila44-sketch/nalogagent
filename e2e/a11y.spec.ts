@@ -21,6 +21,16 @@ test('доступность: вход, PIN, агент, дашборд, мен�
   const check = async (label: string) => {
     // при мягком переходе Next обновляет <title> чуть позже содержимого
     await expect(page).toHaveTitle(/.+/);
+    // Дать закончиться конечным анимациям (появление экрана PIN, листа меню): при частичной прозрачности
+    // axe считает контраст по промежуточному цвету и сообщает ложное нарушение
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+    );
     for (const v of await violations(page)) found.push(`${label}: ${v}`);
   };
 

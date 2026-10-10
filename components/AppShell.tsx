@@ -151,7 +151,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     apply();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(apply);
-    ro.observe(el);
+    // border-box: отступ safe-area лежит в padding шапки, при повороте экрана он меняется, а
+    // content-box нет, и без этого --header-h (на нём высота чата) оставалась бы прежней
+    ro.observe(el, { box: 'border-box' });
     return () => {
       ro.disconnect();
       document.documentElement.style.removeProperty('--header-h');

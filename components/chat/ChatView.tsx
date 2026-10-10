@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import type { ChatTurn } from '@/lib/agent/types';
 import { api, ApiError } from '@/lib/client/api';
 import { KEYBOARD_EVENT } from '@/lib/client/keyboard';
@@ -19,15 +28,34 @@ type Pending = { key: number; text: string };
 /** Высота поля в одну строку; потолок (шесть строк) задан в CSS как max-height, дальше прокрутка внутри */
 const FIELD_MIN = 38;
 
-/** Нажатие на кнопку не отбирает фокус у поля: экранная клавиатура остаётся открытой */
-const keepFocus = (e: MouseEvent) => e.preventDefault();
+/** Сколько пикселей подряд в одну сторону считается листанием, после которого меняется блок подсказок */
+const SCROLL_STEP = 24;
+
+const isCoarse = () => window.matchMedia('(pointer: coarse)').matches;
+
+/**
+ * Нажатие не отбирает фокус у поля, поэтому экранная клавиатура остаётся открытой. preventDefault
+ * на pointerdown и на mousedown: касание порождает оба события, и браузеры расходятся в том, какое
+ * из них переводит фокус.
+ */
+const holdFocus = (e: PointerEvent | MouseEvent) => e.preventDefault();
 
 /**
  * Вкладка «Агент». История хранится в базе, при заходе подгружаются последние 50.
+ *
+ * Раскладка на высоту окна, три части в колонке: список сообщений (единственная прокручиваемая
+ * область), блок подсказок, поле ввода. Страница целиком не прокручивается, поэтому прокрутка
+ * списка при открытой клавиатуре не сдвигает страницу и не закрывает клавиатуру. Нигде в чате
+ * не вызывается blur(), фокус с поля не снимается ни при прокрутке, ни при нажатии на сообщения,
+ * кнопки и подсказки. Список прокручивается только свой собственный (scrollTop), не окно.
+ *
  * Поле ввода как в приложении Claude: textarea растёт от 38 px до шести строк, дальше внутренняя
  * прокрутка. На компьютере Enter отправляет, Shift+Enter переносит строку; на телефоне Enter
  * переносит строку, отправка только кнопкой. Без родительского form и без других полей ввода на
  * экране: так Safari не рисует над клавиатурой стрелки «вверх, вниз» (см. DECISIONS.md).
+ *
+ * Подсказки: все, пока клавиатура закрыта; при открытой клавиатуре и при листании вниз блок
+ * сворачивается до ручки «Подсказки», листание вверх разворачивает его, если клавиатура закрыта.
  */
 export function ChatView() {
   const [turns, setTurns] = useState<ChatTurn[] | null>(null);
@@ -35,10 +63,20 @@ export function ChatView() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState<Pending | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
+  const [kbOpen, setKbOpen] = useState(false);
+  const [chipsOpen, setChipsOpen] = useState(true);
+  const listRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const hadFocus = useRef(false);
-  const [composerH, setComposerH] = useState(120);
+  const kbOpenRef = useRef(false);
+
+  // Состояние прокрутки списка: расстояние от нижнего края, последний scrollTop, ожидаемый scrollTop
+  // после нашей прокрутки (чтобы отличить её от жеста), накопленный сдвиг, окно «листает пользователь»
+  const bottomGap = useRef(0);
+  const lastTop = useRef(0);
+  const expectedTop = useRef<number | null>(null);
+  const travelled = useRef(0);
+  const userUntil = useRef(0);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -61,25 +99,97 @@ export function ChatView() {
     return () => window.removeEventListener(UNLOCKED_EVENT, onUnlocked);
   }, [load]);
 
-  /**
-   * Прокрутка в самый низ страницы. Под последним сообщением лежит запас на высоту поля ввода, поэтому
-   * на крайней позиции сообщение стоит прямо над полем. scrollIntoView по якорю выровнял бы по низу
-   * окна сам якорь, и сообщение ушло бы под поле.
-   */
+  /** Прокрутка списка в самый низ. Только контейнер списка: окно и страница не двигаются */
   const scrollToEnd = useCallback(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    expectedTop.current = el.scrollTop;
+    lastTop.current = el.scrollTop;
+    bottomGap.current = 0;
   }, []);
 
-  // Последнее сообщение остаётся видно: при новых сообщениях, росте поля и подсказок
-  useEffect(() => {
+  // Новое сообщение, ответ, индикатор набора и первая загрузка истории: в самый низ списка
+  useLayoutEffect(() => {
     scrollToEnd();
-  }, [turns, sending, composerH, scrollToEnd]);
+  }, [turns, sending, scrollToEnd]);
 
-  // ...и при открытии клавиатуры и любом изменении вьюпорта, пока она открыта
+  // Список меняет высоту (клавиатура, свёрнутые подсказки, выросшее поле): остаётся на том же
+  // расстоянии от нижнего края, поэтому последнее сообщение не уезжает
   useEffect(() => {
-    window.addEventListener(KEYBOARD_EVENT, scrollToEnd);
-    return () => window.removeEventListener(KEYBOARD_EVENT, scrollToEnd);
-  }, [scrollToEnd]);
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const top = Math.max(0, el.scrollHeight - el.clientHeight - bottomGap.current);
+      el.scrollTop = top;
+      expectedTop.current = el.scrollTop;
+      lastTop.current = el.scrollTop;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Клавиатура закрылась системным жестом (поле осталось в фокусе): подсказки возвращаются
+  useEffect(() => {
+    const onKeyboard = (e: Event) => {
+      const open = Boolean((e as CustomEvent<{ open: boolean }>).detail?.open);
+      if (!open) setKbOpen(false);
+      else if (document.activeElement === fieldRef.current) setKbOpen(true);
+    };
+    window.addEventListener(KEYBOARD_EVENT, onKeyboard);
+    return () => window.removeEventListener(KEYBOARD_EVENT, onKeyboard);
+  }, []);
+
+  // Клавиатура открылась: подсказки сворачиваются; закрылась: разворачиваются
+  useEffect(() => {
+    kbOpenRef.current = kbOpen;
+    setChipsOpen(!kbOpen);
+  }, [kbOpen]);
+
+  /**
+   * Жест на списке: вниз сворачивает подсказки, вверх разворачивает, если клавиатура закрыта.
+   * Прокрутка нашим же кодом (в низ, сохранение расстояния) и сдвиги, вызванные изменением высоты,
+   * жестом не считаются: иначе сворачивание подсказок само вызывало бы разворачивание.
+   */
+  const onListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const top = el.scrollTop;
+    // Прокрутка нашим кодом: расстояние от нижнего края мы задали сами. Событие приходит позже и
+    // может застать уже другую высоту списка (клавиатура), поэтому по нему расстояние не пересчитываем.
+    if (expectedTop.current !== null && Math.abs(top - expectedTop.current) < 1) {
+      expectedTop.current = null;
+      lastTop.current = top;
+      return;
+    }
+    expectedTop.current = null;
+    bottomGap.current = Math.max(0, el.scrollHeight - el.clientHeight - top);
+    const delta = top - lastTop.current;
+    lastTop.current = top;
+    if (delta === 0 || performance.now() > userUntil.current) {
+      travelled.current = 0;
+      return;
+    }
+    travelled.current = Math.sign(travelled.current) === Math.sign(delta) ? travelled.current + delta : delta;
+    if (travelled.current >= SCROLL_STEP) {
+      travelled.current = 0;
+      setChipsOpen(false);
+    } else if (travelled.current <= -SCROLL_STEP) {
+      travelled.current = 0;
+      if (!kbOpenRef.current) setChipsOpen(true);
+    }
+  }, []);
+
+  // Окно, в котором прокрутка считается жестом пользователя: пока палец на экране и 1,5 с инерции
+  const touching = () => {
+    userUntil.current = Number.POSITIVE_INFINITY;
+  };
+  const released = () => {
+    userUntil.current = performance.now() + 1500;
+  };
+  const wheeled = () => {
+    userUntil.current = performance.now() + 300;
+  };
 
   /** Высота по содержимому: от одной строки до max-height из CSS; выше потолка включается прокрутка */
   const fit = useCallback(() => {
@@ -107,15 +217,6 @@ export function ChatView() {
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
   }, [fit]);
-
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setComposerH(el.offsetHeight));
-    ro.observe(el);
-    setComposerH(el.offsetHeight);
-    return () => ro.disconnect();
-  }, []);
 
   const send = useCallback(
     async (raw: string) => {
@@ -146,8 +247,9 @@ export function ChatView() {
   const empty = turns !== null && turns.length === 0 && !sending;
 
   /** Кнопки под полем: если поле было в фокусе, оно остаётся в нём и клавиатура не закрывается */
-  const rememberFocus = () => {
-    hadFocus.current = document.activeElement === fieldRef.current;
+  const down = (e: PointerEvent | MouseEvent) => {
+    if (e.type === 'pointerdown') hadFocus.current = document.activeElement === fieldRef.current;
+    holdFocus(e);
   };
   const press = (text: string) => {
     void send(text);
@@ -158,124 +260,149 @@ export function ChatView() {
   const onFieldKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
     // На телефоне Enter переносит строку: отправляет только кнопка
-    if (window.matchMedia('(pointer: coarse)').matches) return;
+    if (isCoarse()) return;
     e.preventDefault();
     void send(draft);
   };
 
+  /**
+   * На телефоне нажатие на любую часть чата, кроме самого поля, не берёт фокус и не снимает его с поля:
+   * по пустой области, по сообщениям и по списку клавиатура не закрывается. Клик по элементам при этом
+   * срабатывает как обычно, а клавиатура закрывается только жестом самой системы.
+   */
+  const onRootMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if (isCoarse() && e.target !== fieldRef.current) e.preventDefault();
+  };
+
+  const suggestionButton = (s: string, disabled = false) => (
+    <button
+      key={s}
+      type="button"
+      onPointerDown={down}
+      onMouseDown={down}
+      onClick={() => press(s)}
+      disabled={disabled}
+    >
+      {s}
+    </button>
+  );
+
   return (
-    <div style={{ paddingBottom: composerH }}>
-      {turns === null && !loadError ? (
-        <div className="chat" aria-busy="true" aria-label="Загрузка истории">
-          <div className="skeleton" style={{ height: 56, width: '70%' }} />
-          <div className="skeleton" style={{ height: 56, width: '55%', alignSelf: 'flex-end' }} />
-        </div>
-      ) : null}
-
-      {loadError ? (
-        <div className="sec" role="alert">
-          <p style={{ fontWeight: 600 }}>{loadError}</p>
-          <button type="button" className="btn" style={{ marginTop: 12 }} onClick={() => void load()}>
-            Повторить
-          </button>
-        </div>
-      ) : null}
-
-      {turns ? (
-        <div className="chat" aria-live="polite">
-          {turns.map((t) => (
-            <Message key={t.id} turn={t} />
-          ))}
-          {sending ? (
-            <>
-              <div className="msg me">{sending.text}</div>
-              <div className="msg" aria-label="Агент печатает">
-                <span className="typing" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : null}
-
-      {empty ? (
-        <div
-          style={{
-            minHeight: '45vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div className="sug" style={{ justifyContent: 'center' }}>
-            {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onPointerDown={rememberFocus}
-                onMouseDown={keepFocus}
-                onClick={() => press(s)}
-              >
-                {s}
-              </button>
-            ))}
+    <div className="chat-root" onMouseDown={onRootMouseDown}>
+      <div
+        className="chat-scroll"
+        ref={listRef}
+        onScroll={onListScroll}
+        onTouchStart={touching}
+        onTouchEnd={released}
+        onTouchCancel={released}
+        onWheel={wheeled}
+      >
+        {turns === null && !loadError ? (
+          <div className="chat" aria-busy="true" aria-label="Загрузка истории">
+            <div className="skeleton" style={{ height: 56, width: '70%' }} />
+            <div className="skeleton" style={{ height: 56, width: '55%', alignSelf: 'flex-end' }} />
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div className="composer-wrap" ref={composerRef}>
-        <div className="wrap">
-          {turns !== null && !empty ? (
-            <div className="sug" style={{ paddingTop: 8 }}>
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onPointerDown={rememberFocus}
-                  onMouseDown={keepFocus}
-                  onClick={() => press(s)}
-                  disabled={Boolean(sending)}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {sendError ? (
-            <p className="form-error" role="alert" style={{ paddingTop: 6 }}>
-              {sendError}
-            </p>
-          ) : null}
-          <div className="composer">
-            <textarea
-              ref={fieldRef}
-              rows={1}
-              value={draft}
-              onChange={(ev) => setDraft(ev.target.value)}
-              onKeyDown={onFieldKeyDown}
-              onFocus={scrollToEnd}
-              placeholder="Например: какая ставка выгоднее?"
-              aria-label="Вопрос агенту"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="sentences"
-              spellCheck={false}
-              enterKeyHint="send"
-              maxLength={1000}
-            />
-            <button
-              type="button"
-              onPointerDown={rememberFocus}
-              onMouseDown={keepFocus}
-              onClick={() => press(draft)}
-              disabled={!draft.trim() || Boolean(sending)}
-            >
-              Отправить
+        {loadError ? (
+          <div className="sec" role="alert">
+            <p style={{ fontWeight: 600 }}>{loadError}</p>
+            <button type="button" className="btn" style={{ marginTop: 12 }} onClick={() => void load()}>
+              Повторить
             </button>
           </div>
+        ) : null}
+
+        {turns ? (
+          <div className="chat" aria-live="polite">
+            {turns.map((t) => (
+              <Message key={t.id} turn={t} />
+            ))}
+            {sending ? (
+              <>
+                <div className="msg me">{sending.text}</div>
+                <div className="msg" aria-label="Агент печатает">
+                  <span className="typing" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {empty ? (
+          <div className="chat-empty">
+            <div className="sug" style={{ justifyContent: 'center' }}>
+              {SUGGESTIONS.map((s) => suggestionButton(s))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="composer-wrap">
+        {turns !== null && !empty ? (
+          <>
+            <button
+              type="button"
+              className="sug-handle"
+              aria-expanded={chipsOpen}
+              aria-controls="chat-suggestions"
+              onPointerDown={down}
+              onMouseDown={down}
+              onClick={() => setChipsOpen((v) => !v)}
+            >
+              Подсказки
+              <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m7 10 5 5 5-5" />
+              </svg>
+            </button>
+            <div id="chat-suggestions" className="sug-panel" data-open={chipsOpen}>
+              <div inert={!chipsOpen}>
+                <div className="sug">{SUGGESTIONS.map((s) => suggestionButton(s, Boolean(sending)))}</div>
+              </div>
+            </div>
+          </>
+        ) : null}
+        {sendError ? (
+          <p className="form-error" role="alert" style={{ paddingTop: 6 }}>
+            {sendError}
+          </p>
+        ) : null}
+        <div className="composer">
+          <textarea
+            ref={fieldRef}
+            rows={1}
+            value={draft}
+            onChange={(ev) => setDraft(ev.target.value)}
+            onKeyDown={onFieldKeyDown}
+            onFocus={() => {
+              // На телефоне фокус в поле это открытая клавиатура: подсказки сворачиваются сразу,
+              // не дожидаясь, пока вьюпорт успеет измениться
+              if (isCoarse()) setKbOpen(true);
+            }}
+            onBlur={() => setKbOpen(false)}
+            placeholder="Например: какая ставка выгоднее?"
+            aria-label="Вопрос агенту"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
+            spellCheck={false}
+            enterKeyHint="send"
+            maxLength={1000}
+          />
+          <button
+            type="button"
+            onPointerDown={down}
+            onMouseDown={down}
+            onClick={() => press(draft)}
+            disabled={!draft.trim() || Boolean(sending)}
+          >
+            Отправить
+          </button>
         </div>
       </div>
     </div>

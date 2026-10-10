@@ -7,8 +7,9 @@
  * Два случая. Chrome на Android с interactive-widget=resizes-content сам уменьшает раскладочный
  * вьюпорт: fixed-элементы встают над клавиатурой, --kb равен 0, а раскладка на 100dvh сжимается.
  * Safari на iOS раскладочный вьюпорт не уменьшает, уменьшается только визуальный: тогда --kb
- * поднимает поле ввода над клавиатурой. Формула одна: innerHeight - visualViewport.height -
- * visualViewport.offsetTop (равна нулю там, где вьюпорт уже сжат).
+ * укорачивает чат на высоту клавиатуры, и поле ввода стоит над ней. Формула одна: innerHeight -
+ * visualViewport.height - visualViewport.offsetTop (равна нулю там, где вьюпорт уже сжат или
+ * Safari сам сдвинул страницу).
  *
  * Клавиатурой считается вьюпорт, уменьшившийся больше чем на 120 px при фокусе в текстовом поле
  * на устройстве с касанием: панель адреса и увеличение пальцами сюда не попадают.
@@ -38,9 +39,13 @@ export function watchKeyboard(): () => void {
     if (!focused) baseInner = innerH;
 
     const zoomed = vv ? vv.scale > 1.01 : false;
+    // На сколько визуальный вьюпорт ниже раскладочного: есть клавиатура или нет, даже если Safari уже
+    // сдвинул страницу вверх (offsetTop) и нижний край поля оказался над клавиатурой
+    const reduced = vv && !zoomed ? Math.max(0, Math.round(innerH - vv.height)) : 0;
+    // Сколько клавиатура ещё перекрывает раскладку: на это поднимается низ чата (до сдвига страницы)
     const covered = vv && !zoomed ? Math.max(0, Math.round(innerH - vv.height - vv.offsetTop)) : 0;
     const shrunk = Math.max(0, baseInner - innerH);
-    const next = focused && coarse.matches && (covered > THRESHOLD || shrunk > THRESHOLD);
+    const next = focused && coarse.matches && (reduced > THRESHOLD || shrunk > THRESHOLD);
 
     root.style.setProperty('--kb', next ? `${covered}px` : '0px');
     if (next) root.dataset.kb = 'open';

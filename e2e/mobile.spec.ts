@@ -209,63 +209,159 @@ test('Телефон 390: подсказки переносятся рядами
   for (const g of docked.rowGaps) expect(g).toBeCloseTo(8, 0);
 });
 
-test('Телефон 390: клавиатура прячет нижнюю панель, поле над клавиатурой, последнее сообщение видно', async ({
+test('Телефон 390: чат листается при клавиатуре, подсказки сворачиваются и в цвет PIN, поле остаётся в фокусе', async ({
   page,
 }) => {
   await resetChat();
   await firstLogin(page, PIN);
   await field(page).waitFor();
 
-  // несколько ответов, чтобы страница прокручивалась
+  // несколько ответов, чтобы список прокручивался
   for (const q of ['Что с порогами?', 'Какая ставка выгоднее?', 'Налог на прибыль за год?']) {
     await page.getByRole('button', { name: q }).first().click();
     await expect(page.locator('.typing')).toHaveCount(0);
     await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
   }
 
+  const list = page.locator('.chat-scroll');
+  const handle = page.locator('.sug-handle');
+  const panel = page.locator('#chat-suggestions');
   const tabs = page.locator('nav.tabs');
-  await expect(tabs).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.dataset.kb ?? null)).toBeNull();
+  const scrollState = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.chat-scroll') as HTMLElement;
+      return {
+        top: el.scrollTop,
+        max: el.scrollHeight - el.clientHeight,
+        winY: window.scrollY,
+        docTop: document.scrollingElement!.scrollTop,
+        active: document.activeElement?.tagName ?? null,
+      };
+    });
 
-  // клавиатура открывается: фокус в поле и вьюпорт ниже на 300 px (так сжимает его Chrome с resizes-content)
+  // раскладка: страница не прокручивается, прокручивается только список
+  const layout = await page.evaluate(() => {
+    const el = document.querySelector('.chat-scroll') as HTMLElement;
+    const c = getComputedStyle(el);
+    return {
+      htmlOverflow: getComputedStyle(document.documentElement).overflow,
+      bodyOverflow: getComputedStyle(document.body).overflow,
+      overflowY: c.overflowY,
+      overscroll: c.overscrollBehaviorY,
+      minHeight: c.minHeight,
+      flex: c.flexGrow,
+      rootH: document.querySelector('.chat-root')!.getBoundingClientRect().height,
+      docH: document.documentElement.scrollHeight,
+      vh: window.innerHeight,
+      scrollable: el.scrollHeight > el.clientHeight,
+    };
+  });
+  expect(layout.htmlOverflow).toBe('hidden');
+  expect(layout.bodyOverflow).toBe('hidden');
+  expect(layout.overflowY).toBe('auto');
+  expect(layout.overscroll).toBe('contain');
+  expect(layout.flex).toBe('1');
+  expect(layout.docH).toBeLessThanOrEqual(layout.vh); // страница целиком на экране
+  expect(layout.scrollable).toBe(true);
+
+  // клавиатура закрыта: все подсказки развёрнуты, цвета как на экране PIN
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await expect(handle).toHaveAttribute('aria-controls', 'chat-suggestions');
+  await expect(handle).toHaveText('Подсказки');
+  expect((await handle.boundingBox())!.height).toBe(28);
+  const chip = await page.locator('#chat-suggestions .sug button').first().evaluate((e) => {
+    const c = getComputedStyle(e);
+    return {
+      bg: c.backgroundColor,
+      color: c.color,
+      border: c.borderTopColor,
+      radius: c.borderTopLeftRadius,
+      h: e.getBoundingClientRect().height,
+    };
+  });
+  expect(chip.bg).toBe('rgb(120, 66, 68)'); // #784244
+  expect(chip.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
+  expect(chip.border).toBe('rgba(255, 255, 255, 0.2)');
+  expect(chip.radius).toBe('999px');
+  expect(chip.h).toBe(36);
+  const open = (await panel.boundingBox())!.height;
+  expect(open).toBeGreaterThan(70);
+
+  // фокус в поле: подсказки сворачиваются до ручки, поле остаётся в фокусе
   await field(page).focus();
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await page.waitForTimeout(400);
+  expect((await panel.boundingBox())?.height ?? 0).toBeLessThan(1);
+  expect((await handle.boundingBox())!.height).toBe(28); // ручка остаётся
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
+  expect(await panel.locator(':scope > div').evaluate((e) => e.hasAttribute('inert'))).toBe(true);
+
+  // клавиатура открылась (вьюпорт ниже на 300 px): нижняя панель скрыта, поле над клавиатурой
   await page.setViewportSize({ width: 390, height: 544 });
   await expect(page.locator('html[data-kb="open"]')).toHaveCount(1);
   await expect(tabs).toBeHidden();
-
   const geo = await page.evaluate(() => {
     const comp = document.querySelector('.composer-wrap')!.getBoundingClientRect();
     const msgs = [...document.querySelectorAll('.msg')];
     const last = msgs[msgs.length - 1]!.getBoundingClientRect();
-    return { compBottom: comp.bottom, compTop: comp.top, vh: window.innerHeight, lastBottom: last.bottom, lastTop: last.top };
+    const sc = document.querySelector('.chat-scroll')!.getBoundingClientRect();
+    return { compBottom: comp.bottom, compTop: comp.top, vh: window.innerHeight, lastBottom: last.bottom, scBottom: sc.bottom };
   });
-  // поле стоит вплотную к клавиатуре (низ вьюпорта), зазора нет
-  expect(Math.abs(geo.compBottom - geo.vh)).toBeLessThanOrEqual(1);
-  // последнее сообщение не закрыто полем
-  await expect.poll(() =>
-    page.evaluate(() => {
-      const comp = document.querySelector('.composer-wrap')!.getBoundingClientRect();
-      const msgs = [...document.querySelectorAll('.msg')];
-      return msgs[msgs.length - 1]!.getBoundingClientRect().bottom <= comp.top + 0.5;
-    }),
-  ).toBe(true);
+  expect(Math.abs(geo.compBottom - geo.vh)).toBeLessThanOrEqual(1); // вплотную к клавиатуре
+  expect(geo.lastBottom).toBeLessThanOrEqual(geo.compTop + 0.5); // последнее сообщение над полем
+  expect(geo.lastBottom).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
 
-  // поле растёт, сообщение остаётся видно
-  await field(page).fill(lines(6));
-  await expect.poll(() =>
-    page.evaluate(() => {
-      const comp = document.querySelector('.composer-wrap')!.getBoundingClientRect();
-      const msgs = [...document.querySelectorAll('.msg')];
-      const last = msgs[msgs.length - 1]!.getBoundingClientRect();
-      return last.bottom <= comp.top + 0.5 && last.bottom > 0;
-    }),
-  ).toBe(true);
+  // список листается жестом, пока клавиатура открыта: страница на месте, поле в фокусе
+  const atBottom = await scrollState();
+  expect(atBottom.max).toBeGreaterThan(200);
+  expect(atBottom.max - atBottom.top).toBeLessThan(4); // остался внизу
+  const box = (await list.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(async () => (await scrollState()).top).toBeLessThan(atBottom.top - 200);
+  const scrolled = await scrollState();
+  expect(scrolled.winY).toBe(0);
+  expect(scrolled.docTop).toBe(0);
+  expect(scrolled.active).toBe('TEXTAREA');
+  // при открытой клавиатуре листание вверх подсказки не разворачивает
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await page.mouse.wheel(0, 300);
+  await page.waitForTimeout(150);
+  expect((await scrollState()).active).toBe('TEXTAREA');
 
-  // клавиатура закрывается: панель возвращается
+  // нажатие на сообщение и на пустое место не снимает фокус
+  await page.locator('.msg').first().dispatchEvent('mousedown');
+  await page.mouse.click(box.x + 4, box.y + 4);
+  expect((await scrollState()).active).toBe('TEXTAREA');
+
+  // ручка разворачивает блок обратно, фокус и клавиатура остаются
+  await handle.tap();
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(60);
+  expect((await scrollState()).active).toBe('TEXTAREA');
+  await handle.tap();
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+
+  // клавиатура закрылась: подсказки возвращаются, нижняя панель тоже
   await page.setViewportSize({ width: 390, height: 844 });
   await field(page).evaluate((e) => (e as HTMLElement).blur());
   await expect(page.locator('html[data-kb="open"]')).toHaveCount(0);
   await expect(tabs).toBeVisible();
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+
+  // клавиатура закрыта: листание вниз сворачивает, вверх разворачивает
+  const box2 = (await list.boundingBox())!;
+  await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+  await page.mouse.wheel(0, -2000);
+  await page.waitForTimeout(100);
+  await page.mouse.wheel(0, 200);
+  await page.mouse.wheel(0, 200);
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await page.waitForTimeout(500);
+  await page.mouse.wheel(0, -200);
+  await page.mouse.wheel(0, -200);
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
 });
 
 test.describe('Компьютер', () => {
@@ -297,5 +393,30 @@ test.describe('Компьютер', () => {
     await page.getByRole('button', { name: 'Отправить' }).click();
     await expect(field(page)).toHaveValue('');
     expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
+  });
+
+  test('Подсказки: наведение и нажатие светлее бордо, нажатие уменьшает до 0,97', async ({ page }) => {
+    await resetChat();
+    await firstLogin(page, PIN);
+    await field(page).waitFor();
+    await page.getByRole('button', { name: 'Что с порогами?' }).first().click();
+    await expect(page.locator('.typing')).toHaveCount(0);
+    await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
+
+    const chip = page.locator('#chat-suggestions .sug button').nth(1);
+    await page.mouse.move(2, 2);
+    await page.waitForTimeout(250);
+    const bg = () => chip.evaluate((e) => getComputedStyle(e).backgroundColor);
+    expect(await bg()).toBe('rgb(120, 66, 68)'); // #784244
+    await chip.hover();
+    await expect.poll(bg).toBe('rgb(138, 79, 82)'); // #8A4F52
+
+    // нажатие: фон тот же, лёгкое уменьшение до 0,97
+    await page.mouse.down();
+    await page.waitForTimeout(250);
+    const pressed = await chip.evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, t: getComputedStyle(e).transform }));
+    expect(pressed.bg).toBe('rgb(138, 79, 82)');
+    expect(pressed.t).toMatch(/^matrix\(0\.97/);
+    await page.mouse.up();
   });
 });
