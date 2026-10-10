@@ -19,6 +19,8 @@ test.describe.configure({ mode: 'serial' });
 test('доступность: вход, PIN, агент, дашборд, меню, блокировка', async ({ page }) => {
   const found: string[] = [];
   const check = async (label: string) => {
+    // при мягком переходе Next обновляет <title> чуть позже содержимого
+    await expect(page).toHaveTitle(/.+/);
     for (const v of await violations(page)) found.push(`${label}: ${v}`);
   };
 

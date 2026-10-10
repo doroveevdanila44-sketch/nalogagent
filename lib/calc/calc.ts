@@ -1,7 +1,7 @@
 import { dec, D, ZERO, round2, sum, type Dec } from './decimal';
 import { addDay, compareDays, daysInMonth, type CalendarDay, type Moment } from './time';
 import type { CalcCtx, EntityInput, EntitySnapshot, Rate, Selections } from './types';
-import { DEFAULT_RATE } from './types';
+import { DEFAULT_RATE, OSNO_RATE } from './types';
 
 const ONE = dec(1);
 
@@ -90,8 +90,9 @@ export function forecast(e: EntityInput, ctx: CalcCtx, rate: number, now: Moment
   return taxFor(rate, baseRev(e, ctx, now), e.inputVatShare, ctx.rules.generalRate);
 }
 
-/** Ставка с минимальным прогнозом, при равенстве меньшая. */
+/** Ставка с минимальным прогнозом, при равенстве меньшая. На ОСНО ставка одна. */
 export function bestRate(e: EntityInput, ctx: CalcCtx, now: Moment): Rate {
+  if (e.taxRegime === 'osno') return OSNO_RATE;
   const base = baseRev(e, ctx, now);
   let best = ctx.rules.rates[0]!;
   let bestTax = taxFor(best, base, e.inputVatShare, ctx.rules.generalRate);
@@ -106,6 +107,7 @@ export function bestRate(e: EntityInput, ctx: CalcCtx, now: Moment): Rate {
 }
 
 export function selectedRate(e: EntityInput, selections: Selections): Rate {
+  if (e.taxRegime === 'osno') return OSNO_RATE;
   const v = selections[e.id];
   return (v === 5 || v === 7 || v === 22 ? v : DEFAULT_RATE) as Rate;
 }

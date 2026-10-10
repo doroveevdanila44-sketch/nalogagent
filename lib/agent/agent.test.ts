@@ -90,9 +90,56 @@ describe('ответы по расчёту на дату теста', () => {
     expect(r.tables[0]!.head).toEqual(['Ставка за год', 'До', 'После']);
   });
 
-  it('налог на прибыль: честный отказ с планом на 2028', async () => {
-    const r = await ask('А налог на прибыль считаешь?');
-    expect(r.text).toContain('2028');
+  it('налог на прибыль и УСН: таблица по юрлицам с режимами и ближайшими сроками', async () => {
+    const r = await ask('Налог на прибыль за год?');
+    expect(r.class).toBe('A');
+    expect(r.fromCalc).toBe(true);
+    const t = r.tables[0]!;
+    expect(t.head).toEqual(['Юрлицо и режим', 'За год', 'Ближайший платёж']);
+    const row = (name: string) =>
+      t.rows.find((x) => x[0]!.startsWith(`${name}\n`))!.map((c) => c.replace(/\u00A0/g, ' '));
+    expect(row('ООО «Эпсилон»')).toEqual(['ООО «Эпсилон»\nОСНО, 25%', '4,16 млн', '28 октября\n1 540 656 ₽']);
+    expect(row('ИП Бета')[0]).toBe('ИП Бета\nУСН доходы минус расходы, 15%');
+    expect(row('ИП Бета')[1]).toBe('0,83 млн'); // 832 857,14
+    expect(row('ООО «Альфа»')[1]).toBe('1,62 млн'); // 28,4 млн × 100/105 × 6%
+    expect(row('ИП Дельта')[1]).toBe('1,25 млн');
+    expect(row('ООО «Гамма»')[1]).toBe('0,18 млн');
+    // итог по группе
+    expect(t.rows.at(-1)![0]).toBe('Всего');
+    expect(t.rows.at(-1)![1].replace(/\u00A0/g, ' ')).toBe('8,05 млн');
+    // ближайший срок группы и формулы в «Как посчитано»
+    expect(r.text.replace(/\u00A0/g, ' ')).toContain('Ближайший срок 28 октября');
+    expect(r.how.join(' ')).toContain('прибыль =');
+    expect(r.how.join(' ').replace(/\u00A0/g, ' ')).toContain('начислено на сегодня 3 324 432 ₽');
+    expect(r.how.join(' ')).toContain('минимальный налог 1% доходов');
+    expect(r.text).not.toContain('не считаю');
+  });
+
+  it('УСН и прибыль по одному юрлицу', async () => {
+    const r = await ask('Налог на прибыль у Эпсилон');
+    expect(r.tables[0]!.rows).toHaveLength(1);
+    expect(r.tables[0]!.rows[0]![0]).toBe('ООО «Эпсилон»\nОСНО, 25%');
+  });
+
+  it('что умеешь: упомянут налог на прибыль и УСН', async () => {
+    const r = await ask('Что ты умеешь?');
+    expect(r.class).toBe('C');
+    expect(r.text).toContain('налог на прибыль и УСН');
+  });
+
+  it('ставки: ОСНО не участвует в сравнении 5, 7, 22, описана отдельно', async () => {
+    const r = await ask('Какая ставка выгоднее?');
+    const names = r.tables[0]!.rows.map((x) => x[0]);
+    expect(names).not.toContain('ООО «Эпсилон»');
+    expect(r.text.replace(/\u00A0/g, ' ')).toContain(
+      'ООО «Эпсилон» на ОСНО: ставка НДС одна, 22% с вычетами, выбора нет. Прогноз НДС за год 6,00 млн.',
+    );
+  });
+
+  it('сценарий покупки для ОСНО: одна ставка', async () => {
+    const r = await ask('Что если Эпсилон купит 2 машины по 6 млн?');
+    expect(r.tables[0]!.rows).toHaveLength(1);
+    expect(r.text).toContain('Ставка одна');
   });
 
   it('вычет: граница около 73,6%', async () => {

@@ -1,5 +1,5 @@
 import { dec } from './decimal';
-import type { CalcCtx, DashboardInput, EntityInput, RuleSet, Selections } from './types';
+import type { CalcCtx, DashboardInput, EntityInput, RuleSet, Selections, TaxRegime } from './types';
 
 /** Вид входа калькулятора для передачи по сети: деньги строками, чтобы не терять точность. */
 export interface DashboardPayload {
@@ -19,6 +19,11 @@ export interface DashboardPayload {
     rateWindowMonths: number[];
     nextYear: { year: number; deflatorKnown: boolean; base5: string | null; base7: string | null };
     groupSigns: string | null;
+    profitTaxRate: string;
+    usnRateIncome: string;
+    usnRateIncomeExpense: string;
+    usnMinTaxRate: string;
+    paymentDay: number;
   };
   entities: {
     id: string;
@@ -30,6 +35,9 @@ export interface DashboardPayload {
     inputVatShare: string;
     color: string;
     description: string;
+    taxRegime: TaxRegime;
+    usnRate: string | null;
+    annualExpenses: string;
     monthly: { month: number; amount: string; isFact: boolean }[];
   }[];
   selections: Selections;
@@ -58,6 +66,11 @@ export function toPayload(input: DashboardInput, meta: { serverNow: number; tz: 
         base7: r.nextYear.base7?.toString() ?? null,
       },
       groupSigns: r.groupSigns,
+      profitTaxRate: r.profitTaxRate.toString(),
+      usnRateIncome: r.usnRateIncome.toString(),
+      usnRateIncomeExpense: r.usnRateIncomeExpense.toString(),
+      usnMinTaxRate: r.usnMinTaxRate.toString(),
+      paymentDay: r.paymentDay,
     },
     entities: input.entities.map((e) => ({
       id: e.id,
@@ -69,6 +82,9 @@ export function toPayload(input: DashboardInput, meta: { serverNow: number; tz: 
       inputVatShare: e.inputVatShare.toString(),
       color: e.color,
       description: e.description,
+      taxRegime: e.taxRegime,
+      usnRate: e.usnRate?.toString() ?? null,
+      annualExpenses: e.annualExpenses.toString(),
       monthly: (e.monthly ?? []).map((m) => ({ month: m.month, amount: m.amount.toString(), isFact: m.isFact })),
     })),
     selections: input.selections,
@@ -93,6 +109,11 @@ export function fromPayload(p: DashboardPayload): DashboardInput {
       base7: p.rules.nextYear.base7 === null ? null : dec(p.rules.nextYear.base7),
     },
     groupSigns: p.rules.groupSigns,
+    profitTaxRate: dec(p.rules.profitTaxRate),
+    usnRateIncome: dec(p.rules.usnRateIncome),
+    usnRateIncomeExpense: dec(p.rules.usnRateIncomeExpense),
+    usnMinTaxRate: dec(p.rules.usnMinTaxRate),
+    paymentDay: p.rules.paymentDay,
   };
   const ctx: CalcCtx = { weights: p.weights.map((w) => dec(w)), rules };
   const entities: EntityInput[] = p.entities.map((e) => ({
@@ -105,6 +126,9 @@ export function fromPayload(p: DashboardPayload): DashboardInput {
     inputVatShare: dec(e.inputVatShare),
     color: e.color,
     description: e.description,
+    taxRegime: e.taxRegime,
+    usnRate: e.usnRate === null ? null : dec(e.usnRate),
+    annualExpenses: dec(e.annualExpenses),
     monthly: e.monthly.map((m) => ({ month: m.month, amount: dec(m.amount), isFact: m.isFact })),
   }));
   return { entities, selections: p.selections, ctx };

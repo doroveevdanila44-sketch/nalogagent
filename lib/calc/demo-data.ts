@@ -7,12 +7,41 @@ import type { CalcCtx, DashboardInput, EntityInput, Selections } from './types';
 /** Веса сезонности из CALC.md */
 export const SEED_WEIGHTS = ['.07', '.07', '.07', '.05', '.06', '.09', '.13', '.14', '.10', '.06', '.05', '.11'].map(dec);
 
-/** Выдуманные данные демо (CALC.md, «Контрольные числа») */
+/**
+ * Выдуманные данные демо (CALC.md, «Контрольные числа»). Все юрлица и цифры условные.
+ * Эпсилон добавлена как пример ОСНО: НДС 22% с вычетами и налог на прибыль.
+ */
 export const SEED_ENTITIES: EntityInput[] = [
-  { id: 'alfa', name: 'ООО «Альфа»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer', annualRevenue: dec(28_400_000), inputVatShare: dec('0.82'), color: '#13191F', description: 'Аренда без экипажа: люкс и внедорожники' },
-  { id: 'beta', name: 'ИП Бета', form: 'ИП', ownerLabel: 'Собственник 1', status: 'payer', annualRevenue: dec(22_000_000), inputVatShare: dec('0.34'), color: '#906D4B', description: 'Аренда без экипажа: комфорт и внедорожники' },
-  { id: 'delta', name: 'ИП Дельта', form: 'ИП', ownerLabel: 'Собственник 2', status: 'exempt', annualRevenue: dec(20_900_000), inputVatShare: dec('0.18'), color: '#CA9C68', description: 'Аренда без экипажа: комфорт' },
-  { id: 'gamma', name: 'ООО «Гамма»', form: 'ООО', ownerLabel: 'Собственник 2', status: 'exempt', annualRevenue: dec(6_400_000), inputVatShare: dec('0.80'), color: '#E3D2BC', description: 'Аренда с экипажем и трансферы' },
+  {
+    id: 'alfa', name: 'ООО «Альфа»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer',
+    annualRevenue: dec(28_400_000), inputVatShare: dec('0.82'), color: '#13191F',
+    description: 'Аренда без экипажа: люкс и внедорожники',
+    taxRegime: 'usn_income', usnRate: dec('0.06'), annualExpenses: dec(0),
+  },
+  {
+    id: 'beta', name: 'ИП Бета', form: 'ИП', ownerLabel: 'Собственник 1', status: 'payer',
+    annualRevenue: dec(22_000_000), inputVatShare: dec('0.34'), color: '#906D4B',
+    description: 'Аренда без экипажа: комфорт и внедорожники',
+    taxRegime: 'usn_income_expense', usnRate: dec('0.15'), annualExpenses: dec(15_400_000),
+  },
+  {
+    id: 'delta', name: 'ИП Дельта', form: 'ИП', ownerLabel: 'Собственник 2', status: 'exempt',
+    annualRevenue: dec(20_900_000), inputVatShare: dec('0.18'), color: '#CA9C68',
+    description: 'Аренда без экипажа: комфорт',
+    taxRegime: 'usn_income', usnRate: dec('0.06'), annualExpenses: dec(0),
+  },
+  {
+    id: 'gamma', name: 'ООО «Гамма»', form: 'ООО', ownerLabel: 'Собственник 2', status: 'exempt',
+    annualRevenue: dec(6_400_000), inputVatShare: dec('0.80'), color: '#E3D2BC',
+    description: 'Аренда с экипажем и трансферы',
+    taxRegime: 'usn_income_expense', usnRate: dec('0.15'), annualExpenses: dec(5_200_000),
+  },
+  {
+    id: 'epsilon', name: 'ООО «Эпсилон»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer',
+    annualRevenue: dec(74_000_000), inputVatShare: dec('0.55'), color: '#594C3D',
+    description: 'Демо: условное юрлицо на ОСНО, данные выдуманы',
+    taxRegime: 'osno', usnRate: null, annualExpenses: dec(44_000_000),
+  },
 ];
 
 /** Строки таблицы rules из schema.sql */
@@ -24,6 +53,11 @@ export const SEED_RULE_ROWS: RuleRow[] = [
   { key: 'rate_special_7', value: '7', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'Без вычетов' },
   { key: 'rate_general', value: '22', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'С вычетами' },
   { key: 'twelve_quarters', value: '12', formula: null, unit: 'count', validFrom: '2026-01-01', validTo: '2026-12-31', norm: null, note: 'Ограничение возврата к прежней ставке' },
+  { key: 'profit_tax_rate', value: '25', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 284', note: 'Налог на прибыль. Проверить с бухгалтером' },
+  { key: 'usn_rate_income', value: '6', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 346.20, п. 1', note: 'УСН «доходы». Проверить с бухгалтером' },
+  { key: 'usn_rate_income_expense', value: '15', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 346.20, п. 2', note: 'УСН «доходы минус расходы». Проверить с бухгалтером' },
+  { key: 'usn_min_tax_rate', value: '1', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 346.18, п. 6', note: 'Минимальный налог УСН от доходов. Проверить с бухгалтером' },
+  { key: 'payment_day', value: '28', formula: null, unit: 'count', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 174, 287, 346.21', note: 'День месяца срока уплаты. Проверить с бухгалтером' },
   { key: 'rate_window', value: null, formula: null, unit: 'text', validFrom: '2026-01-01', validTo: '2026-12-31', norm: null, note: '11,12' },
   { key: 'group_unity_signs', value: null, formula: null, unit: 'text', validFrom: '2026-01-01', validTo: null, norm: null, note: 'один бренд, один сайт, общий парк' },
   { key: 'limit_5', value: null, formula: '250000000 * deflator', unit: 'rub', validFrom: '2027-01-01', validTo: null, norm: null, note: 'Дефлятор на 2027 год не утверждён' },

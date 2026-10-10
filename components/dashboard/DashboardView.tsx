@@ -13,7 +13,7 @@ import {
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { EntityCard } from './EntityCard';
-import { GroupBanner } from './GroupBanner';
+import { GroupSummary } from './GroupSummary';
 import { RevenueChart } from './RevenueChart';
 import { Skeletons } from './Skeletons';
 import { Warnings } from './Warnings';
@@ -79,7 +79,7 @@ export function DashboardView() {
     () => (input && moment ? computeStatic(input, moment) : null),
     [input, dayKey],
   );
-  const live = input && moment ? computeLive(input, moment) : null;
+  const live = input && moment && stat ? computeLive(input, moment, stat) : null;
 
   const choose = useCallback(
     async (entityId: string, rate: number) => {
@@ -113,12 +113,7 @@ export function DashboardView() {
 
   return (
     <div>
-      <GroupBanner
-        moment={moment}
-        entityCount={input.entities.length}
-        live={live}
-        stat={stat}
-      />
+      <GroupSummary moment={moment} input={input} live={live} stat={stat} />
       {notice ? (
         <p role="status" className="form-error" style={{ marginTop: 12 }}>
           {notice}
@@ -133,7 +128,7 @@ export function DashboardView() {
         <RevenueChart columns={stat.columns} entities={input.entities} />
       </section>
 
-      <section className="sec" aria-labelledby="h-ents">
+      <section className="sec" id="entities" aria-labelledby="h-ents">
         <div className="sec-h">
           <h2 id="h-ents">Юрлица</h2>
           <p>Налог растёт в реальном времени по темпу выручки текущего месяца</p>

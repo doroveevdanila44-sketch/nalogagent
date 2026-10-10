@@ -17,23 +17,31 @@ test('Дашборд: четыре юрлица, три ставки, живые
   await firstLogin(page, PIN);
   await toDashboard(page);
 
-  await expect(page.getByText('4 юрлица · УСН')).toBeVisible();
-  await expect(page.locator('article.ent')).toHaveCount(4);
+  await expect(page.getByText('5 юрлиц · УСН и ОСНО')).toBeVisible();
+  await expect(page.locator('.sum-card')).toHaveCount(4);
+  await expect(page.locator('article.ent')).toHaveCount(5);
   await expect(page.locator('.plot .col')).toHaveCount(12);
   await expect(page.getByText(/Срочных: \d+, всего: \d+/)).toBeVisible();
   await expect(page.getByText('Блок «Как считается»')).toHaveCount(0);
 
-  // у каждого юрлица три карточки ставок, выбрана ровно одна, она зелёная
+  // у юрлиц на УСН три карточки ставок, выбрана одна и она зелёная; на ОСНО одна карточка НДС 22%
   const cards = page.locator('article.ent');
-  for (let i = 0; i < 4; i++) {
-    const rates = cards.nth(i).locator('.rate');
-    await expect(rates).toHaveCount(3);
-    await expect(cards.nth(i).locator('.rate.sel')).toHaveCount(1);
-    await expect(cards.nth(i).locator('.rate.alt')).toHaveCount(2);
+  for (let i = 0; i < 5; i++) {
+    const card = cards.nth(i);
+    const osno = (await card.textContent())!.includes('ООО «Эпсилон»');
+    if (osno) {
+      await expect(card.locator('button.rate')).toHaveCount(0);
+      await expect(card.locator('.rate.sel')).toHaveCount(1);
+      await expect(card.locator('.rate.sel')).toContainText('НДС 22%');
+    } else {
+      await expect(card.locator('.rate')).toHaveCount(3);
+      await expect(card.locator('.rate.sel')).toHaveCount(1);
+      await expect(card.locator('.rate.alt')).toHaveCount(2);
+    }
   }
 
   // живая выручка меняется раз в секунду
-  const metric = page.locator('.metric strong').first();
+  const metric = page.locator('.sum-value').first();
   const first = await metric.innerText();
   await page.waitForTimeout(2500);
   expect(await metric.innerText()).not.toBe(first);
@@ -78,7 +86,7 @@ test('График: сегменты юрлиц это кнопки, выдел�
   const col = page.locator('.plot .col').nth(6);
   await expect(col).toHaveAttribute('aria-label', /Июль: .*млн, (факт|прогноз|идёт сейчас)/);
   const segs = col.locator('button.seg');
-  await expect(segs).toHaveCount(4);
+  await expect(segs).toHaveCount(5);
   await expect(segs.first()).toHaveAttribute('aria-label', /ООО «Альфа», Июль: .*млн, (факт|прогноз|идёт сейчас)/);
 
   // у столбца нет обводки
@@ -90,7 +98,8 @@ test('График: сегменты юрлиц это кнопки, выдел�
 
   // клик по сегменту: выделен он один, остальные приглушены
   await segs.first().click();
-  await expect(page.locator('.caption')).toContainText('ООО «Альфа», июль:');
+  await expect(page.locator('.seg-card')).toContainText('ООО «Альфа»');
+  await expect(page.locator('.seg-card')).toContainText('июль');
   await expect(segs.first()).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.seg.on')).toHaveCount(1);
   await page.waitForTimeout(260);
@@ -110,18 +119,19 @@ test('График: сегменты юрлиц это кнопки, выдел�
   // наведение мышью выделяет сегмент без клика
   await segs.nth(2).hover();
   await expect(page.locator('.seg.on')).toHaveCount(1);
-  await expect(page.locator('.caption')).toContainText('ИП Дельта, июль:');
+  await expect(page.locator('.seg-card')).toContainText('ИП Дельта');
   await page.mouse.move(0, 0);
   await expect(page.locator('.seg.on')).toHaveCount(0);
 
   // клавиатура: стрелки двигают по месяцам и юрлицам, подпись следует за фокусом
   await segs.first().focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.caption')).toContainText('ООО «Альфа», август:');
+  await expect(page.locator('.seg-card')).toContainText('ООО «Альфа»');
+  await expect(page.locator('.seg-card')).toContainText('август');
   await page.keyboard.press('ArrowUp');
-  await expect(page.locator('.caption')).toContainText('ИП Бета, август:');
+  await expect(page.locator('.seg-card')).toContainText('ИП Бета');
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.caption')).toContainText('ИП Бета, июль:');
+  await expect(page.locator('.seg-card')).toContainText('июль');
   await expect(page.locator('.plot .col.fc').first()).toBeVisible();
 });
 
@@ -131,7 +141,7 @@ test('Агент: подсказки, ответ по расчёту, отказ
 
   // пустая история: три подсказки
   const sug = page.locator('.sug button');
-  await expect(sug).toHaveCount(3);
+  await expect(sug).toHaveCount(4);
   await expect(page.getByRole('button', { name: 'Какая ставка выгоднее?' }).first()).toBeVisible();
 
   const input = page.getByLabel('Вопрос агенту');
@@ -176,11 +186,24 @@ test('Агент: подсказки, ответ по расчёту, отказ
   await expect(scenario).toContainText('ООО «Альфа» покупает 3 машины по 7 млн');
   await expect(scenario.locator('table')).toBeVisible();
 
+  // налог на прибыль: подсказка отвечает таблицей по юрлицам; на телефоне без горизонтальной прокрутки
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Налог на прибыль за год?' }).first().click();
+  await expect(page.locator('.typing')).toHaveCount(0);
+  const profit = page.locator('.msg:not(.me)').last();
+  await expect(profit.getByText('Налог на прибыль и УСН за год')).toBeVisible();
+  await expect(profit.locator('table')).toBeVisible();
+  await expect(profit.locator('tbody tr').filter({ hasText: 'ООО «Эпсилон»' })).toContainText('ОСНО, 25%');
+  // таблица целиком помещается на экране без горизонтальной прокрутки
+  const wide = await profit.locator('.tscroll').evaluate((e) => e.scrollWidth > e.clientWidth + 1);
+  expect(wide).toBe(false);
+  await expect(profit.locator('details summary')).toHaveText('Как посчитано');
+
   // история переживает перезагрузку
   await page.reload();
   await typePin(page, PIN);
   await expect(page.locator('.msg.me').first()).toBeVisible();
-  await expect(page.locator('.msg.me')).toHaveCount(8);
+  await expect(page.locator('.msg.me')).toHaveCount(9);
 });
 
 test('Вёрстка: нет горизонтальной прокрутки на 360, 390, 768, 1024, 1440', async ({ page }) => {

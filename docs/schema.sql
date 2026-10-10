@@ -5,6 +5,8 @@
 create extension if not exists pgcrypto;
 
 -- ===== Вход (см. AUTH.md) =====
+-- Реальная схема входа отличается от этого файла (лимиты в auth_events, devices.password_verified_at,
+-- sessions.locked_at, webauthn_credentials): см. docs/DECISIONS.md и lib/db/schema.ts.
 create table users (
   id            uuid primary key default gen_random_uuid(),
   login         text not null unique check (login = lower(login)),
@@ -76,7 +78,7 @@ create table seasonality (
 
 -- ===== Группа =====
 create table legal_entities (
-  id          text primary key,                 -- alfa, beta, delta, gamma
+  id          text primary key,                 -- alfa, beta, delta, gamma, epsilon
   name        text not null,
   form        text not null,                    -- ООО, ИП
   owner_label text not null,
@@ -85,7 +87,14 @@ create table legal_entities (
   input_vat_share numeric(5,4) not null check (input_vat_share between 0 and 1),  -- p
   color       text not null,
   description text,
-  sort        int not null default 0
+  sort        int not null default 0,
+  -- система налогообложения; для osno ставка НДС одна: 22% с вычетами
+  tax_regime  text not null default 'usn_income'
+              check (tax_regime in ('usn_income','usn_income_expense','osno')),
+  -- ставка УСН долей (0.06, 0.15); null: брать из rules по режиму
+  usn_rate    numeric(5,4) check (usn_rate is null or usn_rate between 0 and 1),
+  -- расходы за год без НДС: для УСН «доходы минус расходы» и налога на прибыль
+  annual_expenses numeric(18,2) not null default 0
 );
 
 create table revenue_monthly (
@@ -143,11 +152,13 @@ create table llm_usage (
 insert into seasonality(month, weight) values
  (1,.07),(2,.07),(3,.07),(4,.05),(5,.06),(6,.09),(7,.13),(8,.14),(9,.10),(10,.06),(11,.05),(12,.11);
 
-insert into legal_entities(id,name,form,owner_label,vat_status,annual_revenue,input_vat_share,color,description,sort) values
- ('alfa','ООО «Альфа»','ООО','Собственник 1','payer', 28400000,.82,'#13191F','Аренда без экипажа: люкс и внедорожники',1),
- ('beta','ИП Бета','ИП','Собственник 1','payer', 22000000,.34,'#906D4B','Аренда без экипажа: комфорт и внедорожники',2),
- ('delta','ИП Дельта','ИП','Собственник 2','exempt',20900000,.18,'#CA9C68','Аренда без экипажа: комфорт',3),
- ('gamma','ООО «Гамма»','ООО','Собственник 2','exempt', 6400000,.80,'#E3D2BC','Аренда с экипажем и трансферы',4);
+-- Все юрлица и цифры условные (демо). Сид обновляет существующие строки (on conflict do update).
+insert into legal_entities(id,name,form,owner_label,vat_status,annual_revenue,input_vat_share,color,description,sort,tax_regime,usn_rate,annual_expenses) values
+ ('alfa','ООО «Альфа»','ООО','Собственник 1','payer', 28400000,.82,'#13191F','Аренда без экипажа: люкс и внедорожники',1,'usn_income',.06,0),
+ ('beta','ИП Бета','ИП','Собственник 1','payer', 22000000,.34,'#906D4B','Аренда без экипажа: комфорт и внедорожники',2,'usn_income_expense',.15,15400000),
+ ('delta','ИП Дельта','ИП','Собственник 2','exempt',20900000,.18,'#CA9C68','Аренда без экипажа: комфорт',3,'usn_income',.06,0),
+ ('gamma','ООО «Гамма»','ООО','Собственник 2','exempt', 6400000,.80,'#E3D2BC','Аренда с экипажем и трансферы',4,'usn_income_expense',.15,5200000),
+ ('epsilon','ООО «Эпсилон»','ООО','Собственник 1','payer',74000000,.55,'#594C3D','Демо: условное юрлицо на ОСНО, данные выдуманы',5,'osno',null,44000000);
 
 insert into rules(key,value,unit,valid_from,valid_to,norm,note) values
  ('vat_exempt_limit', 20000000,'rub','2026-01-01','2026-12-31','НК РФ, ст. 145','Порог освобождения'),
@@ -156,7 +167,12 @@ insert into rules(key,value,unit,valid_from,valid_to,norm,note) values
  ('rate_special_5',   5,'percent','2026-01-01','2026-12-31','НК РФ, ст. 164','Без вычетов'),
  ('rate_special_7',   7,'percent','2026-01-01','2026-12-31','НК РФ, ст. 164','Без вычетов'),
  ('rate_general',     22,'percent','2026-01-01','2026-12-31','НК РФ, ст. 164','С вычетами'),
- ('twelve_quarters',  12,'count','2026-01-01','2026-12-31',null,'Ограничение возврата к прежней ставке');
+ ('twelve_quarters',  12,'count','2026-01-01','2026-12-31',null,'Ограничение возврата к прежней ставке'),
+ ('profit_tax_rate',  25,'percent','2026-01-01','2026-12-31','НК РФ, ст. 284','Налог на прибыль. Проверить с бухгалтером'),
+ ('usn_rate_income',  6,'percent','2026-01-01','2026-12-31','НК РФ, ст. 346.20, п. 1','УСН «доходы». Проверить с бухгалтером'),
+ ('usn_rate_income_expense',15,'percent','2026-01-01','2026-12-31','НК РФ, ст. 346.20, п. 2','УСН «доходы минус расходы». Проверить с бухгалтером'),
+ ('usn_min_tax_rate', 1,'percent','2026-01-01','2026-12-31','НК РФ, ст. 346.18, п. 6','Минимальный налог УСН от доходов. Проверить с бухгалтером'),
+ ('payment_day',      28,'count','2026-01-01','2026-12-31','НК РФ, ст. 174, 287, 346.21','День месяца срока уплаты. Проверить с бухгалтером');
 
 insert into rules(key,formula,unit,valid_from,note) values
  ('limit_5','250000000 * deflator','rub','2027-01-01','Дефлятор на 2027 год не утверждён'),

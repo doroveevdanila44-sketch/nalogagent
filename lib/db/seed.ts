@@ -6,8 +6,10 @@ import { legalEntities, revenueMonthly, rules, seasonality } from './schema';
 
 /**
  * Сид выдуманных данных демо. Идемпотентен:
- *  - справочники (правила, юрлица, веса) вставляются, существующие записи не трогаются,
- *    чтобы правка владельца (например, дефлятор) не затиралась повторным запуском;
+ *  - правила и веса вставляются, существующие записи не трогаются, чтобы правка владельца
+ *    (например, дефлятор) не затиралась повторным запуском;
+ *  - юрлица демо вставляются и ОБНОВЛЯЮТСЯ (название, цифры, режим налогообложения): сид
+ *    приводит демо-данные к описанным в CALC.md;
  *  - помесячная выручка текущего года пересчитывается: is_fact = месяц меньше текущего.
  * Пользователь luxautoowner сидом не создаётся, только командой npm run user:create.
  */
@@ -31,9 +33,28 @@ export async function seedDatabase(db: Db, now: { year: number; month: number })
         color: e.color,
         description: e.description,
         sort: i + 1,
+        taxRegime: e.taxRegime,
+        usnRate: e.usnRate ? e.usnRate.toFixed(4) : null,
+        annualExpenses: e.annualExpenses.toFixed(2),
       })),
     )
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: legalEntities.id,
+      set: {
+        name: sql`excluded.name`,
+        form: sql`excluded.form`,
+        ownerLabel: sql`excluded.owner_label`,
+        vatStatus: sql`excluded.vat_status`,
+        annualRevenue: sql`excluded.annual_revenue`,
+        inputVatShare: sql`excluded.input_vat_share`,
+        color: sql`excluded.color`,
+        description: sql`excluded.description`,
+        sort: sql`excluded.sort`,
+        taxRegime: sql`excluded.tax_regime`,
+        usnRate: sql`excluded.usn_rate`,
+        annualExpenses: sql`excluded.annual_expenses`,
+      },
+    });
 
   await db
     .insert(rules)

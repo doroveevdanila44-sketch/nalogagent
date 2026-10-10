@@ -166,10 +166,21 @@ export const legalEntities = pgTable(
     color: text('color').notNull(),
     description: text('description'),
     sort: integer('sort').notNull().default(0),
+    /** Система налогообложения: usn_income, usn_income_expense, osno */
+    taxRegime: text('tax_regime').notNull().default('usn_income'),
+    /** Ставка УСН долей (0.06, 0.15). null: брать из rules по режиму. Для ОСНО не используется */
+    usnRate: numeric('usn_rate', { precision: 5, scale: 4 }),
+    /** Расходы за год без НДС: для УСН «доходы минус расходы» и налога на прибыль */
+    annualExpenses: numeric('annual_expenses', { precision: 18, scale: 2 }).notNull().default('0'),
   },
   (t) => [
     check('legal_entities_vat_status', sql`${t.vatStatus} in ('payer','exempt')`),
     check('legal_entities_share_range', sql`${t.inputVatShare} between 0 and 1`),
+    check(
+      'legal_entities_tax_regime',
+      sql`${t.taxRegime} in ('usn_income','usn_income_expense','osno')`,
+    ),
+    check('legal_entities_usn_rate_range', sql`${t.usnRate} is null or ${t.usnRate} between 0 and 1`),
   ],
 );
 

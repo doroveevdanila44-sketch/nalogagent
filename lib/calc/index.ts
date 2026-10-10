@@ -3,6 +3,8 @@ export * from './decimal';
 export * from './time';
 export * from './rules';
 export * from './calc';
+export * from './income-tax';
+export * from './payments';
 export * from './format';
 export * from './warnings';
 export * from './serialize';

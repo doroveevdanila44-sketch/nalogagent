@@ -1,6 +1,8 @@
 import { bestRate, crossing, forecast, selectedRate, taxFor, groupTotal } from './calc';
 import { dec, sum } from './decimal';
 import { dateRu, mln, pct, pluralRu, rub } from './format';
+import { incomeTax, incomeTaxSchedule, nextPayment } from './income-tax';
+import { daysUntil, groupPayments, sumKind } from './payments';
 import type { Moment } from './time';
 import { compareDays } from './time';
 import type { CalcCtx, EntityInput, Selections, Warning, WarningLevel } from './types';
@@ -15,6 +17,11 @@ const ORDER: Record<WarningLevel, number> = { crit: 0, warn: 1, info: 2 };
 
 /** Запас до порога, меньше которого предупреждаем об освобождённом юрлице */
 const NEAR_LIMIT_MARGIN = dec(5_000_000);
+
+/** За сколько дней до срока платежа показывать напоминание */
+const PAYMENT_LEAD_DAYS = 45;
+
+const VAT_THIRD = ['первая треть', 'вторая треть', 'третья треть'] as const;
 
 /**
  * Предупреждения строятся из расчёта, не из текста модели. Сортировка: crit, warn, info,
@@ -93,15 +100,17 @@ export function buildWarnings(
     }
   }
 
-  if (rules.groupSigns && entities.length > 1 && rules.limit5) {
-    const total = groupTotal(entities.map((e) => e.annualRevenue));
+  // Лимит ставки 5% относится к выручке на УСН: юрлица на ОСНО в сумму не входят
+  const usnEntities = entities.filter((e) => e.taxRegime !== 'osno');
+  if (rules.groupSigns && usnEntities.length > 1 && rules.limit5) {
+    const total = groupTotal(usnEntities.map((e) => e.annualRevenue));
     const share = total.div(rules.limit5);
     const exemptTax = sum(
-      entities
+      usnEntities
         .filter((e) => e.status === 'exempt')
         .map((e) => taxFor(selectedRate(e, selections), e.annualRevenue, e.inputVatShare, rules.generalRate)),
     );
-    const owners = [...new Set(entities.map((e) => e.ownerLabel))];
+    const owners = [...new Set(usnEntities.map((e) => e.ownerLabel))];
     list.push({
       level: 'warn',
       kind: 'unified-business',
@@ -111,6 +120,63 @@ export function buildWarnings(
         `Юрлица взаимозависимы (${owners.join(' и ')}). Если выручку объединят, группа в сумме ${mln(total, 1)} за год, ` +
         `это ${pct(share)} от лимита ставки 5% (${mln(rules.limit5, 1)}). ` +
         `Освобождённые юрлица потеряли бы освобождение: оценка НДС по их выручке ${rub(exemptTax)} в год по выбранным ставкам.`,
+    });
+  }
+
+  // Ближайшая дата платежей: авансы по УСН и налогу на прибыль, доли НДС
+  const upcoming = groupPayments(entities, selections, ctx, now);
+  const first = upcoming[0];
+  if (first && daysUntil(first.due, now) <= PAYMENT_LEAD_DAYS) {
+    const same = upcoming.filter((p) => compareDays(p.due, first.due) === 0);
+    const income = same.filter((p) => p.kind !== 'vat');
+    const vat = same.filter((p) => p.kind === 'vat');
+    const taxes = [
+      income.some((p) => p.kind === 'usn') ? 'УСН' : null,
+      income.some((p) => p.kind === 'profit') ? 'налогу на прибыль' : null,
+    ].filter((x): x is string => x !== null);
+
+    const parts: string[] = [];
+    if (taxes.length) {
+      const final = income.some((p) => p.final);
+      parts.push(`${final ? 'итоговая уплата' : 'авансовые платежи'} по ${taxes.join(' и ')} ${income[0]!.periodLabel}`);
+    }
+    if (vat.length) parts.push(`${VAT_THIRD[(vat[0]!.vatThird ?? 1) - 1]} НДС за ${vat[0]!.vatQuarter} квартал`);
+
+    const usnSum = sumKind(same, 'usn', first.due);
+    const profitSum = sumKind(same, 'profit', first.due);
+    const vatSum = sumKind(same, 'vat', first.due);
+    const items = [
+      usnSum.gt(0) ? `УСН ${rub(usnSum)}` : null,
+      profitSum.gt(0) ? `налог на прибыль ${rub(profitSum)}` : null,
+      vatSum.gt(0) ? `НДС ${rub(vatSum)}` : null,
+    ].filter((x): x is string => x !== null);
+
+    list.push({
+      level: 'info',
+      kind: 'payment-date',
+      tag: TAG.info,
+      title: `${dateRu(first.due)}: ${parts.join(' и ')}`,
+      text:
+        `К уплате по расчёту: ${items.join(', ')}. Всего ${rub(usnSum.plus(profitSum).plus(vatSum))}. ` +
+        `Суммы ориентировочные (без страховых взносов), проверьте с бухгалтером.`,
+    });
+  }
+
+  // Юрлица на ОСНО: прогноз налога на прибыль за год
+  for (const e of entities.filter((x) => x.taxRegime === 'osno')) {
+    const tax = incomeTax(e, ctx, selections, now);
+    const next = nextPayment(incomeTaxSchedule(e, ctx, selections, now), today);
+    list.push({
+      level: 'info',
+      kind: 'osno-profit',
+      entityId: e.id,
+      tag: TAG.info,
+      title: `${e.name} на ОСНО: прогноз налога на прибыль за год ${mln(tax.forecast, 2)}`,
+      text:
+        `Прибыль за год ${mln(tax.base, 2)}: выручка без НДС ${mln(tax.income, 2)} минус расходы ${mln(tax.expenses, 2)}, ` +
+        `ставка ${tax.ratePct.toString()}%. Начислено на сегодня ${rub(tax.accrued)}.` +
+        (next ? ` Ближайший платёж ${dateRu(next.due)}, ${rub(next.amount)}.` : '') +
+        ` Данные демо, проверьте с бухгалтером.`,
     });
   }
 

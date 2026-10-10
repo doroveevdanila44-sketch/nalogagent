@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 import { fillPassword, firstLogin, typePin } from './helpers';
 
 const PIN = '8246';
@@ -285,4 +285,259 @@ test('Вход: ошибка и поля читаемы на коричнево�
   await expect(page.getByRole('alert').filter({ hasText: 'Неверный логин или пароль' })).toBeVisible();
   const errColor = await page.locator('.auth-screen .form-error').first().evaluate((e) => getComputedStyle(e).color);
   expect(errColor).toBe('rgb(255, 194, 184)'); // #FFC2B8 на #594C3D
+});
+
+// ===== Дашборд: карточки группы, график на телефоне, режимы налогообложения =====
+
+test('Карточки группы: четыре отдельные, раскладка 1, 2 на 2 и 4 в ряд, числа не переносятся', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.getByRole('link', { name: 'Дашборд' }).click();
+  await expect(page.getByRole('heading', { name: /Группа на \d+ \S+ \d{4}/ })).toBeVisible();
+  await expect(page.getByText('5 юрлиц · УСН и ОСНО')).toBeVisible();
+
+  const layout = async (width: number) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.mouse.move(1, 1); // курсор не над карточкой: нет подъёма при наведении
+    await page.waitForTimeout(300);
+    return page.evaluate(() => {
+      const els = [...document.querySelectorAll('.sum-card')] as HTMLElement[];
+      const boxes = els.map((e) => e.getBoundingClientRect());
+      const cs = getComputedStyle(els[0]!);
+      return {
+        count: els.length,
+        xs: [...new Set(boxes.map((b) => Math.round(b.left)))].length,
+        ys: [...new Set(boxes.map((b) => Math.round(b.top)))].length,
+        gap: Math.round(boxes[1]!.top - boxes[0]!.bottom) || Math.round(boxes[1]!.left - boxes[0]!.right),
+        bg: cs.backgroundColor,
+        radius: cs.borderTopLeftRadius,
+        padding: cs.paddingTop,
+        overflow: els.some((e) => {
+          const v = e.querySelector('.sum-value') as HTMLElement;
+          return v.scrollWidth > e.clientWidth - 24;
+        }),
+        label: getComputedStyle(els[0]!.querySelector('.sum-label')!).color,
+        value: getComputedStyle(els[0]!.querySelector('.sum-value')!).color,
+        tabular: getComputedStyle(els[0]!.querySelector('.sum-value')!).fontVariantNumeric,
+        labels: els.map((e) => e.querySelector('.sum-label')!.textContent),
+      };
+    });
+  };
+
+  const phone = await layout(390);
+  expect(phone.count).toBe(4);
+  expect(phone.xs).toBe(1); // один столбец
+  expect(phone.ys).toBe(4);
+  expect(phone.bg).toBe('rgb(89, 76, 61)'); // #594C3D
+  expect(phone.radius).toBe('16px');
+  expect(phone.padding).toBe('16px');
+  expect(phone.label).toBe('rgb(217, 199, 174)'); // #D9C7AE
+  expect(phone.value).toBe('rgb(246, 235, 221)'); // #F6EBDD
+  expect(phone.tabular).toContain('tabular-nums');
+  expect(phone.gap).toBe(12);
+  expect(phone.overflow).toBe(false);
+  expect(phone.labels).toEqual([
+    'Выручка с начала года',
+    'НДС начислен',
+    'Прогноз НДС за год',
+    'Налог на прибыль: прогноз за год',
+  ]);
+
+  const tablet = await layout(768);
+  expect(tablet.xs).toBe(2); // два на два
+  expect(tablet.ys).toBe(2);
+  expect(tablet.overflow).toBe(false);
+
+  const desktop = await layout(1440);
+  expect(desktop.xs).toBe(4); // четыре в ряд
+  expect(desktop.ys).toBe(1);
+  expect(desktop.overflow).toBe(false);
+
+  const narrow = await layout(1024);
+  expect(narrow.xs).toBe(4);
+  expect(narrow.overflow).toBe(false);
+  await layout(360).then((r) => expect(r.overflow).toBe(false));
+
+  // «можно сэкономить» внутри карточки НДС
+  await expect(page.locator('.sum-card').nth(1)).toContainText(/можно сэкономить .* в год|ставки уже лучшие/);
+});
+
+test('Карточки группы нажимаются: расшифровка по юрлицам и переход к карточкам юрлиц', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.getByRole('link', { name: 'Дашборд' }).click();
+  await expect(page.locator('.sum-card')).toHaveCount(4);
+
+  const profit = page.locator('.sum-card').nth(3);
+  await expect(profit).toHaveAttribute('aria-expanded', 'false');
+  await profit.click();
+  await expect(profit).toHaveAttribute('aria-expanded', 'true');
+  const detail = page.locator('#sum-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail.locator('li')).toHaveCount(5);
+  await expect(detail).toContainText('ООО «Эпсилон»');
+  await expect(detail).toContainText('ОСНО, 25%');
+
+  await page.locator('.sum-card').nth(0).click();
+  await expect(detail.locator('li')).toHaveCount(5);
+  await expect(detail).toContainText('Выручка с начала года по юрлицам');
+  await page.locator('.sum-card').nth(0).click();
+  await expect(detail).toBeHidden();
+
+  await profit.click();
+  const before = await page.evaluate(() => window.scrollY);
+  await page.getByRole('button', { name: 'К карточкам юрлиц' }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before + 100);
+});
+
+test('График на телефоне: ось закреплена, столбцы прокручиваются, текущий месяц по центру', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('link', { name: 'Дашборд' }).click();
+  await expect(page.locator('.plot .col')).toHaveCount(12);
+  await page.waitForTimeout(300);
+
+  const m = await page.evaluate(() => {
+    const sc = document.querySelector('.plot-scroll') as HTMLElement;
+    const cols = [...document.querySelectorAll('.plot .col')] as HTMLElement[];
+    const cur = [...document.querySelectorAll('.mon span')].findIndex((s) => s.classList.contains('now'));
+    const scr = sc.getBoundingClientRect();
+    const c = cols[cur]!.getBoundingClientRect();
+    return {
+      scrollable: sc.scrollWidth > sc.clientWidth,
+      inner: (document.querySelector('.plot') as HTMLElement).getBoundingClientRect().width,
+      minCol: Math.min(...cols.map((e) => e.getBoundingClientRect().width)),
+      centerOffset: Math.abs(c.left + c.width / 2 - (scr.left + scr.width / 2)),
+      plotH: (document.querySelector('.plot') as HTMLElement).getBoundingClientRect().height,
+      snap: getComputedStyle(sc).scrollSnapType,
+      monNow: getComputedStyle(document.querySelector('.mon .now')!).fontWeight,
+      monTransform: getComputedStyle(document.querySelector('.mon span')!).transform,
+      yaxLeft: document.querySelector('.yax')!.getBoundingClientRect().left,
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  expect(m.scrollable).toBe(true);
+  expect(m.inner).toBeGreaterThanOrEqual(520);
+  expect(m.inner).toBeLessThanOrEqual(530);
+  expect(m.minCol).toBeGreaterThanOrEqual(40);
+  expect(m.plotH).toBe(220);
+  expect(m.snap).toContain('x');
+  expect(m.monNow).toBe('600');
+  expect(m.monTransform).toBe('none'); // подписи без наклона
+  expect(m.centerOffset).toBeLessThanOrEqual(24);
+  expect(m.pageOverflow).toBeLessThanOrEqual(0);
+
+  // прокрутка столбцов не двигает ось Y
+  const axisBefore = await page.evaluate(() => document.querySelector('.yax')!.getBoundingClientRect().left);
+  await page.evaluate(() => (document.querySelector('.plot-scroll') as HTMLElement).scrollTo({ left: 0 }));
+  await page.waitForTimeout(150);
+  const axisAfter = await page.evaluate(() => document.querySelector('.yax')!.getBoundingClientRect().left);
+  expect(axisAfter).toBe(axisBefore);
+
+  // легенда в две колонки
+  const legendCols = await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.legend span')] as HTMLElement[];
+    return new Set(items.map((e) => Math.round(e.getBoundingClientRect().left))).size;
+  });
+  expect(legendCols).toBe(2);
+
+  // нажатие по сегменту показывает юрлицо, месяц и сумму в карточке под графиком
+  const seg = page.locator('.plot .col').nth(7).locator('button.seg').first();
+  await seg.scrollIntoViewIfNeeded();
+  await seg.click();
+  const card = page.locator('.seg-card');
+  await expect(card).toContainText('ООО «Альфа»');
+  await expect(card).toContainText('август');
+  await expect(card.locator('.seg-amount')).toContainText('млн');
+  await expect(page.locator('.seg.on')).toHaveCount(1);
+
+  // на компьютере график выше
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => (document.querySelector('.plot') as HTMLElement).getBoundingClientRect().height)).toBe(300);
+});
+
+test('Юрлица: режим тегом, ОСНО одной карточкой НДС и блоком налога на прибыль, УСН с тремя ставками', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('link', { name: 'Дашборд' }).click();
+  const card = (name: string) => page.locator('article.ent', { hasText: name });
+
+  await expect(card('ООО «Альфа»').locator('.chip.regime')).toHaveText('УСН доходы, 6%');
+  await expect(card('ИП Бета').locator('.chip.regime')).toHaveText('УСН доходы минус расходы, 15%');
+  await expect(card('ИП Дельта').locator('.chip.regime')).toHaveText('УСН доходы, 6%');
+  await expect(card('ООО «Гамма»').locator('.chip.regime')).toHaveText('УСН доходы минус расходы, 15%');
+  await expect(card('ООО «Эпсилон»').locator('.chip.regime')).toHaveText('ОСНО, 25%');
+  await expect(card('ООО «Эпсилон»').locator('.chip.demo')).toHaveText('демо');
+
+  // УСН: три ставки НДС и блок налога по УСН
+  const beta = card('ИП Бета');
+  await expect(beta.locator('button.rate')).toHaveCount(3);
+  await expect(beta.locator('.taxblock h4')).toHaveText('Налог по УСН, прогноз');
+  await expect(beta.locator('.taxblock')).toContainText('Ближайший платёж');
+  await expect(beta.locator('.taxblock')).toContainText('28 октября');
+  await expect(beta.locator('.taxblock-note')).toContainText('Минимальный налог 1% доходов');
+
+  // ОСНО: одна карточка НДС 22% с вычетами и блок налога на прибыль
+  const eps = card('ООО «Эпсилон»');
+  await expect(eps.locator('button.rate')).toHaveCount(0);
+  await expect(eps.locator('.rate.sel.static')).toContainText('НДС 22%');
+  await expect(eps.locator('.rate.sel.static')).toContainText('С вычетами');
+  await expect(eps.locator('.taxblock h4')).toHaveText('Налог на прибыль, прогноз');
+  await expect(eps.locator('.taxblock')).toContainText('25%');
+  await expect(eps.locator('.taxblock-note')).toContainText('прибыль');
+
+  // «Начислено» растёт вместе с выручкой
+  const accrued = eps.locator('.taxblock dd').nth(2);
+  const first = await accrued.innerText();
+  await page.waitForTimeout(3000);
+  expect(await accrued.innerText()).not.toBe(first);
+
+  // предупреждения: ОСНО и ближайшие платежи
+  await expect(page.locator('.warn', { hasText: 'ООО «Эпсилон» на ОСНО: прогноз налога на прибыль за год' })).toBeVisible();
+  await expect(page.locator('.warn', { hasText: /\d{1,2} [а-я]+: .*(УСН|НДС)/ }).first()).toBeVisible();
+
+  // сервер не принимает выбор ставки для ОСНО
+  const st = await (await page.request.get('/api/auth/state')).json();
+  const res = await page.request.post('/api/rates', {
+    headers: { 'x-csrf-token': st.csrf, origin: 'http://localhost:3101' },
+    data: { entityId: 'epsilon', rate: 5 },
+  });
+  expect(res.status()).toBe(422);
+});
+
+test('Касание тонкого сегмента на телефоне: область не меньше 40 px, выбирается сегмент под пальцем', async ({ browser }) => {
+  const ctx = await browser.newContext({
+    ...devices['Pixel 7'],
+    baseURL: 'http://localhost:3101',
+    locale: 'ru-RU',
+    timezoneId: 'Asia/Kamchatka',
+  });
+  const page = await ctx.newPage();
+  await firstLogin(page, PIN);
+  await page.getByRole('link', { name: 'Дашборд' }).click();
+  await expect(page.locator('.plot .col')).toHaveCount(12);
+
+  // у тонкого сегмента расширенная область даёт в сумме не меньше 40 px
+  const hit = await page.evaluate(() => {
+    const segs = [...document.querySelectorAll('.plot .seg')] as HTMLElement[];
+    const thin = segs.reduce((a, b) => (a.getBoundingClientRect().height < b.getBoundingClientRect().height ? a : b));
+    const h = thin.getBoundingClientRect().height;
+    const before = getComputedStyle(thin, '::before');
+    return { h, total: h - parseFloat(before.top) - parseFloat(before.bottom), coarse: matchMedia('(pointer: coarse)').matches };
+  });
+  expect(hit.coarse).toBe(true);
+  expect(hit.total).toBeGreaterThanOrEqual(39.5);
+
+  // касание по центру второго сегмента (ИП Бета) в столбце выбирает именно его
+  const point = await page.evaluate(() => {
+    const col = document.querySelectorAll('.plot .col')[2]!;
+    const seg = col.querySelectorAll('button.seg')[1] as HTMLElement;
+    seg.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = seg.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.touchscreen.tap(point.x, point.y);
+  await expect(page.locator('.seg-card')).toContainText('ИП Бета');
+  await expect(page.locator('.seg.on')).toHaveCount(1);
+  await ctx.close();
 });

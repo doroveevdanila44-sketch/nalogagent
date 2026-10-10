@@ -170,11 +170,19 @@ describe('6. правила с датами', () => {
   const rows = [
     ...SEED_RULE_ROWS,
     { key: 'vat_exempt_limit', value: '60000000', formula: null, unit: 'rub', validFrom: '2025-01-01', validTo: '2025-12-31', norm: 'НК РФ, ст. 145', note: 'Порог 2025' },
+    // правила налогов на 2025 год: пересчёт задним числом берёт записи того периода
+    { key: 'profit_tax_rate', value: '20', formula: null, unit: 'percent', validFrom: '2025-01-01', validTo: '2025-12-31', norm: 'НК РФ, ст. 284', note: 'условно' },
+    { key: 'usn_rate_income', value: '6', formula: null, unit: 'percent', validFrom: '2025-01-01', validTo: '2025-12-31', norm: null, note: null },
+    { key: 'usn_rate_income_expense', value: '15', formula: null, unit: 'percent', validFrom: '2025-01-01', validTo: '2025-12-31', norm: null, note: null },
+    { key: 'usn_min_tax_rate', value: '1', formula: null, unit: 'percent', validFrom: '2025-01-01', validTo: '2025-12-31', norm: null, note: null },
+    { key: 'payment_day', value: '28', formula: null, unit: 'count', validFrom: '2025-01-01', validTo: '2025-12-31', norm: null, note: null },
   ];
   it('пересчёт за 2025 год использует правила 2025', () => {
     const r25 = buildRuleSet(rows, moment(2025, 6, 1));
     expect(r25.vatExemptLimit.toNumber()).toBe(60_000_000);
     expect(r25.year).toBe(2025);
+    expect(r25.profitTaxRate.toString()).toBe('0.2');
+    expect(buildRuleSet(rows, moment(2026, 6, 1)).profitTaxRate.toString()).toBe('0.25');
     const r26 = buildRuleSet(rows, moment(2026, 6, 1));
     expect(r26.vatExemptLimit.toNumber()).toBe(20_000_000);
   });

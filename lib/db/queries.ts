@@ -49,6 +49,10 @@ export async function loadDashboardInput(db: Db, now: Moment): Promise<Dashboard
     inputVatShare: dec(r.inputVatShare),
     color: r.color,
     description: r.description ?? '',
+    taxRegime:
+      r.taxRegime === 'osno' || r.taxRegime === 'usn_income_expense' ? r.taxRegime : 'usn_income',
+    usnRate: r.usnRate === null ? null : dec(r.usnRate),
+    annualExpenses: dec(r.annualExpenses),
     monthly: byEntity.get(r.id) ?? [],
   }));
 
@@ -91,4 +95,14 @@ export async function entityExists(db: Db, entityId: string): Promise<boolean> {
     .where(and(eq(legalEntities.id, entityId)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** Режим налогообложения юрлица или null, если юрлица нет. */
+export async function entityTaxRegime(db: Db, entityId: string): Promise<string | null> {
+  const rows = await db
+    .select({ regime: legalEntities.taxRegime })
+    .from(legalEntities)
+    .where(eq(legalEntities.id, entityId))
+    .limit(1);
+  return rows[0]?.regime ?? null;
 }

@@ -4,6 +4,7 @@ function TableView({ table }: { table: Table }) {
   const best = new Set((table.best ?? []).map(([r, c]) => `${r}:${c}`));
   const last = table.rows.length - 1;
   return (
+    <div className="tscroll">
     <table>
       <thead>
         <tr>
@@ -29,6 +30,7 @@ function TableView({ table }: { table: Table }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 

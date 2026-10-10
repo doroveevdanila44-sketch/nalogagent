@@ -28,6 +28,8 @@ function parsePriceMln(t: string): number | null {
   return m ? parseFloat(m[1]!.replace(',', '.')) : null;
 }
 
+const PROFIT = cyr('прибыл|\\bусн\\b|упрощ|налог\\w* по усн|налог\\w* на доход');
+
 const SCENARIO = cyr(
   'куп(им|ит|ить|ка|или|лю|ишь|ите|ят|ленн\\w*)|приобре\\w+|покуп|новых? (машин|авто)|добав\\w* (машин|авто)|лизинг|(машин|авто|автомобил)\\w* по \\d|\\d+ (машин|авто|автомобил)',
 );
@@ -35,7 +37,7 @@ const SCENARIO = cyr(
 function detectIntent(t: string): Intent | null {
   if (/раздроб|обойти|спрят|незамет|скрыть/.test(t)) return 'boundary';
   if (SCENARIO.test(t)) return 'scenario';
-  if (/прибыл/.test(t)) return 'profit';
+  if (PROFIT.test(t)) return 'profit';
   if (/порог|предупрежд|20 млн|освобожд|риск|пересеч/.test(t)) return 'warnings';
   if (/дроблен|объедин|единый бизнес|признак/.test(t)) return 'fragmentation';
   if (/вычет|входящ|входной/.test(t)) return 'deduct';

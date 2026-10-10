@@ -4,7 +4,7 @@ import { BodyError, readJson } from '@/lib/auth/request';
 import { failure, json, requireApiAuth } from '@/lib/auth/server';
 import { momentFromEpoch } from '@/lib/calc/time';
 import { getDb } from '@/lib/db/client';
-import { entityExists, saveRateChoice } from '@/lib/db/queries';
+import { entityTaxRegime, saveRateChoice } from '@/lib/db/queries';
 import { getEnv } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -22,8 +22,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!gate.ok) return gate.res;
     const body = await readJson(req, Body);
     const db = getDb();
-    if (!(await entityExists(db, body.entityId))) {
-      return json({ error: 'Юрлицо не найдено', code: 'not_found' }, 404);
+    const regime = await entityTaxRegime(db, body.entityId);
+    if (!regime) return json({ error: 'Юрлицо не найдено', code: 'not_found' }, 404);
+    // На ОСНО ставка НДС одна (22% с вычетами), выбирать нечего
+    if (regime === 'osno') {
+      return json({ error: 'Для юрлица на ОСНО ставка НДС одна', code: 'no_choice' }, 422);
     }
     const { year } = momentFromEpoch(Date.now(), getEnv().appTz);
     await saveRateChoice(db, { entityId: body.entityId, year, rate: body.rate, userId: gate.auth.userId });

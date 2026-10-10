@@ -3,10 +3,15 @@ import type { CalendarDay } from './time';
 
 export type VatStatus = 'payer' | 'exempt';
 
+/** Система налогообложения юрлица */
+export type TaxRegime = 'usn_income' | 'usn_income_expense' | 'osno';
+
 /** Допустимые ставки задаются правилами, но в интерфейсе их ровно три. */
 export type Rate = 5 | 7 | 22;
 export const RATES: readonly Rate[] = [5, 7, 22];
 export const DEFAULT_RATE: Rate = 5;
+/** На ОСНО ставка НДС одна: общая, с вычетами. Выбора нет */
+export const OSNO_RATE: Rate = 22;
 
 export interface MonthFact {
   /** 0..11 */
@@ -27,6 +32,12 @@ export interface EntityInput {
   inputVatShare: Dec;
   color: string;
   description: string;
+  /** Система налогообложения. Для osno ставка НДС одна: общая 22% с вычетами */
+  taxRegime: TaxRegime;
+  /** Ставка УСН долей; null: из справочника rules по режиму */
+  usnRate: Dec | null;
+  /** Расходы за год без НДС */
+  annualExpenses: Dec;
   monthly?: MonthFact[];
 }
 
@@ -52,6 +63,16 @@ export interface RuleSet {
   };
   /** Текст признаков единого бизнеса из справочника, null если не задан */
   groupSigns: string | null;
+  /** Налог на прибыль, доля: 0.25 */
+  profitTaxRate: Dec;
+  /** УСН «доходы», доля: 0.06 */
+  usnRateIncome: Dec;
+  /** УСН «доходы минус расходы», доля: 0.15 */
+  usnRateIncomeExpense: Dec;
+  /** Минимальный налог УСН от доходов, доля: 0.01 */
+  usnMinTaxRate: Dec;
+  /** День месяца срока уплаты: 28 */
+  paymentDay: number;
 }
 
 export interface CalcCtx {

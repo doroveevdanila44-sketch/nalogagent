@@ -82,6 +82,14 @@ export function buildRuleSet(rows: RuleRow[], now: Moment): RuleSet {
     : [11, 12];
   const signs = resolveRule(rows, 'group_unity_signs', onDate);
 
+  /** Процентная ставка из справочника в виде доли */
+  const share = (key: string): Dec => {
+    const v = numeric(need(key));
+    if (!v) throw new MissingRuleError(key, onDate);
+    return v.div(100);
+  };
+  const day = numeric(need('payment_day'));
+
   return {
     asOf: onDate,
     year: now.year,
@@ -99,5 +107,10 @@ export function buildRuleSet(rows: RuleRow[], now: Moment): RuleSet {
       base7: formulaBase(next7),
     },
     groupSigns: signs?.note ?? null,
+    profitTaxRate: share('profit_tax_rate'),
+    usnRateIncome: share('usn_rate_income'),
+    usnRateIncomeExpense: share('usn_rate_income_expense'),
+    usnMinTaxRate: share('usn_min_tax_rate'),
+    paymentDay: day ? day.toNumber() : 28,
   };
 }

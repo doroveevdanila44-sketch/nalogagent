@@ -6,7 +6,12 @@ import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { Message } from './Message';
 
-const SUGGESTIONS = ['Какая ставка выгоднее?', 'Сколько платить за квартал?', 'Что с порогами?'];
+const SUGGESTIONS = [
+  'Какая ставка выгоднее?',
+  'Сколько платить за квартал?',
+  'Что с порогами?',
+  'Налог на прибыль за год?',
+];
 
 type Pending = { key: number; text: string };
 
@@ -147,7 +152,7 @@ export function ChatView() {
 
       <div className="composer-wrap" ref={composerRef}>
         <div className="wrap">
-          {!empty ? (
+          {turns !== null && !empty ? (
             <div className="sug" style={{ paddingTop: 8 }}>
               {SUGGESTIONS.map((s) => (
                 <button key={s} type="button" onClick={() => void send(s)} disabled={Boolean(sending)}>
