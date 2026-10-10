@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { firstLogin } from './helpers';
+import { fillPassword, firstLogin } from './helpers';
 
 // Снимки для визуальной проверки. Запуск: SCREENS=1 npx playwright test e2e/screens.spec.ts
 test.skip(!process.env.SCREENS, 'только по запросу');
@@ -7,60 +7,69 @@ test.describe.configure({ mode: 'serial' });
 
 const OUT = '.data/shots';
 
-test('дашборд и агент на 390, 768, 1440', async ({ page }) => {
-  await firstLogin(page, '8246');
-  await page.getByRole('link', { name: 'Дашборд' }).click();
-  await page.locator('.sum-card').first().waitFor();
-  await page.waitForTimeout(800);
+test('экран PIN на разных размерах', async ({ page }) => {
+  // шаг «Придумайте PIN» с подписью
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('/login');
+  await fillPassword(page);
+  await page.getByRole('heading', { name: 'Придумайте PIN из 4 цифр' }).waitFor();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/t2-setup-375x667.png` });
+  for (const d of ['8', '2', '4', '6']) await page.getByRole('button', { name: d, exact: true }).click();
+  await page.getByRole('heading', { name: 'Повторите PIN' }).waitFor();
+  for (const d of ['8', '2', '4', '6']) await page.getByRole('button', { name: d, exact: true }).click();
+  await page.waitForURL('**/agent');
 
-  for (const w of [390, 768, 1440]) {
-    await page.setViewportSize({ width: w, height: 900 });
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.mouse.move(1, 1);
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: `${OUT}/t1-dash-top-${w}.png` });
+  await page.reload();
+  await page.getByRole('heading', { name: 'Введите PIN' }).waitFor();
+  const combos: [number, number][] = [
+    [375, 667],
+    [390, 844],
+    [430, 932],
+    [768, 1024],
+    [430, 667],
+    [375, 932],
+    [768, 667],
+    [1440, 900],
+  ];
+  for (const [w, h] of combos) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: `${OUT}/t2-pin-${w}x${h}.png` });
   }
 
-  // раскрытая расшифровка
-  await page.setViewportSize({ width: 390, height: 900 });
-  await page.locator('.sum-card').nth(3).click();
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/t1-dash-detail-390.png` });
-  await page.locator('.sum-card').nth(3).click();
-
-  // график на телефоне
-  await page.locator('.chart').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
-  await page.locator('.chart').evaluate((e) => e.scrollIntoView({ block: 'start' }));
-  await page.waitForTimeout(200);
-  await page.screenshot({ path: `${OUT}/t1-chart-390.png` });
-  await page.locator('.plot .col').nth(9).locator('button.seg').nth(1).click({ force: true });
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: `${OUT}/t1-chart-pick-390.png` });
-
-  // карточки юрлиц
-  await page.locator('article.ent', { hasText: 'ООО «Эпсилон»' }).scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/t1-ent-epsilon-390.png` });
-  await page.locator('article.ent', { hasText: 'ИП Бета' }).scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/t1-ent-beta-390.png` });
-
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.waitForTimeout(300);
-  await page.locator('article.ent', { hasText: 'ООО «Эпсилон»' }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `${OUT}/t1-ent-1440.png` });
-  await page.locator('.chart').evaluate((e) => e.scrollIntoView({ block: 'start' }));
-  await page.waitForTimeout(200);
-  await page.screenshot({ path: `${OUT}/t1-chart-1440.png` });
-
-  // агент: налог на прибыль
+  // введены цифры: «Удалить» справа
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('link', { name: 'Агент' }).click();
-  await page.getByRole('button', { name: 'Налог на прибыль за год?' }).first().click();
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/t1-agent-profit-390.png` });
+  await page.getByRole('button', { name: '1', exact: true }).click();
+  await page.getByRole('button', { name: '3', exact: true }).click();
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/t2-pin-digits-390x844.png` });
+
+  // нажатая клавиша
+  const key = page.getByRole('button', { name: '7', exact: true });
+  await key.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(60);
+  await page.screenshot({ path: `${OUT}/t2-pin-pressed-390x844.png` });
+  await page.mouse.up();
+
+  // ошибка
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click().catch(() => undefined);
+  for (const d of ['1', '3', '5', '7']) await page.getByRole('button', { name: d, exact: true }).click();
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: `${OUT}/t2-pin-error-375x667.png` });
+
+  // пароль
+  await page.waitForTimeout(700);
+  await page.getByRole('button', { name: 'Войти по паролю' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel('Логин', { exact: true }).waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/t2-password-390x844.png` });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/t1-agent-profit-1440.png` });
+  await page.screenshot({ path: `${OUT}/t2-password-1440x900.png` });
 });

@@ -219,6 +219,9 @@
   .wordmark.big {
     font-size: 30px;
   }
+  .wordmark.small {
+    font-size: 20px;
+  }
   /* На коричневом фоне входа и PIN: «luxauto» F6EBDD, «41» CA9C68 */
   .wordmark.light {
     color: #f6ebdd;
@@ -1233,9 +1236,9 @@
   }
   .field input {
     width: 100%;
-    height: 44px;
+    height: 52px;
     border: 1px solid var(--a-line);
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 0 14px;
     font-size: 16px;
     color: var(--a-ink);
@@ -1258,8 +1261,8 @@
   }
   .field .with-eye button {
     position: absolute;
-    right: 2px;
-    top: 0;
+    right: 4px;
+    top: 4px;
     width: 44px;
     height: 44px;
     border: 0;
@@ -1278,8 +1281,12 @@
     max-width: 360px;
   }
   .auth-screen .btn {
+    width: 100%;
+    min-height: 52px;
+    border-radius: 14px;
     background: var(--a-accent);
     color: var(--color-river);
+    font-size: 17px;
   }
   .form-error {
     color: var(--color-bad);
@@ -1291,106 +1298,208 @@
     color: #ffc2b8;
   }
 
+  /* ===== Экран PIN по образцу iPhone ===== */
+  .auth-screen.pin-mode {
+    padding: 0;
+    gap: 0;
+    justify-content: flex-start;
+  }
+  .pin-screen {
+    /* размер клавиши: от 64 px, 19,5% ширины, не больше 82 px; на низких экранах ограничен высотой */
+    --key: min(clamp(64px, 19.5vw, 82px), 10.8dvh);
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    height: 100dvh;
+    margin-inline: auto;
+    color: #fff;
+    animation: pin-in 220ms ease both;
+  }
+  .pin-screen.leaving {
+    opacity: 0;
+    transform: scale(0.98);
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease;
+    pointer-events: none;
+  }
+  @keyframes pin-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  /* знак небольшой, около 20 px высотой, у верхнего края под safe-area плюс 24 px */
+  .pin-mark {
+    position: absolute;
+    top: calc(var(--safe-top) + 24px);
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+  }
+  /* заголовок по центру на высоте около 18% экрана */
+  .pin-head {
+    position: absolute;
+    top: 18dvh;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
+    padding-inline: 8px;
+    text-align: center;
+  }
   .pin-title {
     font-size: 19px;
-    font-weight: 600;
+    font-weight: 500;
+    line-height: 1.25;
     text-align: center;
-    color: var(--a-ink);
+    color: #f6ebdd;
   }
   .pin-sub {
-    color: var(--color-muted);
-    font-size: 14px;
-    text-align: center;
     margin-top: 4px;
+    font-size: 14px;
+    line-height: 1.35;
+    text-align: center;
+    color: var(--color-muted);
   }
   .auth-screen .pin-sub {
-    color: var(--a-sub);
+    color: #d9c7ae;
   }
-  .dots {
+  /* точки на высоте около 25%: диаметр 13 px, расстояние между центрами 37 px */
+  .pin-dots {
+    position: absolute;
+    top: 25dvh;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
     display: flex;
-    gap: 16px;
     justify-content: center;
-    height: 16px;
+    gap: 24px;
   }
-  .dots i {
-    width: 16px;
-    height: 16px;
+  .pin-dots i {
+    box-sizing: border-box;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
-    border: 2px solid var(--a-ink);
+    border: 1.5px solid #f6ebdd;
     background: transparent;
-    transition:
-      background-color 150ms ease,
-      border-color 150ms ease,
-      transform 150ms ease;
+    transition: background-color 150ms ease;
   }
-  .dots i.on {
-    background: var(--a-accent);
-    border-color: var(--a-accent);
-    transform: scale(1.1);
+  .pin-dots i.on {
+    background: #f6ebdd;
   }
-  .dots.shake {
-    animation: shake 0.4s;
+  .pin-dots.shake {
+    animation: shake 400ms ease;
   }
   @keyframes shake {
-    20%,
-    60% {
-      transform: translateX(-9px);
+    15%,
+    55% {
+      transform: translate(-9px, -50%);
     }
-    40%,
-    80% {
-      transform: translateX(9px);
+    35%,
+    75% {
+      transform: translate(9px, -50%);
     }
   }
+  .pin-error {
+    position: absolute;
+    top: calc(25dvh + 20px);
+    left: 0;
+    right: 0;
+    padding-inline: 20px;
+    text-align: center;
+    min-height: 20px;
+  }
+  /* клавиатура 3 на 4 с высоты около 34%: 0 в середине нижнего ряда, по бокам пусто */
   .pad {
+    position: absolute;
+    top: 34dvh;
+    left: 50%;
+    transform: translateX(-50%);
     display: grid;
-    grid-template-columns: repeat(3, 64px);
-    gap: 14px 22px;
+    grid-template-columns: repeat(3, var(--key));
+    grid-auto-rows: var(--key);
+    gap: 19px 25px;
     justify-content: center;
   }
   .key {
-    width: 64px;
-    height: 64px;
+    width: var(--key);
+    height: var(--key);
     border-radius: 50%;
-    border: 1px solid var(--a-line);
-    background: transparent;
-    color: var(--a-ink);
-    font-size: 24px;
+    padding: 0;
+    /* стекло: полупрозрачная заливка, тонкий контур, размытие фона */
+    background: rgb(255 255 255 / 0.14);
+    border: 1px solid rgb(255 255 255 / 0.18);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    color: #fff;
+    font-size: 36px;
     font-weight: 500;
+    line-height: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    /* возврат после нажатия плавный, 300 мс */
+    transition:
+      background-color 300ms ease,
+      transform 300ms ease;
   }
   .key:disabled {
     opacity: 1;
   }
   .key:hover:not(:disabled) {
-    background: rgb(246 235 221 / 0.1);
-    border-color: rgb(246 235 221 / 0.6);
+    background: rgb(255 255 255 / 0.2);
   }
-  /* Нажатие: плавная заливка акцентом и тёмная цифра. .pressed держит заливку на быстром тапе */
+  /* Нажатие: мгновенное осветление до .38 и лёгкое уменьшение, без перехода на входе */
   .key.pressed,
   .key:active:not(:disabled) {
-    background: var(--a-accent);
-    border-color: var(--a-accent);
-    color: var(--color-river);
+    background: rgb(255 255 255 / 0.38);
     transform: scale(0.96);
+    transition: none;
   }
-  .key.plain {
-    border-color: transparent;
+  /* нижняя строка действий: выровнена по колонкам кнопок 1 и 3, у нижнего края */
+  .pin-actions {
+    position: absolute;
+    bottom: calc(var(--safe-bottom) + 34px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(3, var(--key));
+    column-gap: 25px;
+    justify-content: center;
+    align-items: center;
   }
-  .key.plain:hover:not(:disabled) {
-    border-color: transparent;
+  .pin-action {
+    display: flex;
+    justify-content: center;
+    min-height: 44px;
   }
-  .key svg {
-    width: 26px;
-    height: 26px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .pin-action.left {
+    grid-column: 1;
+  }
+  .pin-action.right {
+    grid-column: 3;
+  }
+  .pin-action button {
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: opacity 150ms ease;
+  }
+  .pin-action button:hover:not(:disabled) {
+    opacity: 0.75;
+  }
+  .pin-action button:active:not(:disabled) {
+    opacity: 0.55;
   }
   .linkish {
     background: none;
@@ -1403,37 +1512,43 @@
     min-height: 44px;
     padding: 0 8px;
   }
-  .auth-screen .linkish {
-    color: var(--color-sand-soft);
-  }
-  .auth-screen .linkish:hover {
-    color: #fff;
-  }
 
-  /* Низкие окна: клавиатура компактнее, чтобы не появлялась прокрутка и блок не смещался */
-  @media (max-height: 700px) {
-    .auth-screen {
-      gap: 16px;
+  /* Совсем низкие экраны (горизонтальный телефон): обычный поток и прокрутка вместо наложения */
+  @media (max-height: 520px) {
+    .pin-screen {
+      --key: 52px;
+      height: auto;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: calc(var(--safe-top) + 16px) 0 calc(var(--safe-bottom) + 16px);
     }
-    .pad {
-      grid-template-columns: repeat(3, 56px);
-      gap: 10px 18px;
+    .pin-mark,
+    .pin-head,
+    .pin-dots,
+    .pin-error,
+    .pad,
+    .pin-actions {
+      position: static;
+      transform: none;
     }
-    .key {
-      width: 56px;
-      height: 56px;
-      font-size: 22px;
+    .pin-dots.shake {
+      animation-name: shake-flow;
     }
-  }
-  @media (max-height: 580px) {
-    .pad {
-      grid-template-columns: repeat(3, 48px);
-      gap: 8px 14px;
+    @keyframes shake-flow {
+      15%,
+      55% {
+        transform: translateX(-9px);
+      }
+      35%,
+      75% {
+        transform: translateX(9px);
+      }
     }
-    .key {
-      width: 48px;
-      height: 48px;
-      font-size: 20px;
+    .pin-actions {
+      margin-top: 4px;
     }
   }
 
@@ -1595,8 +1710,12 @@
     .tab:active,
     .key.pressed,
     .key:active,
+    .pin-screen.leaving,
     .seg.on {
       transform: none !important;
+    }
+    .pin-screen {
+      animation: none;
     }
   }
 }

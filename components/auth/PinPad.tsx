@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Wordmark } from '@/components/Wordmark';
 import { useHydrated } from '@/lib/client/hydrated';
 
 export interface PinResult {
@@ -11,41 +12,57 @@ export interface PinResult {
 interface Props {
   title: string;
   subtitle?: string;
-  /** Вызывается, когда введена четвёртая цифра. При ok: false точки трясутся и очищаются */
+  /** Вызывается, когда введена четвёртая цифра. При ok: false точки трясутся 400 мс и очищаются */
   onSubmit: (pin: string) => Promise<PinResult>;
   /** Меняется снаружи, чтобы сбросить введённое (например, при переходе на «Повторите PIN») */
   resetKey?: string | number;
-  footer?: ReactNode;
   initialError?: string | null;
+  /** Текстовая кнопка слева внизу, например «Войти по паролю» */
+  leftAction?: { label: string; onClick: () => void };
+  /** «Отмена» справа внизу, пока не введена ни одна цифра. Без обработчика место пустое */
+  onCancel?: () => void;
 }
 
+const SHAKE_MS = 400;
+const PRESS_MS = 180;
+
 /**
- * Экран ввода PIN как в банковском приложении: 4 точки и клавиатура 3 на 4.
- * Ввод после четвёртой цифры отправляется сам. Для аппаратной клавиатуры есть скрытое поле:
- * type=password (маска), inputmode=numeric, менеджеры паролей отключены.
+ * Экран кода-пароля по образцу iPhone: знак вверху, заголовок на ~18% высоты, четыре точки
+ * на ~25%, клавиатура 3 на 4 с ~34%, внизу строка действий («Войти по паролю» слева, «Удалить»
+ * или «Отмена» справа). Высоты в dvh с учётом safe-area. Колонка не шире 360 px.
+ *
+ * Логика ввода прежняя: четвёртая цифра отправляется сама; с аппаратной клавиатуры работают
+ * цифры и Backspace, Enter не нужен. Скрытое поле type=password с inputmode=numeric оставлено
+ * для вспомогательных технологий, менеджеры паролей отключены.
  */
-export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialError = null }: Props) {
+export function PinPad({
+  title,
+  subtitle,
+  onSubmit,
+  resetKey,
+  initialError = null,
+  leftAction,
+  onCancel,
+}: Props) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(initialError);
-  const [shake, setShake] = useState(0);
+  const [shaking, setShaking] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pressed, setPressed] = useState<string | null>(null);
   const hydrated = useHydrated();
   const input = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
   const valueRef = useRef('');
-  const [pressed, setPressed] = useState<string | null>(null);
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  /** Подсветка клавиши держится 180 мс, чтобы быстрый тап успевал показать заливку */
-  const flash = useCallback((key: string) => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
-    setPressed(key);
-    pressTimer.current = setTimeout(() => setPressed(null), 180);
+  const later = useCallback((fn: () => void, ms: number) => {
+    timers.current.push(setTimeout(fn, ms));
   }, []);
 
   useEffect(
     () => () => {
-      if (pressTimer.current) clearTimeout(pressTimer.current);
+      for (const t of timers.current) clearTimeout(t);
     },
     [],
   );
@@ -55,35 +72,56 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
     setValue(next);
   }, []);
 
+  /** Подсветка клавиши держится 180 мс: быстрый тап успевает показать заливку */
+  const flash = useCallback(
+    (key: string) => {
+      setPressed(key);
+      later(() => setPressed((cur) => (cur === key ? null : cur)), PRESS_MS);
+    },
+    [later],
+  );
+
   useEffect(() => {
     update('');
     setError(initialError);
+    setShaking(false);
   }, [resetKey, initialError, update]);
 
-  useEffect(() => {
+  const focusInput = useCallback(() => {
     // Курсор в скрытое поле только на устройствах с мышью: на телефоне не поднимаем системную клавиатуру
     if (typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches) {
       input.current?.focus();
     }
-  }, [resetKey]);
+  }, []);
+
+  useEffect(() => {
+    focusInput();
+  }, [resetKey, focusInput]);
 
   const submit = useCallback(
     async (pin: string) => {
       busyRef.current = true;
       setBusy(true);
       const res = await onSubmit(pin);
-      busyRef.current = false;
-      setBusy(false);
-      if (!res.ok) {
-        setError(res.error ?? 'Неверный PIN');
-        setShake((n) => n + 1);
-        update('');
-        if (typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches) {
-          input.current?.focus();
-        }
+      if (res.ok) {
+        // верный PIN: экран плавно уходит, пока открывается следующий
+        setLeaving(true);
+        busyRef.current = false;
+        setBusy(false);
+        return;
       }
+      setError(res.error ?? 'Неверный PIN');
+      setShaking(true);
+      // точки трясутся 400 мс, затем очищаются
+      later(() => {
+        update('');
+        setShaking(false);
+        busyRef.current = false;
+        setBusy(false);
+        focusInput();
+      }, SHAKE_MS);
     },
-    [onSubmit, update],
+    [onSubmit, update, later, focusInput],
   );
 
   const push = useCallback(
@@ -95,9 +133,9 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
       setError(null);
       update(next);
       // даём дорисоваться четвёртой точке
-      if (next.length === 4) setTimeout(() => void submit(next), 60);
+      if (next.length === 4) later(() => void submit(next), 60);
     },
-    [submit, update],
+    [submit, update, later],
   );
 
   const back = useCallback(() => {
@@ -106,16 +144,52 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
     update(valueRef.current.slice(0, -1));
   }, [update]);
 
+  // Клавиши с клавиатуры работают, даже если фокус на кнопке после клика мышью
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target === input.current || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^\d$/.test(e.key)) {
+      e.preventDefault();
+      flash(e.key);
+      push(e.key);
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      flash('del');
+      back();
+    }
+  };
+
+  const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const key = (d: string) => (
+    <button
+      key={d}
+      type="button"
+      className={`key ${pressed === d ? 'pressed' : ''}`}
+      onPointerDown={() => flash(d)}
+      onClick={() => {
+        flash(d);
+        push(d);
+      }}
+      disabled={busy || !hydrated}
+    >
+      {d}
+    </button>
+  );
+
+  const hasDigits = value.length > 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28, width: '100%' }}>
-      <div>
+    <div className={`pin-screen ${leaving ? 'leaving' : ''}`} onKeyDown={onKeyDown}>
+      <div className="pin-mark">
+        <Wordmark tone="light" size="small" />
+      </div>
+
+      <div className="pin-head">
         <h1 className="pin-title">{title}</h1>
         {subtitle ? <p className="pin-sub">{subtitle}</p> : null}
       </div>
 
       <div
-        key={shake}
-        className={`dots ${shake > 0 ? 'shake' : ''}`}
+        className={`pin-dots ${shaking ? 'shake' : ''}`}
         role="img"
         aria-label={`Введено цифр: ${value.length} из 4`}
       >
@@ -124,11 +198,7 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
         ))}
       </div>
 
-      <p
-        className="form-error"
-        role="alert"
-        style={{ textAlign: 'center', minHeight: 20, marginTop: -12 }}
-      >
+      <p className="form-error pin-error" role="alert">
         {error}
       </p>
 
@@ -148,65 +218,49 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
         data-form-type="other"
         value={value}
         onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+          const next = e.target.value.replace(/\D/g, '').slice(0, 4);
           if (busyRef.current) return;
           setError(null);
-          update(digits);
-          if (digits.length === 4) setTimeout(() => void submit(digits), 60);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && value.length === 4 && !busyRef.current) void submit(value);
+          update(next);
+          if (next.length === 4) later(() => void submit(next), 60);
         }}
       />
 
       <div className="pad" role="group" aria-label="Цифровая клавиатура">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-          <button
-            key={d}
-            type="button"
-            className={`key ${pressed === d ? 'pressed' : ''}`}
-            onPointerDown={() => flash(d)}
-            onClick={() => {
-              flash(d);
-              push(d);
-            }}
-            disabled={busy || !hydrated}
-          >
-            {d}
-          </button>
-        ))}
+        {digits.map(key)}
         <span aria-hidden="true" />
-        <button
-          type="button"
-          className={`key ${pressed === '0' ? 'pressed' : ''}`}
-          onPointerDown={() => flash('0')}
-          onClick={() => {
-            flash('0');
-            push('0');
-          }}
-          disabled={busy || !hydrated}
-        >
-          0
-        </button>
-        <button
-          type="button"
-          className={`key plain ${pressed === 'del' ? 'pressed' : ''}`}
-          onPointerDown={() => flash('del')}
-          onClick={() => {
-            flash('del');
-            back();
-          }}
-          disabled={busy || !hydrated}
-          aria-label="Удалить цифру"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />
-            <path d="m12.5 9.5 5 5m0-5-5 5" />
-          </svg>
-        </button>
+        {key('0')}
+        <span aria-hidden="true" />
       </div>
 
-      {footer}
+      <div className="pin-actions">
+        <span className="pin-action left">
+          {leftAction ? (
+            <button type="button" onClick={leftAction.onClick} disabled={busy}>
+              {leftAction.label}
+            </button>
+          ) : null}
+        </span>
+        <span className="pin-action right">
+          {hasDigits ? (
+            <button
+              type="button"
+              onPointerDown={() => flash('del')}
+              onClick={() => {
+                flash('del');
+                back();
+              }}
+              disabled={busy || !hydrated}
+            >
+              Удалить
+            </button>
+          ) : onCancel ? (
+            <button type="button" onClick={onCancel} disabled={busy}>
+              Отмена
+            </button>
+          ) : null}
+        </span>
+      </div>
     </div>
   );
 }

@@ -55,52 +55,233 @@ test('Вход и PIN: коричневый фон, светлые тексты,
   }
 });
 
-test('PIN-экран: палитра, клавиши, центр на 390, 768, 1440, заливка при нажатии', async ({ page }) => {
+test('PIN-экран как на iPhone: расположение, размеры, стекло клавиш, действия внизу', async ({ page }) => {
   await firstLogin(page, PIN);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
 
-  for (const width of WIDTHS) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(150);
-    for (const sel of ['.wordmark', '.pin-title', '.dots', '.pad']) {
-      expect(await offsets(page, sel), `${sel} @${width}`).toBeLessThanOrEqual(1);
-    }
+  const combos: [number, number][] = [
+    [375, 667], // iPhone SE
+    [390, 844],
+    [430, 932],
+    [768, 1024],
+    [1440, 900],
+  ];
+  for (const [w, h] of combos) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(300);
+    const m = await page.evaluate(() => {
+      const rect = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      const keys = [...document.querySelectorAll('.key')].map((k) => ({
+        t: k.textContent,
+        r: k.getBoundingClientRect(),
+      }));
+      const k = (t: string) => keys.find((x) => x.t === t)!.r;
+      const dots = [...document.querySelectorAll('.pin-dots i')].map((d) => d.getBoundingClientRect());
+      const actions = [...document.querySelectorAll('.pin-actions button')].map((b) => b.getBoundingClientRect());
+      const left = document.querySelector('.pin-action.left button')!;
+      const right = document.querySelector('.pin-action.right button')!;
+      const key1 = getComputedStyle(document.querySelector('.key')!);
+      return {
+        vh,
+        vw,
+        scrollY: document.documentElement.scrollHeight - vh,
+        scrollX: document.documentElement.scrollWidth - vw,
+        screenW: rect('.pin-screen').width,
+        markH: rect('.pin-mark .wordmark').height,
+        markTop: rect('.pin-mark').top,
+        headCy: rect('.pin-head').top + rect('.pin-head').height / 2,
+        titleSize: getComputedStyle(document.querySelector('.pin-title')!).fontSize,
+        titleWeight: getComputedStyle(document.querySelector('.pin-title')!).fontWeight,
+        titleColor: getComputedStyle(document.querySelector('.pin-title')!).color,
+        dotsCy: dots[0]!.top + dots[0]!.height / 2,
+        dotSize: dots[0]!.width,
+        dotStep: dots[1]!.left + dots[1]!.width / 2 - (dots[0]!.left + dots[0]!.width / 2),
+        dotBorder: getComputedStyle(document.querySelector('.pin-dots i')!).borderTopWidth,
+        padTop: rect('.pad').top,
+        padBottom: rect('.pad').bottom,
+        padCx: rect('.pad').left + rect('.pad').width / 2,
+        keySize: k('1').width,
+        gapX: k('2').left - k('1').right,
+        gapY: k('4').top - k('1').bottom,
+        zeroCx: k('0').left + k('0').width / 2,
+        eightCx: k('8').left + k('8').width / 2,
+        zeroRowY: k('0').top - k('7').top,
+        keyCount: keys.length,
+        keyFont: key1.fontSize,
+        keyWeight: key1.fontWeight,
+        keyColor: key1.color,
+        keyBg: key1.backgroundColor,
+        keyBorder: key1.borderTopColor,
+        keyBlur: key1.getPropertyValue('backdrop-filter') || key1.getPropertyValue('-webkit-backdrop-filter'),
+        actionsBottom: vh - Math.max(...actions.map((a) => a.bottom)),
+        actionsTop: Math.min(...actions.map((a) => a.top)),
+        leftText: left.textContent,
+        rightText: right.textContent,
+        leftCx: left.getBoundingClientRect().left + left.getBoundingClientRect().width / 2,
+        rightCx: right.getBoundingClientRect().left + right.getBoundingClientRect().width / 2,
+        key1Cx: k('1').left + k('1').width / 2,
+        key3Cx: k('3').left + k('3').width / 2,
+        actFont: getComputedStyle(left).fontSize,
+        actWeight: getComputedStyle(left).fontWeight,
+        actColor: getComputedStyle(left).color,
+        actDecor: getComputedStyle(left).textDecorationLine,
+        actBorder: getComputedStyle(left).borderTopWidth,
+      };
+    });
+    const at = `@${w}x${h}`;
+    const expectKey = Math.min(Math.max(64, 0.195 * w), 82, 0.108 * h);
+
+    // всё помещается без прокрутки, колонка не шире 360
+    expect(m.scrollY, `scrollY ${at}`).toBeLessThanOrEqual(0);
+    expect(m.scrollX, `scrollX ${at}`).toBeLessThanOrEqual(0);
+    expect(m.screenW, at).toBeLessThanOrEqual(360);
+
+    // вертикальная раскладка в процентах высоты
+    expect(m.markH, `знак ${at}`).toBeGreaterThanOrEqual(16);
+    expect(m.markH, `знак ${at}`).toBeLessThanOrEqual(24);
+    expect(m.markTop, `отступ знака ${at}`).toBeGreaterThanOrEqual(23);
+    expect(m.markTop, `отступ знака ${at}`).toBeLessThanOrEqual(25);
+    expect(Math.abs(m.headCy / m.vh - 0.18), `заголовок ${at}`).toBeLessThan(0.02);
+    expect(Math.abs(m.dotsCy / m.vh - 0.25), `точки ${at}`).toBeLessThan(0.01);
+    expect(Math.abs(m.padTop / m.vh - 0.34), `клавиатура ${at}`).toBeLessThan(0.01);
+
+    // заголовок и точки
+    expect(m.titleSize).toBe('19px');
+    expect(m.titleWeight).toBe('500');
+    expect(m.titleColor).toBe('rgb(246, 235, 221)');
+    expect(m.dotSize).toBe(13);
+    expect(Math.round(m.dotStep)).toBe(37);
+    // задано 1.5 px; при масштабе экрана 1x Chrome округляет границу до целого пикселя
+    expect(['1px', '1.5px']).toContain(m.dotBorder);
+
+    // клавиатура: размер, зазоры, ноль посередине, по бокам пусто
+    expect(m.keyCount).toBe(10);
+    expect(Math.abs(m.keySize - expectKey), `клавиша ${at}`).toBeLessThan(1);
+    expect(Math.round(m.gapX)).toBe(25);
+    expect(Math.round(m.gapY)).toBe(19);
+    expect(Math.abs(m.zeroCx - m.eightCx)).toBeLessThan(1);
+    expect(m.zeroRowY).toBeGreaterThan(0);
+    expect(Math.abs(m.padCx - m.vw / 2), `центр ${at}`).toBeLessThan(1);
+    expect(m.keyFont).toBe('36px');
+    expect(m.keyWeight).toBe('500');
+    expect(m.keyColor).toBe('rgb(255, 255, 255)');
+    expect(m.keyBg).toBe('rgba(255, 255, 255, 0.14)');
+    expect(m.keyBorder).toBe('rgba(255, 255, 255, 0.18)');
+    expect(m.keyBlur).toContain('blur(14px)');
+
+    // действия: слева «Войти по паролю», справа «Отмена», у нижнего края, под колонками 1 и 3
+    expect(m.leftText).toBe('Войти по паролю');
+    expect(m.rightText).toBe('Отмена');
+    expect(Math.abs(m.actionsBottom - 34), `низ действий ${at}`).toBeLessThanOrEqual(12);
+    expect(m.actionsTop, `клавиатура не залезает под действия ${at}`).toBeGreaterThan(m.padBottom + 4);
+    expect(Math.abs(m.leftCx - m.key1Cx)).toBeLessThan(2);
+    expect(Math.abs(m.rightCx - m.key3Cx)).toBeLessThan(2);
+    expect(m.actFont).toBe('17px');
+    expect(m.actWeight).toBe('500');
+    expect(m.actColor).toBe('rgb(255, 255, 255)');
+    expect(m.actDecor).toBe('none');
+    expect(m.actBorder).toBe('0px');
   }
 
-  const style = await page.evaluate(() => {
-    const css = (sel: string, prop: string) => getComputedStyle(document.querySelector(sel)!).getPropertyValue(prop);
-    return {
-      title: css('.pin-title', 'color'),
-      dot: css('.dots i', 'border-top-color'),
-      keyColor: css('.key', 'color'),
-      keyBorder: css('.key', 'border-top-color'),
-      keySize: css('.key', 'width'),
-    };
-  });
-  expect(style.title).toBe('rgb(246, 235, 221)');
-  expect(style.dot).toBe('rgb(246, 235, 221)');
-  expect(style.keyColor).toBe('rgb(246, 235, 221)');
-  expect(style.keyBorder).toMatch(/rgba\(246, 235, 221, 0\.35\)/);
-  expect(style.keySize).toBe('64px');
-
-  // нажатие: плавная заливка акцентом и тёмная цифра
-  const key = page.getByRole('button', { name: '5', exact: true });
-  await expect(key).toBeEnabled();
-  await key.hover();
+  // нажатие: мгновенное осветление до .38, возврат за 300 мс
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.mouse.move(1, 1);
+  const key5 = page.getByRole('button', { name: '5', exact: true });
+  await expect(key5).toBeEnabled();
+  await key5.hover();
   await page.mouse.down();
-  await page.waitForTimeout(300);
-  const pressed = await key.evaluate((e) => {
+  await page.waitForTimeout(30);
+  const down = await key5.evaluate((e) => {
     const c = getComputedStyle(e);
-    return { bg: c.backgroundColor, color: c.color };
+    return { bg: c.backgroundColor, transform: c.transform };
   });
-  expect(pressed).toEqual({ bg: 'rgb(202, 156, 104)', color: 'rgb(19, 25, 31)' });
+  expect(down.bg).toBe('rgba(255, 255, 255, 0.38)');
+  expect(down.transform).not.toBe('none'); // масштаб 0,96
   await page.mouse.up();
+  // цифра введена: заполненная точка, справа «Удалить»
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(1);
+  await page.waitForTimeout(250); // заливка точки плавная, 150 мс
+  expect(await page.locator('.pin-dots i.on').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
+    'rgb(246, 235, 221)',
+  );
+  await expect(page.getByRole('button', { name: 'Удалить', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Отмена', exact: true })).toHaveCount(0);
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(700);
+  expect(await key5.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(255, 255, 255, 0.14)');
 
-  // заполненная точка цвета акцента
-  await page.waitForTimeout(250);
-  const dotFill = await page.locator('.dots i').first().evaluate((e) => getComputedStyle(e).backgroundColor);
-  expect(dotFill).toBe('rgb(202, 156, 104)');
+  // «Удалить» стирает, справа снова «Отмена»
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Отмена', exact: true })).toBeVisible();
+});
+
+test('PIN-экран: ввод с клавиатуры, Backspace, неверный PIN трясёт точки 400 мс и очищает', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // цифры с клавиатуры, фокус не нужен; Backspace стирает; Enter не нужен
+  await page.keyboard.type('12');
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(2);
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(1);
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(0);
+
+  // неверный PIN: после четвёртой цифры отправка сама, точки трясутся 400 мс, затем очищаются
+  await page.keyboard.type('1357');
+  await expect(page.locator('.pin-dots.shake')).toBeVisible();
+  expect(await page.locator('.pin-dots').evaluate((e) => getComputedStyle(e).animationDuration)).toBe('0.4s');
+  await expect(page.getByText('Неверный PIN. Осталось попыток: 4')).toBeVisible();
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(4); // во время тряски точки заполнены
+  await expect(page.locator('.pin-dots.shake')).toHaveCount(0, { timeout: 2000 });
+  await expect(page.locator('.pin-dots i.on')).toHaveCount(0);
+
+  // верный PIN с клавиатуры открывает приложение
+  await page.keyboard.type(PIN);
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/agent');
+});
+
+test('PIN-экран: «Войти по паролю» и «Отмена» ведут к паролю; на экране пароля поля 52 px', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
+  await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+  await expect(page.getByLabel('Логин', { exact: true })).toBeVisible();
+
+  for (const w of [375, 390, 430, 768, 1440]) {
+    await page.setViewportSize({ width: w, height: 844 });
+    await page.waitForTimeout(150);
+    const m = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      const input = getComputedStyle(document.querySelector('#pva-login')!);
+      const btn = getComputedStyle(document.querySelector('.auth-screen .btn')!);
+      return {
+        vw: window.innerWidth,
+        formW: r('.auth-screen form').width,
+        formCx: r('.auth-screen form').left + r('.auth-screen form').width / 2,
+        inputH: input.height,
+        inputR: input.borderTopLeftRadius,
+        btnH: r('.auth-screen .btn').height,
+        btnR: btn.borderTopLeftRadius,
+        btnW: r('.auth-screen .btn').width,
+        scrollX: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    expect(m.formW, `колонка @${w}`).toBeLessThanOrEqual(360);
+    expect(Math.abs(m.formCx - m.vw / 2)).toBeLessThan(1);
+    expect(m.inputH).toBe('52px');
+    expect(m.inputR).toBe('14px');
+    expect(m.btnH).toBe(52);
+    expect(m.btnR).toBe('14px');
+    expect(Math.abs(m.btnW - m.formW)).toBeLessThan(1);
+    expect(m.scrollX).toBeLessThanOrEqual(0);
+  }
 });
 
 test('Оверлей PIN поверх дашборда: центр, страница под ним не прокручивается', async ({ page }) => {
@@ -113,7 +294,7 @@ test('Оверлей PIN поверх дашборда: центр, страни
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
 
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe('hidden');
-  for (const sel of ['.auth-overlay .wordmark', '.auth-overlay .pad', '.auth-overlay .dots']) {
+  for (const sel of ['.auth-overlay .wordmark', '.auth-overlay .pad', '.auth-overlay .pin-dots']) {
     expect(await offsets(page, sel), sel).toBeLessThanOrEqual(1);
   }
   await typePin(page, PIN);

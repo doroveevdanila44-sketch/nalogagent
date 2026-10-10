@@ -103,29 +103,30 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
     [firstPin, done, goPassword],
   );
 
+  const pinMode = step !== 'password';
+
   return (
-    <main className="auth-screen">
-      <Wordmark big tone="light" />
+    <main className={`auth-screen ${pinMode ? 'pin-mode' : ''}`}>
       {step === 'password' && (
-        <PasswordForm
-          notice={passwordNotice}
-          onSuccess={(needPinSetup) => {
-            setPasswordNotice(null);
-            setSetupNotice(null);
-            setStep(needPinSetup ? 'setup' : 'pin');
-          }}
-        />
+        <>
+          <Wordmark big tone="light" />
+          <PasswordForm
+            notice={passwordNotice}
+            onSuccess={(needPinSetup) => {
+              setPasswordNotice(null);
+              setSetupNotice(null);
+              setStep(needPinSetup ? 'setup' : 'pin');
+            }}
+          />
+        </>
       )}
       {step === 'pin' && (
         <PinPad
           key="pin"
           title="Введите PIN"
           onSubmit={submitPin}
-          footer={
-            <button type="button" className="linkish" onClick={() => goPassword(null)}>
-              Войти по паролю
-            </button>
-          }
+          leftAction={{ label: 'Войти по паролю', onClick: () => goPassword(null) }}
+          onCancel={() => goPassword(null)}
         />
       )}
       {step === 'setup' && (
@@ -135,10 +136,21 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
           subtitle="Он будет открывать приложение на этом устройстве"
           initialError={setupNotice}
           onSubmit={submitSetup}
+          onCancel={() => goPassword(null)}
         />
       )}
       {step === 'confirm' && (
-        <PinPad key="confirm" title="Повторите PIN" subtitle="Введите тот же PIN ещё раз" onSubmit={submitConfirm} />
+        <PinPad
+          key="confirm"
+          title="Повторите PIN"
+          subtitle="Введите тот же PIN ещё раз"
+          onSubmit={submitConfirm}
+          onCancel={() => {
+            setFirstPin('');
+            setSetupNotice(null);
+            setStep('setup');
+          }}
+        />
       )}
     </main>
   );

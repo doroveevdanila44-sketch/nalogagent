@@ -63,18 +63,19 @@ export function ChangePin({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <div className="auth-screen auth-overlay" role="dialog" aria-modal="true" aria-label="Смена PIN">
+    <div
+      className={`auth-screen auth-overlay ${step === 'done' ? '' : 'pin-mode'}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Смена PIN"
+    >
       {step === 'current' && (
         <PinPad
           key="current"
           title="Введите текущий PIN"
           initialError={notice}
           onSubmit={onCurrent}
-          footer={
-            <button type="button" className="linkish" onClick={onClose}>
-              Отмена
-            </button>
-          }
+          onCancel={onClose}
         />
       )}
       {step === 'new' && (
@@ -83,14 +84,21 @@ export function ChangePin({ onClose }: { onClose: () => void }) {
           title="Новый PIN из 4 цифр"
           initialError={notice}
           onSubmit={onNew}
-          footer={
-            <button type="button" className="linkish" onClick={onClose}>
-              Отмена
-            </button>
-          }
+          onCancel={onClose}
         />
       )}
-      {step === 'confirm' && <PinPad key="confirm" title="Повторите новый PIN" onSubmit={onConfirm} />}
+      {step === 'confirm' && (
+        <PinPad
+          key="confirm"
+          title="Повторите новый PIN"
+          onSubmit={onConfirm}
+          onCancel={() => {
+            setFirst('');
+            setNotice(null);
+            setStep('new');
+          }}
+        />
+      )}
       {step === 'done' && (
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 20, alignItems: 'center' }}>
           <h1 className="pin-title">PIN изменён</h1>

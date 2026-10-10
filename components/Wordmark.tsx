@@ -13,9 +13,19 @@ const orbitron = Orbitron({
 });
 
 /** tone="light" для тёмного коричневого фона экранов входа и PIN */
-export function Wordmark({ big = false, tone = 'header' }: { big?: boolean; tone?: 'header' | 'light' }) {
+export function Wordmark({
+  big = false,
+  size,
+  tone = 'header',
+}: {
+  big?: boolean;
+  /** small: около 20 px на экране PIN, big: 30 px на экране пароля */
+  size?: 'small' | 'normal' | 'big';
+  tone?: 'header' | 'light';
+}) {
+  const sz = size ?? (big ? 'big' : 'normal');
   return (
-    <div className={`wordmark ${big ? 'big' : ''} ${tone === 'light' ? 'light' : ''} ${orbitron.variable}`} role="img" aria-label="luxauto41">
+    <div className={`wordmark ${sz === 'big' ? 'big' : ''} ${sz === 'small' ? 'small' : ''} ${tone === 'light' ? 'light' : ''} ${orbitron.variable}`} role="img" aria-label="luxauto41">
       <span aria-hidden="true">luxauto</span>
       <span aria-hidden="true" className="n41">
         41

@@ -296,20 +296,14 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
       {sheet === 'changePin' && !locked && <ChangePin onClose={() => setSheet('none')} />}
 
       {locked && (
-        <div className="auth-screen auth-overlay" role="dialog" aria-modal="true" aria-label="Ввод PIN">
-          <Wordmark big tone="light" />
+        <div className="auth-screen auth-overlay pin-mode" role="dialog" aria-modal="true" aria-label="Ввод PIN">
           <PinPad
             title="Введите PIN"
             onSubmit={unlock}
-            footer={
-              <button
-                type="button"
-                className="linkish"
-                onClick={() => window.location.assign('/login?mode=password')}
-              >
-                Войти по паролю
-              </button>
-            }
+            leftAction={{
+              label: 'Войти по паролю',
+              onClick: () => window.location.assign('/login?mode=password'),
+            }}
           />
         </div>
       )}
