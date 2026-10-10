@@ -1,0 +1,540 @@
+<title>Агент по НДС Autumn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Orbitron:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: app shell. Black top bar with brand and live clock, tabs at the bottom on phones and in the bar on wide screens.
+   Dashboard = group band, warnings list, monthly revenue chart, entity cards with three rate cards each. */
+:root{
+  --bg:#FFFFFF;
+  --ink:#13191F;
+  --muted:#75665A;
+  --line:#E9E1D6;
+  --buff:#CA9C68;
+  --buff-soft:#F6EEE2;
+  --umber:#906D4B;
+  --blue:#CA9C68;
+  --blue-soft:#EFE9E1;
+  --good:#1D7A4B;
+  --good-soft:#E3F3EA;
+  --bad:#B3372B;
+  --bad-soft:#FCEAE7;
+  --f-display:'Onest',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --f-body:'Onest',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --f-mono:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --nav-h:68px;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;padding-bottom:calc(var(--nav-h) + 20px)}
+button,input,select{font:inherit;color:inherit}
+body{font-variant-numeric:tabular-nums}
+b,strong{font-weight:600}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--umber);outline-offset:2px}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:16px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--f-mono)}
+.eyebrow{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* top bar */
+.top{background:var(--buff);color:#13191F;position:sticky;top:env(safe-area-inset-top,0px);z-index:30}
+.top-in{display:flex;align-items:center;justify-content:center;padding-block:14px}
+.wordmark{font:500 22px/1 'Orbitron','Onest',system-ui,sans-serif;letter-spacing:.01em;color:#13191F;white-space:nowrap}
+.wordmark span{color:#594C3D;font-weight:600}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.mark{flex:none;width:30px;height:30px;border-radius:7px;background:linear-gradient(90deg,#B3372B 0 33.3%,#9E8E43 33.3% 66.6%,#13191F 66.6% 100%)}
+.brand b{display:block;font:600 16px/1.2 var(--f-display)}
+.brand small{display:block;font:400 11px var(--f-mono);color:#13191F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live{display:flex;align-items:center;gap:8px;font:400 12px var(--f-mono);color:#13191F;white-space:nowrap}
+.live i{width:8px;height:8px;border-radius:50%;background:#13191F;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.live .d{display:none}
+
+/* tabs */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;background:#2B2F2E;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid rgba(0,0,0,.15)}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;border-radius:12px;padding:7px 4px;color:#E9D9C3;font:500 12px var(--f-body)}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-selected="true"]{background:#CA9C68;color:#13191F;font-weight:600}
+@media (min-width:760px){.tabs{grid-template-columns:repeat(2,minmax(0,190px));justify-content:center}}
+
+/* sections */
+.panel{padding-block:24px 8px}
+.sec{margin-top:36px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.sec-h h2{font-size:19px;line-height:1.25}
+.sec-h p{color:var(--muted);font-size:13px}
+.pagehead h1{font-size:24px;line-height:1.2}
+.pagehead p{color:var(--muted);margin-top:6px;max-width:62ch}
+
+/* group band */
+.band{background:#594C3D;color:#F6EBDD;border-radius:22px;padding:22px 20px;margin-top:18px}
+.band-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:18px}
+.band-h h2{font-size:19px}
+.band-h span{font:400 12px var(--f-mono);color:#E7D2B5}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px 20px}
+.metric .eyebrow{color:#E7D2B5}
+.metric strong{display:block;font:600 clamp(20px,2.6vw,26px)/1.2 var(--f-display);font-variant-numeric:tabular-nums lining-nums;margin-top:4px}
+.metric strong.m{font-family:var(--f-display);font-weight:600;font-size:clamp(18px,2.4vw,22px);letter-spacing:0}
+.metric small{display:block;font-size:12px;color:#E7D2B5;margin-top:2px}
+
+/* warnings */
+.warns{list-style:none;margin:0;padding:0;border-top:1px solid var(--ink)}
+.warn{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.warn b{font-weight:600}
+.warn p{grid-column:1;color:var(--muted);font-size:14px;max-width:70ch}
+.pill{align-self:start;justify-self:end;grid-row:1;grid-column:2;font:500 11px var(--f-mono);letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill.crit{background:var(--bad);color:#fff}
+.pill.warn{background:var(--buff-soft);color:#4A3418}
+.pill.info{background:var(--blue);color:#13191F}
+
+/* chart */
+.chart{display:grid;grid-template-columns:34px 1fr;gap:8px;margin-top:6px}
+.yax{display:flex;flex-direction:column-reverse;justify-content:space-between;height:220px;font:400 10px var(--f-mono);color:var(--muted);text-align:right}
+.plot{position:relative;display:grid;grid-template-columns:repeat(12,1fr);gap:4px;height:220px;border-bottom:1px solid var(--ink);
+  background:repeating-linear-gradient(to top,transparent 0,transparent calc(33.333% - 1px),var(--line) calc(33.333% - 1px),var(--line) 33.333%)}
+.col{display:flex;flex-direction:column-reverse;height:100%;background:none;border:0;padding:0;border-radius:3px}
+.col .seg{display:block;width:100%}
+.col.fc{opacity:.5}
+.col.fc .seg{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 2px,transparent 2px 6px)}
+.col[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.mon{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-left:42px;margin-top:6px;font:400 10px var(--f-mono);color:var(--muted);text-align:center}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.25)}
+.caption{margin-top:10px;font:400 13px var(--f-mono);color:var(--ink);min-height:20px}
+
+/* entity cards */
+.ents{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.ent{container-type:inline-size;border:1px solid var(--line);border-radius:18px;padding:18px}
+.ent-h{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.ent-h h3{font-size:16px;line-height:1.25;display:flex;align-items:center;gap:10px}
+.ent-h h3 i{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.3);flex:none}
+.ent-d{color:var(--muted);font-size:13px;margin-top:2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{font:500 11px var(--f-mono);padding:3px 8px;border-radius:6px;background:var(--blue-soft);color:#13191F;white-space:nowrap}
+.chip.ex{background:var(--buff-soft);color:var(--umber)}
+.chip.pay{background:var(--ink);color:#fff}
+.ent-m{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.ent-m .eyebrow{display:block}
+.ent-m b{display:block;font:600 16px var(--f-display);font-variant-numeric:tabular-nums lining-nums}
+.bar{position:relative;height:8px;border-radius:99px;background:var(--line);margin-top:14px;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--umber);border-radius:99px}
+.bar-l{display:flex;justify-content:space-between;gap:8px;font:400 11px var(--f-mono);color:var(--muted);margin-top:6px}
+.hint{font-size:13px;color:var(--muted);margin-top:12px}
+.rates{display:grid;grid-template-columns:1fr;gap:10px;margin-top:16px}
+@container (min-width:520px){.rates{grid-template-columns:repeat(3,1fr)}}
+.rate{display:flex;flex-direction:column;gap:3px;text-align:left;border-radius:14px;padding:12px 14px;border:1.5px solid;min-width:0}
+.rate.sel{background:var(--good-soft);border-color:var(--good);color:#0F3E27}
+.rate.alt{background:var(--bad-soft);border-color:#D98A90;color:#5E141B}
+.rate.alt:hover{border-color:#B3372B}
+.rate-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rate-n{font:600 24px/1 var(--f-display)}
+.tag{font:500 10px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px}
+.sel .tag{background:var(--good);color:#fff}
+.alt .tag{background:var(--bad);color:#fff}
+.rate-sum{font:600 16px var(--f-body);letter-spacing:0;margin-top:6px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rate-sub{font-size:11px;opacity:.8}
+.rate-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-top:4px;border-top:1px solid rgba(0,0,0,.1);padding-top:4px}
+.rate-row b{font:500 12px var(--f-mono)}
+.note{margin-top:16px;font-size:13px;color:var(--muted);max-width:80ch}
+.note b{color:var(--ink);font-weight:600}
+
+/* fleet */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+.filters input,.filters select{height:40px;border:1px solid var(--ink);border-radius:10px;background:#fff;padding:0 12px;min-width:0;flex:1 1 150px}
+.fsum{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:14px;font-size:14px}
+.fsum b{font-family:var(--f-mono);font-weight:500}
+.tw{overflow-x:auto;border-top:1px solid var(--ink)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th{font:500 11px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 10px 10px 0;white-space:nowrap}
+td{padding:10px 10px 10px 0;border-top:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.n{font-family:var(--f-mono);font-size:13px}
+.car b{display:block;font-weight:600}
+.car span{font:400 12px var(--f-mono);color:var(--muted)}
+.st{font:500 11px var(--f-mono);padding:3px 8px;border-radius:6px;white-space:nowrap}
+.st.rent{background:var(--blue);color:#13191F}
+.st.free{background:var(--buff-soft);color:var(--umber)}
+.st.svc{background:var(--ink);color:#fff}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;border:1px solid rgba(0,0,0,.3);vertical-align:-1px}
+
+/* agent */
+.mode{background:var(--blue-soft);border-radius:14px;padding:12px 14px;font-size:13px;color:#24485a;margin-top:16px}
+.chat{display:flex;flex-direction:column;gap:14px;margin-top:18px}
+.msg{max-width:min(680px,94%);padding:12px 14px;border-radius:18px 18px 18px 5px;background:var(--blue-soft);overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--ink);color:#fff;border-radius:18px 18px 5px 18px}
+.msg p+p{margin-top:8px}
+.msg table{min-width:0;font-size:13px;margin-top:8px}
+.msg th,.msg td{padding:6px 8px 6px 0}
+.msg td.n{font-size:12px}
+.msg .best{font-weight:600;color:var(--good)}
+.msg details{margin-top:10px;font-size:12px;color:var(--muted)}
+.msg summary{cursor:pointer;font-family:var(--f-mono)}
+.msg details div{margin-top:6px;font:400 12px/1.6 var(--f-mono);color:var(--ink)}
+.src{display:block;font:500 10px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--umber);margin-top:8px}
+.typing{display:inline-flex;gap:4px;padding:4px 0}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--umber);animation:pulse 1s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.sug{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.sug button{background:var(--buff-soft);border:1px solid var(--umber);color:var(--umber);border-radius:999px;padding:6px 12px;font-size:13px}
+.sug button:hover{background:var(--buff)}
+.composer{position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));background:var(--bg);padding-block:8px;margin-top:10px;display:flex;gap:8px;border-top:1px solid var(--line)}
+.composer input{flex:1;min-width:0;height:38px;font-size:15px;border:1px solid var(--ink);border-radius:12px;padding:0 14px;background:#fff}
+.composer button{height:38px;padding:0 16px;border:0;border-radius:12px;background:var(--ink);color:#fff;font-weight:500}
+@media (prefers-reduced-motion:reduce){.live i,.typing i{animation:none}}
+[hidden]{display:none!important}
+</style>
+
+<header class="top"><div class="wrap top-in"><div class="wordmark" role="img" aria-label="luxauto41">luxauto<span>41</span></div></div></header>
+<nav class="tabs" id="tabs" role="tablist" aria-label="Разделы">
+    <button class="tab" role="tab" data-tab="agent" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg>Агент</button>
+    <button class="tab" role="tab" data-tab="dash" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/></svg>Дашборд</button>
+  </nav>
+
+
+<main class="wrap">
+
+<section class="panel" id="p-agent" role="tabpanel">
+  <div class="chat" id="chat" aria-live="polite"></div>
+  <div class="sug" id="sug"></div>
+  <form class="composer" id="form"><input id="msg" type="text" autocomplete="off" placeholder="Например: какая ставка выгоднее?" aria-label="Вопрос агенту"><button type="submit">Отправить</button></form>
+</section>
+
+<section class="panel" id="p-dash" role="tabpanel" hidden>
+  <div class="band" id="band"></div>
+  <div class="sec"><div class="sec-h"><h2>Предупреждения</h2><p id="warn-n"></p></div><ul class="warns" id="warns"></ul></div>
+  <div class="sec"><div class="sec-h"><h2>Выручка группы по месяцам</h2><p>Факт и прогноз с учётом сезонности, млн ₽</p></div>
+    <div class="chart"><div class="yax" id="yax"></div><div class="plot" id="plot"></div></div>
+    <div class="mon" id="mon"></div>
+    <div class="legend" id="legend"></div>
+    <div class="caption" id="cap">Нажмите на месяц, чтобы увидеть сумму.</div>
+  </div>
+  <div class="sec"><div class="sec-h"><h2>Юрлица</h2><p>Налог растёт в реальном времени по темпу выручки текущего месяца</p></div><div class="ents" id="ents"></div>
+  </div>
+</section>
+
+
+</main>
+
+<script>
+/* ===== Данные и расчёт (чистые функции, без DOM) ===== */
+var W=[.07,.07,.07,.05,.06,.09,.13,.14,.10,.06,.05,.11];
+var MN=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+var MS=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+var MG=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+var LIM_EX=20e6, LIM5=272.5e6, LIM7=490.5e6;
+var RATES=[5,7,22];
+var ENT=[
+ {id:'alfa',name:'ООО «Альфа»',form:'ООО',owner:'Собственник 1',payer:true, annual:28.4e6,p:0.82,color:'#13191F',desc:'Аренда без экипажа: люкс и внедорожники'},
+ {id:'beta',name:'ИП Бета',form:'ИП',owner:'Собственник 1',payer:true, annual:22.0e6,p:0.34,color:'#906D4B',desc:'Аренда без экипажа: комфорт и внедорожники'},
+ {id:'delta',name:'ИП Дельта',form:'ИП',owner:'Собственник 2',payer:false,annual:20.9e6,p:0.18,color:'#CA9C68',desc:'Аренда без экипажа: комфорт'},
+ {id:'gamma',name:'ООО «Гамма»',form:'ООО',owner:'Собственник 2',payer:false,annual:6.4e6,p:0.80,color:'#E3D2BC',desc:'Аренда с экипажем и трансферы'}
+];
+function ent(id){return ENT.filter(function(e){return e.id===id})[0]}
+function dim(y,m){return new Date(y,m+1,0).getDate()}
+function frac(d){
+  var y=d.getFullYear(),m=d.getMonth(),s=0,i;
+  for(i=0;i<m;i++)s+=W[i];
+  var f=((d.getDate()-1)+(d.getHours()*3600+d.getMinutes()*60+d.getSeconds()+d.getMilliseconds()/1000)/86400)/dim(y,m);
+  return s+W[m]*f;
+}
+function ytd(e,d){return e.annual*frac(d)}
+function taxFor(rate,R,p){
+  if(rate===5)return R*5/105;
+  if(rate===7)return R*7/107;
+  return R*22/122*(1-p);
+}
+function crossing(e,d){
+  if(e.payer)return null;
+  var y=d.getFullYear(),m=d.getMonth(),i,cum=0;
+  for(i=0;i<m;i++)cum+=W[i];
+  cum=e.annual*(cum+W[m]*d.getDate()/dim(y,m));
+  if(cum>=LIM_EX)return new Date(y,m,d.getDate());
+  var day=new Date(y,m,d.getDate()+1);
+  while(day.getFullYear()===y){
+    cum+=e.annual*W[day.getMonth()]/dim(y,day.getMonth());
+    if(cum>=LIM_EX)return new Date(day.getTime());
+    day=new Date(y,day.getMonth(),day.getDate()+1);
+  }
+  return null;
+}
+/* налогооблагаемая выручка до конца года: у плательщика весь год, у освобождённого после месяца пересечения */
+function baseRev(e,d){
+  if(e.payer)return e.annual;
+  var c=crossing(e,d); if(!c)return 0;
+  var sm=c.getMonth()+1; if(sm>11)return 0;
+  var s=0,i; for(i=sm;i<12;i++)s+=W[i];
+  return e.annual*s;
+}
+function forecast(e,rate,d){return taxFor(rate,baseRev(e,d),e.p)}
+function bestRate(e,d){
+  var b=RATES[0],i; for(i=1;i<RATES.length;i++){ if(forecast(e,RATES[i],d)<forecast(e,b,d))b=RATES[i]; }
+  return b;
+}
+var SEL={alfa:5,beta:5,delta:5,gamma:5};
+
+/* ===== Форматирование ===== */
+var nf0=new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0});
+var nf2=new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+function mn(s){return s.replace('-','−')}
+function rub(n){return mn(nf0.format(Math.round(n)))+' ₽'}
+function rub2(n){return mn(nf2.format(n))+' ₽'}
+function mln(n,dg){return mn((n/1e6).toFixed(dg==null?1:dg).replace('.',','))+' млн'}
+function sgn(n){return (n>0?'+':'')+mln(n,2)}
+function dstr(d){return d.getDate()+' '+MG[d.getMonth()]}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+/*DOM*/
+var $=function(id){return document.getElementById(id)};
+var NOW=function(){return new Date()};
+
+try{var sv=JSON.parse(localStorage.getItem('pva_sel')||'null'); if(sv){for(var k in SEL){ if(RATES.indexOf(sv[k])>-1)SEL[k]=sv[k]; }}}catch(e){}
+function saveSel(){try{localStorage.setItem('pva_sel',JSON.stringify(SEL))}catch(e){}}
+
+function groupYtd(d){return ENT.reduce(function(s,e){return s+ytd(e,d)},0)}
+function groupTaxYtd(d){return ENT.reduce(function(s,e){return e.payer?s+taxFor(SEL[e.id],ytd(e,d),e.p):s},0)}
+function groupForecast(d){return ENT.reduce(function(s,e){return s+forecast(e,SEL[e.id],d)},0)}
+function groupSaving(d){return ENT.reduce(function(s,e){var f=forecast(e,SEL[e.id],d),m=forecast(e,bestRate(e,d),d);return s+Math.max(0,f-m)},0)}
+
+function renderBand(){
+  var d=NOW();
+  $('band').innerHTML=
+   '<div class="band-h"><h2>Группа на '+dstr(d)+' '+d.getFullYear()+'</h2><span>4 юрлица · УСН</span></div>'+
+   '<div class="metrics">'+
+   '<div class="metric"><span class="eyebrow">Выручка с начала года</span><strong class="m" data-live="rev" data-ent="all"></strong><small>по всем юрлицам</small></div>'+
+   '<div class="metric"><span class="eyebrow">НДС начислен</span><strong class="m" data-live="gtax"></strong><small>плательщики, по выбранным ставкам</small></div>'+
+   '<div class="metric"><span class="eyebrow">Прогноз НДС за год</span><strong>'+mln(groupForecast(d),2)+'</strong><small>по выбранным ставкам</small></div>'+
+   '<div class="metric"><span class="eyebrow">Можно сэкономить</span><strong>'+mln(groupSaving(d),2)+'</strong><small>в год, если выбрать лучшие ставки</small></div>'+
+   '</div>';
+}
+
+function buildWarnings(d){
+  var list=[];
+  ENT.forEach(function(e){
+    var c=crossing(e,d);
+    if(!e.payer&&c){
+      var start=new Date(c.getFullYear(),c.getMonth()+1,1);
+      list.push({lv:'crit',t:e.name+' пересечёт порог 20 млн около '+dstr(c),
+        x:'НДС начнёт начисляться с '+dstr(start)+(start.getFullYear()>d.getFullYear()?' '+start.getFullYear():'')+'. Нужны счета-фактуры и выбранная ставка. При выручке этого года налог составил бы '+rub(taxFor(5,e.annual,e.p))+' при 5% и '+rub(taxFor(22,e.annual,e.p))+' при 22%. Решить заранее дешевле, чем узнать в марте.',
+        tag:'Срочно'});
+    }
+    if(!e.payer&&!c){
+      var left=LIM_EX-e.annual;
+      if(left<5e6)list.push({lv:'warn',t:e.name+': запас до порога '+mln(left,1),x:'Прогноз года '+mln(e.annual,1)+' из 20 млн.',tag:'Внимание'});
+    }
+    if(e.payer){
+      var b=bestRate(e,d),cur=SEL[e.id];
+      if(b!==cur){
+        var diff=forecast(e,cur,d)-forecast(e,b,d);
+        list.push({lv:'warn',t:e.name+': ставка '+b+'% выгоднее на '+rub(diff)+' в год',
+          x:'Сейчас выбрана '+cur+'%. Закупки с НДС у юрлица '+Math.round(e.p*100)+'% от выручки, при 22% вычеты остаются в бизнесе. Минус: при 5% покупатели-юрлица теряют вычет и могут уйти к конкуренту.',tag:'Внимание'});
+      }
+    }
+  });
+  var ex=ENT.filter(function(e){return !e.payer});
+  var exTax=ex.reduce(function(s,e){return s+taxFor(SEL[e.id],e.annual,e.p)},0);
+  var tot=groupYtd(d);
+  list.push({lv:'warn',t:'Признаки единого бизнеса: один бренд, один сайт, общий парк',
+    x:'Юрлица взаимозависимы (собственники 1 и 2). Если выручку объединят, группа в сумме '+mln(ENT.reduce(function(s,e){return s+e.annual},0),1)+' за год, это '+Math.round(ENT.reduce(function(s,e){return s+e.annual},0)/LIM5*100)+'% от лимита ставки 5% (272,5 млн). Освобождённые юрлица потеряли бы освобождение: оценка НДС по их выручке '+rub(exTax)+' в год по выбранным ставкам.',tag:'Внимание'});
+  list.push({lv:'info',t:'Окно выбора ставки на 2027 год: ноябрь и декабрь',x:'Главное решение года. Правило 12 кварталов ограничивает возврат, поэтому до смены ставки сверьте условия с бухгалтером.',tag:'К сведению'});
+  list.push({lv:'info',t:'Дефлятор на 2027 год не утверждён',x:'Лимиты ставок 5% и 7% (250 и 450 млн, умноженные на дефлятор) на 2027 год пока неизвестны. В справочнике лежит формула, число подставим после публикации.',tag:'К сведению'});
+  var ord={crit:0,warn:1,info:2};
+  list.sort(function(a,b){return ord[a.lv]-ord[b.lv]});
+  return list;
+}
+function renderWarns(){
+  var d=NOW(),w=buildWarnings(d);
+  $('warns').innerHTML=w.map(function(x){return '<li class="warn"><b>'+esc(x.t)+'</b><span class="pill '+x.lv+'">'+x.tag+'</span><p>'+esc(x.x)+'</p></li>'}).join('');
+  var c=w.filter(function(x){return x.lv==='crit'}).length;
+  $('warn-n').textContent=c?('Срочных: '+c+', всего: '+w.length):('Всего: '+w.length);
+}
+
+var chartSel=-1;
+function renderChart(){
+  var d=NOW(),cur=d.getMonth(),max=12e6,i;
+  $('yax').innerHTML=[0,4,8,12].map(function(v){return '<span>'+v+'</span>'}).join('');
+  var h='',m;
+  for(m=0;m<12;m++){
+    var tot=0,segs='';
+    ENT.forEach(function(e){var v=e.annual*W[m];tot+=v;segs+='<span class="seg" style="height:'+(v/max*100).toFixed(2)+'%;background:'+e.color+'"></span>'});
+    h+='<button class="col'+(m>cur?' fc':'')+'" data-m="'+m+'" aria-pressed="'+(m===chartSel)+'" aria-label="'+MN[m]+': '+mln(tot,1)+'">'+segs+'</button>';
+  }
+  $('plot').innerHTML=h;
+  $('mon').innerHTML=MS.map(function(s){return '<span>'+s+'</span>'}).join('');
+  $('legend').innerHTML=ENT.map(function(e){return '<span><i style="background:'+e.color+'"></i>'+e.name+'</span>'}).join('')+'<span style="color:var(--muted)">Штриховка: прогноз</span>';
+}
+function showCap(m){
+  chartSel=m;
+  var d=NOW(),tot=0,parts=[];
+  ENT.forEach(function(e){var v=e.annual*W[m];tot+=v;parts.push(e.name.replace(/ООО |«|»/g,'')+' '+mln(v,1))});
+  $('cap').textContent=MN[m]+': '+mln(tot,1)+' ('+(m>d.getMonth()?'прогноз':m===d.getMonth()?'идёт сейчас':'факт')+'). '+parts.join(', ')+'.';
+  Array.prototype.forEach.call($('plot').children,function(b,i){b.setAttribute('aria-pressed',String(i===m))});
+}
+
+function renderEnts(){
+  var d=NOW(),html='';
+  ENT.forEach(function(e){
+    var y=ytd(e,d);
+    var bar,barL;
+    if(e.payer){bar=Math.min(100,y/LIM5*100);barL='<span>Лимит ставки 5%: 272,5 млн</span><span>'+(y/LIM5*100).toFixed(1).replace('.',',')+'%</span>'}
+    else{bar=Math.min(100,y/LIM_EX*100);barL='<span>Порог освобождения: 20 млн</span><span>'+(y/LIM_EX*100).toFixed(0)+'%</span>'}
+    var rates='';
+    var selF=forecast(e,SEL[e.id],d);
+    RATES.forEach(function(r){
+      var isSel=SEL[e.id]===r;
+      var f=e.payer?forecast(e,r,d):taxFor(r,e.annual,e.p);
+      var base=e.payer?selF:taxFor(SEL[e.id],e.annual,e.p);
+      var delta=f-base;
+      rates+='<button class="rate '+(isSel?'sel':'alt')+'" data-ent="'+e.id+'" data-rate="'+r+'" aria-pressed="'+isSel+'">'+
+        '<span class="rate-top"><span class="rate-n">'+r+'%</span><span class="tag">'+(isSel?'Выбрана':'Сравнение')+'</span></span>'+
+        '<span class="rate-sum" data-live="tax" data-ent="'+e.id+'" data-rate="'+r+'"></span>'+
+        '<span class="rate-sub">'+(e.payer?'налог с начала года':'условно, если порог пройден')+'</span>'+
+        '<span class="rate-row"><span>'+(e.payer?'Прогноз года':'За весь год')+'</span><b>'+mln(f,2)+'</b></span>'+
+        '<span class="rate-row"><span>К выбранной</span><b>'+(isSel?'выбрана':sgn(delta))+'</b></span>'+
+      '</button>';
+    });
+    html+='<article class="ent"><div class="ent-h"><div><h3><i style="background:'+e.color+'"></i>'+e.name+'</h3><p class="ent-d">'+e.desc+'</p></div>'+
+      '<div class="chips"><span class="chip">'+e.form+'</span><span class="chip '+(e.payer?'pay':'ex')+'">'+(e.payer?'Плательщик НДС':'Освобождён')+'</span></div></div>'+
+      '<div class="ent-m"><div><span class="eyebrow">Выручка с начала года</span><b data-live="rev" data-ent="'+e.id+'"></b></div><div><span class="eyebrow">Прогноз года</span><b>'+mln(e.annual,1)+'</b></div></div>'+
+      '<div class="bar" role="img" aria-label="Использование порога"><i style="width:'+bar.toFixed(2)+'%"></i></div><div class="bar-l">'+barL+'</div>'+
+      (e.payer?'':'<p class="hint">Сейчас НДС не платится. Суммы ниже показывают налог, если юрлицо потеряет освобождение.</p>')+
+      '<div class="rates">'+rates+'</div></article>';
+  });
+  $('ents').innerHTML=html;
+}
+
+function tickLive(){
+  var d=NOW();
+  var ck=$('clock');if(ck)ck.textContent=d.toLocaleTimeString('ru-RU');
+  var els=document.querySelectorAll('[data-live]');
+  for(var i=0;i<els.length;i++){
+    var el=els[i],k=el.getAttribute('data-live'),v;
+    if(k==='rev'){var id=el.getAttribute('data-ent');v=id==='all'?groupYtd(d):ytd(ent(id),d);el.textContent=rub(v);}
+    else if(k==='tax'){var e=ent(el.getAttribute('data-ent'));v=taxFor(+el.getAttribute('data-rate'),ytd(e,d),e.p);el.textContent=rub2(v);}
+    else if(k==='gtax'){el.textContent=rub2(groupTaxYtd(d));}
+  }
+}
+function renderDash(){renderBand();renderWarns();renderChart();renderEnts();if(chartSel>-1)showCap(chartSel);tickLive()}
+
+/* ===== Агент ===== */
+var REFUSE=['Это не моя тема. Я считаю налоги по вашей группе компаний: НДС, ставки, пороги. Спросите про них, и я отвечу.','Тут я не помощник, извините. Моя работа это налоговые расчёты, всё остальное мимо меня.','Не возьмусь: это за пределами того, что я умею. Зато считаю НДС и слежу за порогами.','В этом я не разбираюсь. А вот в налогах на упрощёнке разбираюсь хорошо, спрашивайте.','Такое я не считаю. Могу посчитать налоговую нагрузку, выбор ставки или прогноз на квартал.'];
+var GREET=['Здравствуйте. Чем помочь по налогам?','Добрый день. Что посчитать?'];
+var ri=0,gi=0;
+function tbl(head,rows){return '<table><thead><tr>'+head.map(function(h,i){return '<th'+(i?' class="n"':'')+'>'+h+'</th>'}).join('')+'</tr></thead><tbody>'+rows.map(function(r){return '<tr>'+r.map(function(c,i){return '<td'+(i?' class="n"':'')+'>'+c+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>'}
+function ans(html,calc){return {html:html,calc:calc||[]}}
+
+function aRates(){
+  var d=NOW(),rows=[],calc=[],notes=[],tot={5:0,7:0,22:0};
+  ENT.forEach(function(e){
+    var v={},b=bestRate(e,d);
+    RATES.forEach(function(r){v[r]=e.payer?forecast(e,r,d):taxFor(r,e.annual,e.p);tot[r]+=v[r]});
+    var mb=e.payer?b:RATES.slice().sort(function(a,c){return v[a]-v[c]})[0];
+    rows.push([e.name+(e.payer?'':'*')].concat(RATES.map(function(r){return (r===mb?'<span class="best">':'<span>')+mln(v[r],2)+'</span>'})));
+    calc.push(e.name+': 5% = '+rub(e.annual)+' × 5/105; 22% = '+rub(e.annual)+' × 22/122 × (1 − '+e.p+')');
+  });
+  rows.push(['Всего'].concat(RATES.map(function(r){return '<b>'+mln(tot[r],2)+'</b>'})));
+  var save=groupSaving(d);
+  var txt='<p>Налог за год по трём ставкам. Зелёным лучшая для каждого юрлица.</p>'+tbl(['Юрлицо','5%','7%','22%'],rows)+
+   '<p>'+(save>0?'Сейчас выбрано так, что переплата составляет около <b>'+mln(save,2)+'</b> в год. Это Альфа: у неё закупки с НДС около 82% выручки (обновление парка), поэтому вычеты при 22% перевешивают.':'Выбранные ставки уже самые дешёвые.')+'</p>'+
+   '<p>Что учесть: при 5% покупатели-юрлица теряют вычет и могут уйти. Звёздочка: юрлицо освобождено, цифры показывают налог, если порог будет пройден.</p>';
+  return ans(txt,calc);
+}
+function aWarn(){
+  var d=NOW(),w=buildWarnings(d).filter(function(x){return x.lv!=='info'});
+  return ans('<p>Сейчас вижу '+w.length+' предупрежд.:</p>'+w.map(function(x){return '<p><b>'+esc(x.t)+'.</b> '+esc(x.x)+'</p>'}).join(''),['Порог 20 млн: прогноз пересечения по сезонным весам месяцев и годовому прогнозу юрлица']);
+}
+function aFrag(){
+  var d=NOW(),tot=ENT.reduce(function(s,e){return s+e.annual},0);
+  return ans('<p>Видимые признаки: общий бренд, один сайт, общий парк, взаимозависимые собственники. Это то, что смотрит налоговая при проверке дробления.</p><p>Суммарная выручка группы '+mln(tot,1)+' за год, '+Math.round(tot/LIM5*100)+'% от лимита ставки 5%. Такие схемы я не проектирую, но могу показать, насколько близка группа к границе и во сколько обойдётся риск.</p>',['Сумма прогнозов выручки четырёх юрлиц: '+rub(tot)]);
+}
+function aBorder(){return ans('<p>Такие схемы я не проектирую. Но могу показать, какие признаки дробления видны в ваших данных и во сколько может обойтись риск.</p>')}
+function aForecast(){
+  var d=NOW(),m=d.getMonth(),q=Math.floor(m/3),prev=q-1,rows=[],calc=[],tq=0,payer=ENT.filter(function(e){return e.payer});
+  var qw=function(a){return W[a*3]+W[a*3+1]+W[a*3+2]};
+  var cur=q;
+  payer.forEach(function(e){var t=taxFor(SEL[e.id],e.annual*qw(cur),e.p);tq+=t;rows.push([e.name+' ('+SEL[e.id]+'%)',mln(t,2)]);calc.push(e.name+': '+rub(e.annual*qw(cur))+' выручки квартала, ставка '+SEL[e.id]+'%')});
+  rows.push(['Всего за '+(cur+1)+' квартал','<b>'+mln(tq,2)+'</b>']);
+  var txt='<p>Налог за текущий '+(cur+1)+' квартал по выбранным ставкам, только плательщики:</p>'+tbl(['Юрлицо','Налог'],rows);
+  if(prev>=0){
+    var pt=payer.reduce(function(s,e){return s+taxFor(SEL[e.id],e.annual*qw(prev),e.p)},0),dd=null,k;
+    for(k=0;k<3;k++){var x=new Date(d.getFullYear(),(prev+1)*3+k,28); if(x>=new Date(d.getFullYear(),m,d.getDate())){dd=x;break}}
+    txt+='<p>За '+(prev+1)+' квартал начислено '+mln(pt,2)+'. НДС платится тремя равными частями до 28 числа трёх месяцев после квартала'+(dd?', ближайший платёж '+dstr(dd)+' примерно '+rub(pt/3):'')+'.</p>';
+    calc.push((prev+1)+' квартал: '+rub(pt)+' ÷ 3 по 28 числам');
+  }
+  return ans(txt,calc);
+}
+function aDeduct(){return ans('<p>Вычет это входной НДС из счетов-фактур поставщиков: покупка машин, лизинг, ремонт, топливо. Он работает только при 22%. При 5% и 7% входной НДС в расчёт не идёт.</p><p>Поэтому у капиталоёмкого проката выбор ставки зависит от доли закупок с НДС. Граница около 73,6% выручки: выше выгодна 22%, ниже 5%. У Альфы доля 82%, у Беты 34%.</p>',['Граница: 22/122 × (1 − доля) = 5/105 → доля = 73,6%'])}
+function aProfit(){return ans('<p>Налог на прибыль пока не считаю. Он в плане на 2028 год: амортизация парка, лизинг, продажа машин. Сейчас работаю с НДС.</p>')}
+function aScenario(t){
+  var d=NOW(),e=ent('alfa');
+  ENT.forEach(function(x){if(t.indexOf(x.name.replace(/ООО |ИП |«|»/g,'').toLowerCase())>-1)e=x});
+  var cm=t.match(/(\d+)\s*(?:машин|авто|шт)/),pm=t.match(/(\d+(?:[.,]\d+)?)\s*(?:млн|м\b)/);
+  var n=cm?parseInt(cm[1],10):2,price=pm?parseFloat(pm[1].replace(',','.')):6;
+  n=Math.min(Math.max(n,1),20);
+  var buy=n*price*1e6,p2=e.p+buy/e.annual;
+  var b22=taxFor(22,e.annual,e.p),a22=e.annual*22/122*(1-p2),t5=taxFor(5,e.annual,e.p);
+  var vat=buy*22/122;
+  var txt='<p>Сценарий: '+e.name+' покупает '+n+' маш. по '+String(price).replace('.',',')+' млн ₽ с НДС, всего '+mln(buy,1)+'.</p>'+
+   '<p>Входной НДС в покупке '+rub(vat)+'. Доля закупок с НДС вырастет с '+Math.round(e.p*100)+'% до '+Math.round(p2*100)+'%.</p>'+
+   tbl(['Ставка за год','До','После'],[['5%',mln(t5,2),mln(t5,2)],['22%',mln(b22,2),'<span class="best">'+mln(a22,2)+'</span>']])+
+   '<p>'+(a22<0?'Отрицательное число означает НДС к возмещению из бюджета. ':'')+'При 5% покупка на налог не влияет, при 22% вычет снижает его на '+rub(b22-a22)+'. '+(a22<t5?'После покупки ставка 22% выгоднее 5% на '+rub(t5-a22)+' в год.':'Даже после покупки 5% остаётся дешевле.')+'</p>'+
+   '<p>Вычет возможен после принятия машины на учёт и при наличии счёта-фактуры. Сумма условная: данные выдуманы.</p>';
+  return ans(txt,['Закупки: '+n+' × '+price+' млн = '+rub(buy),'Входной НДС = '+rub(buy)+' × 22/122 = '+rub(vat),'Доля: '+e.p+' + '+rub(buy)+' / '+rub(e.annual)+' = '+p2.toFixed(3)]);
+}
+function reply(q){
+  var t=q.toLowerCase().trim();
+  if(/раздроб|обойти|спрят|незамет|скрыть/.test(t))return aBorder();
+  if(/^(привет|здравств|добр|хай|здаров)/.test(t))return ans('<p>'+GREET[gi++%GREET.length]+'</p>');
+  if(/^(спасибо|благодар)/.test(t))return ans('<p>Пожалуйста. Понадобится пересчитать, скажите.</p>');
+  if(/что ты умеешь|помощь|help|\/start/.test(t))return ans('<p>Считаю НДС по вашей группе: выбор ставки 5%, 7% или 22%, пороги, прогноз квартала, сценарии вроде покупки машин. Любая цифра раскрывается до формулы.</p>');
+  if(/куп(им|ить|ка)|покуп|новых? машин|добав.*машин|лизинг/.test(t))return aScenario(t);
+  if(/порог|предупрежд|20 млн|освобожд|риск/.test(t))return aWarn();
+  if(/дроблен|объедин|единый бизнес/.test(t))return aFrag();
+  if(/вычет|входящ/.test(t))return aDeduct();
+  if(/квартал|прогноз|сколько.*(заплат|налог)|к уплате|срок|платёж/.test(t))return aForecast();
+  if(/ставк|5%|7%|22|выгодн|выбрат|ндс|налог/.test(t))return aRates();
+  if(/прибыл/.test(t))return aProfit();
+  if(/погод|стих|анекдот|рецепт|футбол|кино|музык|курс|новост|песн|кто ты/.test(t))return ans('<p>'+REFUSE[ri++%REFUSE.length]+'</p>');
+  return ans('<p>Не уверен, что понял. Уточните: по какому юрлицу и что посчитать, ставку, порог или прогноз квартала?</p>');
+}
+var SUG=['Какая ставка выгоднее?','Что с порогами?','Сколько платить за квартал?','Что если купим 3 машины по 7 млн?','Почему вычет важен?'];
+function addMsg(who,html,calc){
+  var div=document.createElement('div');div.className='msg'+(who==='me'?' me':'');
+  div.innerHTML=html+(who==='bot'?'<span class="src">Цифры из калькулятора</span>'+(calc&&calc.length?'<details><summary>Как посчитано</summary><div>'+calc.map(esc).join('<br>')+'</div></details>':''):'');
+  $('chat').appendChild(div);
+  div.scrollIntoView({block:'nearest',behavior:'smooth'});
+  return div;
+}
+function ask(q){
+  if(!q)return;
+  addMsg('me',esc(q));
+  var ty=document.createElement('div');ty.className='msg';ty.innerHTML='<span class="typing"><i></i><i></i><i></i></span>';$('chat').appendChild(ty);
+  setTimeout(function(){ty.remove();var r=reply(q);addMsg('bot',r.html,r.calc)},650);
+}
+
+/* ===== Вкладки и события ===== */
+function showTab(id){
+  ['dash','agent'].forEach(function(k){$('p-'+k).hidden=(k!==id)});
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){b.setAttribute('aria-selected',String(b.getAttribute('data-tab')===id))});
+  try{history.replaceState(null,'','#'+id)}catch(e){}
+  window.scrollTo(0,0);
+}
+document.getElementById('tabs').addEventListener('click',function(ev){var b=ev.target.closest('.tab');if(b)showTab(b.getAttribute('data-tab'))});
+document.getElementById('ents').addEventListener('click',function(ev){
+  var b=ev.target.closest('.rate');if(!b)return;
+  var id=b.getAttribute('data-ent'),r=+b.getAttribute('data-rate');
+  if(SEL[id]===r)return;
+  SEL[id]=r;saveSel();renderDash();
+  var nb=document.querySelector('.rate[data-ent="'+id+'"][data-rate="'+r+'"]');if(nb)nb.focus({preventScroll:true});
+});
+document.getElementById('plot').addEventListener('click',function(ev){var b=ev.target.closest('.col');if(b)showCap(+b.getAttribute('data-m'))});
+document.getElementById('form').addEventListener('submit',function(ev){ev.preventDefault();var i=$('msg'),v=i.value.trim();i.value='';ask(v)});
+document.getElementById('sug').addEventListener('click',function(ev){var b=ev.target.closest('button');if(b)ask(b.textContent)});
+
+$('sug').innerHTML=SUG.map(function(s){return '<button type="button">'+s+'</button>'}).join('');
+addMsg('bot','<p>Здравствуйте. Я считаю НДС по вашей группе из четырёх юрлиц. Можно спросить про ставки, пороги, прогноз квартала или покупку машин.</p>',[]);
+renderDash();
+var h=(location.hash||'').replace('#','');showTab(['dash','agent'].indexOf(h)>-1?h:'agent');
+setInterval(tickLive,250);
+</script>

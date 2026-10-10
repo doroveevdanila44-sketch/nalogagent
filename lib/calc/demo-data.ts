@@ -1,0 +1,39 @@
+import { dec } from './decimal';
+import type { RuleRow } from './rules';
+import { buildRuleSet } from './rules';
+import type { Moment } from './time';
+import type { CalcCtx, DashboardInput, EntityInput, Selections } from './types';
+
+/** Веса сезонности из CALC.md */
+export const SEED_WEIGHTS = ['.07', '.07', '.07', '.05', '.06', '.09', '.13', '.14', '.10', '.06', '.05', '.11'].map(dec);
+
+/** Выдуманные данные демо (CALC.md, «Контрольные числа») */
+export const SEED_ENTITIES: EntityInput[] = [
+  { id: 'alfa', name: 'ООО «Альфа»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer', annualRevenue: dec(28_400_000), inputVatShare: dec('0.82'), color: '#13191F', description: 'Аренда без экипажа: люкс и внедорожники' },
+  { id: 'beta', name: 'ИП Бета', form: 'ИП', ownerLabel: 'Собственник 1', status: 'payer', annualRevenue: dec(22_000_000), inputVatShare: dec('0.34'), color: '#906D4B', description: 'Аренда без экипажа: комфорт и внедорожники' },
+  { id: 'delta', name: 'ИП Дельта', form: 'ИП', ownerLabel: 'Собственник 2', status: 'exempt', annualRevenue: dec(20_900_000), inputVatShare: dec('0.18'), color: '#CA9C68', description: 'Аренда без экипажа: комфорт' },
+  { id: 'gamma', name: 'ООО «Гамма»', form: 'ООО', ownerLabel: 'Собственник 2', status: 'exempt', annualRevenue: dec(6_400_000), inputVatShare: dec('0.80'), color: '#E3D2BC', description: 'Аренда с экипажем и трансферы' },
+];
+
+/** Строки таблицы rules из schema.sql */
+export const SEED_RULE_ROWS: RuleRow[] = [
+  { key: 'vat_exempt_limit', value: '20000000', formula: null, unit: 'rub', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 145', note: 'Порог освобождения' },
+  { key: 'limit_5', value: '272500000', formula: null, unit: 'rub', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'Верхняя граница для ставки 5%' },
+  { key: 'limit_7', value: '490500000', formula: null, unit: 'rub', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'Верхняя граница для ставки 7%' },
+  { key: 'rate_special_5', value: '5', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'Без вычетов' },
+  { key: 'rate_special_7', value: '7', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'Без вычетов' },
+  { key: 'rate_general', value: '22', formula: null, unit: 'percent', validFrom: '2026-01-01', validTo: '2026-12-31', norm: 'НК РФ, ст. 164', note: 'С вычетами' },
+  { key: 'twelve_quarters', value: '12', formula: null, unit: 'count', validFrom: '2026-01-01', validTo: '2026-12-31', norm: null, note: 'Ограничение возврата к прежней ставке' },
+  { key: 'rate_window', value: null, formula: null, unit: 'text', validFrom: '2026-01-01', validTo: '2026-12-31', norm: null, note: '11,12' },
+  { key: 'group_unity_signs', value: null, formula: null, unit: 'text', validFrom: '2026-01-01', validTo: null, norm: null, note: 'один бренд, один сайт, общий парк' },
+  { key: 'limit_5', value: null, formula: '250000000 * deflator', unit: 'rub', validFrom: '2027-01-01', validTo: null, norm: null, note: 'Дефлятор на 2027 год не утверждён' },
+  { key: 'limit_7', value: null, formula: '450000000 * deflator', unit: 'rub', validFrom: '2027-01-01', validTo: null, norm: null, note: 'Дефлятор на 2027 год не утверждён' },
+];
+
+export function seedCtx(now: Moment, rows: RuleRow[] = SEED_RULE_ROWS): CalcCtx {
+  return { weights: SEED_WEIGHTS, rules: buildRuleSet(rows, now) };
+}
+
+export function seedInput(now: Moment, selections: Selections = {}): DashboardInput {
+  return { entities: SEED_ENTITIES, selections, ctx: seedCtx(now) };
+}

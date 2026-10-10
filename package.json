@@ -1,0 +1,56 @@
+{
+  "name": "pva-agent-nds",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Агент по НДС: закрытое PWA для собственника группы компаний",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:dev": "tsx scripts/dev-db.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "user:create": "tsx scripts/user-create.ts",
+    "user:set-password": "tsx scripts/user-set-password.ts",
+    "user:revoke-devices": "tsx scripts/user-revoke-devices.ts",
+    "icons": "tsx scripts/make-icons.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
+    "bcryptjs": "^3.0.3",
+    "decimal.js": "^10.6.0",
+    "drizzle-orm": "^0.45.4",
+    "next": "^16.4.0",
+    "pg": "^8.23.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.64.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "embedded-postgres": "^17.10.0-beta.17",
+    "postcss": "^8.5.29",
+    "sharp": "^0.35.5",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

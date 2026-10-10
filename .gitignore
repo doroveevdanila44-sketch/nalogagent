@@ -1,0 +1,29 @@
+# зависимости и сборка
+node_modules
+.next
+out
+build
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# окружение: все .env-файлы, кроме образца без значений
+.env
+.env.*
+!.env.example
+
+# локальные данные: PostgreSQL от npm run db:dev, логи серверов, снимки экранов, отчёты Lighthouse
+.data
+*.log
+npm-debug.log*
+
+# результаты тестов
+playwright-report
+test-results
+
+# дубликат docs/ (пакет передачи)
+pva-handoff/
+
+# служебное
+.vercel
+.DS_Store
