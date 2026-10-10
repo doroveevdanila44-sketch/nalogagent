@@ -17,8 +17,13 @@ interface Props {
   /** Меняется снаружи, чтобы сбросить введённое (например, при переходе на «Повторите PIN») */
   resetKey?: string | number;
   initialError?: string | null;
-  /** Текстовая кнопка слева внизу, например «Войти по паролю» */
-  leftAction?: { label: string; onClick: () => void };
+  /**
+   * PIN на этом устройстве заблокирован после пяти ошибок. Клавиши неактивны, а слева внизу
+   * появляется «Войти по паролю»: без неё выхода из блокировки на этом экране не было бы.
+   */
+  blocked?: boolean;
+  /** Что делает «Войти по паролю» в блокировке. Без обработчика кнопки нет */
+  onPassword?: () => void;
   /** «Отмена» справа внизу, пока не введена ни одна цифра. Без обработчика место пустое */
   onCancel?: () => void;
 }
@@ -28,8 +33,10 @@ const PRESS_MS = 180;
 
 /**
  * Экран кода-пароля по образцу iPhone: знак вверху, заголовок на ~18% высоты, четыре точки
- * на ~25%, клавиатура 3 на 4 с ~34%, внизу строка действий («Войти по паролю» слева, «Удалить»
- * или «Отмена» справа). Высоты в dvh с учётом safe-area. Колонка не шире 360 px.
+ * на ~25%, клавиатура 3 на 4 с ~34%, внизу строка действий. Справа одна кнопка: «Отмена», пока
+ * не введено ни одной цифры, затем «Удалить» (стирает ровно одну последнюю цифру). Слева пусто,
+ * кроме блокировки PIN: тогда там «Войти по паролю». Высоты в dvh с учётом safe-area. Колонка
+ * не шире 360 px.
  *
  * Логика ввода прежняя: четвёртая цифра отправляется сама; с аппаратной клавиатуры работают
  * цифры и Backspace, Enter не нужен. Скрытое поле type=password с inputmode=numeric оставлено
@@ -41,7 +48,8 @@ export function PinPad({
   onSubmit,
   resetKey,
   initialError = null,
-  leftAction,
+  blocked = false,
+  onPassword,
   onCancel,
 }: Props) {
   const [value, setValue] = useState('');
@@ -53,6 +61,7 @@ export function PinPad({
   const hydrated = useHydrated();
   const input = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
+  const blockedRef = useRef(blocked);
   const valueRef = useRef('');
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -66,6 +75,10 @@ export function PinPad({
     },
     [],
   );
+
+  useEffect(() => {
+    blockedRef.current = blocked;
+  }, [blocked]);
 
   const update = useCallback((next: string) => {
     valueRef.current = next;
@@ -126,7 +139,7 @@ export function PinPad({
 
   const push = useCallback(
     (digit: string) => {
-      if (busyRef.current) return;
+      if (busyRef.current || blockedRef.current) return;
       const current = valueRef.current;
       if (current.length >= 4) return;
       const next = current + digit;
@@ -169,7 +182,7 @@ export function PinPad({
         flash(d);
         push(d);
       }}
-      disabled={busy || !hydrated}
+      disabled={busy || blocked || !hydrated}
     >
       {d}
     </button>
@@ -216,10 +229,11 @@ export function PinPad({
         data-lpignore="true"
         data-bwignore="true"
         data-form-type="other"
+        disabled={blocked}
         value={value}
         onChange={(e) => {
           const next = e.target.value.replace(/\D/g, '').slice(0, 4);
-          if (busyRef.current) return;
+          if (busyRef.current || blockedRef.current) return;
           setError(null);
           update(next);
           if (next.length === 4) later(() => void submit(next), 60);
@@ -235,9 +249,9 @@ export function PinPad({
 
       <div className="pin-actions">
         <span className="pin-action left">
-          {leftAction ? (
-            <button type="button" onClick={leftAction.onClick} disabled={busy}>
-              {leftAction.label}
+          {blocked && onPassword ? (
+            <button type="button" onClick={onPassword} disabled={busy}>
+              Войти по паролю
             </button>
           ) : null}
         </span>

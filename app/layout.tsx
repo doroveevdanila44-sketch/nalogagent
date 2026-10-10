@@ -36,6 +36,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // Экранная клавиатура уменьшает раскладочный вьюпорт (Chrome на Android): поле ввода и 100dvh
+  // оказываются прямо над ней. Для Safari на iOS то же делает lib/client/keyboard.ts.
+  interactiveWidget: 'resizes-content',
   themeColor: '#CA9C68',
   colorScheme: 'light',
 };

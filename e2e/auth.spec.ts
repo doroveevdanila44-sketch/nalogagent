@@ -88,8 +88,15 @@ test('4. повторный вход по PIN, ошибки, блокировк�
     await typePin(page, '1357');
     await expect(page.getByText(`Осталось попыток: ${left}`)).toBeVisible();
   }
+  // пока PIN не заблокирован, «Войти по паролю» на экране нет
+  await expect(page.getByRole('button', { name: 'Войти по паролю' })).toHaveCount(0);
   await typePin(page, '1357');
-  // пятая ошибка: PIN заблокирован, остаётся вход по паролю
+  // пятая ошибка: PIN заблокирован, экран PIN остаётся, слева появляется единственный выход
+  await expect(page.getByText('PIN заблокирован')).toBeVisible();
+  const toPassword = page.getByRole('button', { name: 'Войти по паролю' });
+  await expect(toPassword).toBeVisible();
+  await expect(page.getByRole('button', { name: '1', exact: true })).toBeDisabled();
+  await toPassword.click();
   await expect(page.getByLabel('Логин', { exact: true })).toBeVisible();
   await expect(page.getByText('PIN заблокирован')).toBeVisible();
 

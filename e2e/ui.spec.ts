@@ -81,7 +81,8 @@ test('PIN-экран как на iPhone: расположение, размер�
       const k = (t: string) => keys.find((x) => x.t === t)!.r;
       const dots = [...document.querySelectorAll('.pin-dots i')].map((d) => d.getBoundingClientRect());
       const actions = [...document.querySelectorAll('.pin-actions button')].map((b) => b.getBoundingClientRect());
-      const left = document.querySelector('.pin-action.left button')!;
+      // слева в обычном состоянии пусто: это только колонка сетки, кнопки там нет
+      const left = document.querySelector('.pin-action.left')!;
       const right = document.querySelector('.pin-action.right button')!;
       const key1 = getComputedStyle(document.querySelector('.key')!);
       return {
@@ -119,16 +120,17 @@ test('PIN-экран как на iPhone: расположение, размер�
         actionsBottom: vh - Math.max(...actions.map((a) => a.bottom)),
         actionsTop: Math.min(...actions.map((a) => a.top)),
         leftText: left.textContent,
+        leftButtons: left.querySelectorAll('button').length,
         rightText: right.textContent,
         leftCx: left.getBoundingClientRect().left + left.getBoundingClientRect().width / 2,
         rightCx: right.getBoundingClientRect().left + right.getBoundingClientRect().width / 2,
         key1Cx: k('1').left + k('1').width / 2,
         key3Cx: k('3').left + k('3').width / 2,
-        actFont: getComputedStyle(left).fontSize,
-        actWeight: getComputedStyle(left).fontWeight,
-        actColor: getComputedStyle(left).color,
-        actDecor: getComputedStyle(left).textDecorationLine,
-        actBorder: getComputedStyle(left).borderTopWidth,
+        actFont: getComputedStyle(right).fontSize,
+        actWeight: getComputedStyle(right).fontWeight,
+        actColor: getComputedStyle(right).color,
+        actDecor: getComputedStyle(right).textDecorationLine,
+        actBorder: getComputedStyle(right).borderTopWidth,
       };
     });
     const at = `@${w}x${h}`;
@@ -172,8 +174,9 @@ test('PIN-экран как на iPhone: расположение, размер�
     expect(m.keyBorder).toBe('rgba(255, 255, 255, 0.18)');
     expect(m.keyBlur).toContain('blur(14px)');
 
-    // действия: слева «Войти по паролю», справа «Отмена», у нижнего края, под колонками 1 и 3
-    expect(m.leftText).toBe('Войти по паролю');
+    // действия: слева пусто, справа одна кнопка «Отмена», у нижнего края, под колонками 1 и 3
+    expect(m.leftText).toBe('');
+    expect(m.leftButtons).toBe(0);
     expect(m.rightText).toBe('Отмена');
     expect(Math.abs(m.actionsBottom - 34), `низ действий ${at}`).toBeLessThanOrEqual(12);
     expect(m.actionsTop, `клавиатура не залезает под действия ${at}`).toBeGreaterThan(m.padBottom + 4);
@@ -247,10 +250,11 @@ test('PIN-экран: ввод с клавиатуры, Backspace, неверн�
   await expect.poll(() => new URL(page.url()).pathname).toBe('/agent');
 });
 
-test('PIN-экран: «Войти по паролю» и «Отмена» ведут к паролю; на экране пароля поля 52 px', async ({ page }) => {
+test('PIN-экран: «Отмена» ведёт к паролю, «Войти по паролю» нет; на экране пароля поля 52 px', async ({ page }) => {
   await firstLogin(page, PIN);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Войти по паролю' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
   await expect(page.getByLabel('Логин', { exact: true })).toBeVisible();
 
@@ -408,7 +412,7 @@ test('Курсоры, переходы 150-200 мс, нет левых поло�
   await page.getByRole('link', { name: 'Агент' }).click();
   await expect(page.getByLabel('Вопрос агенту')).toBeVisible();
   expect(await cursor('.sug button')).toBe('pointer');
-  expect(await cursor('.composer input')).toBe('text');
+  expect(await cursor('.composer textarea')).toBe('text');
   await page.getByRole('button', { name: 'Меню' }).click();
   expect(await cursor('.sheet button.row')).toBe('pointer');
   await page.keyboard.press('Escape');
@@ -416,7 +420,7 @@ test('Курсоры, переходы 150-200 мс, нет левых поло�
   // переходы на интерактивных элементах 150-200 мс
   const durations = await page.evaluate(() => {
     const out: Record<string, number[]> = {};
-    for (const sel of ['.tab', '.icon-btn', '.sug button', '.composer button', '.composer input']) {
+    for (const sel of ['.tab', '.icon-btn', '.sug button', '.composer button', '.composer textarea']) {
       const el = document.querySelector(sel);
       if (!el) continue;
       out[sel] = getComputedStyle(el)

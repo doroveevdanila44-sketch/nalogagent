@@ -12,6 +12,7 @@ type Step = 'password' | 'pin' | 'setup' | 'confirm';
 type Initial = 'anonymous' | 'locked' | 'needPinSetup';
 
 const FORBIDDEN = AUTH.forbiddenPins as readonly string[];
+const BLOCKED_NOTICE = 'PIN заблокирован. Войдите по паролю, затем придумайте новый PIN';
 
 /**
  * Сценарии 1 и 2 из AUTH.md: пароль, затем создание PIN (дважды) либо ввод PIN.
@@ -25,6 +26,8 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
   const [firstPin, setFirstPin] = useState('');
   const [setupNotice, setSetupNotice] = useState<string | null>(null);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(notice ?? null);
+  // PIN этого устройства заблокирован после пяти ошибок: экран PIN остаётся, слева «Войти по паролю»
+  const [pinBlocked, setPinBlocked] = useState(false);
 
   const done = useCallback(() => {
     router.replace(next);
@@ -34,6 +37,7 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
   const goPassword = useCallback((message: string | null) => {
     setPasswordNotice(message);
     setFirstPin('');
+    setPinBlocked(false);
     setStep('password');
   }, []);
 
@@ -47,8 +51,8 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
       } catch (e) {
         if (e instanceof ApiError) {
           if (e.code === 'pin_blocked') {
-            goPassword('PIN заблокирован. Войдите по паролю, затем придумайте новый PIN');
-            return { ok: true };
+            setPinBlocked(true);
+            return { ok: false, error: e.message };
           }
           if (e.code === 'need_password' || e.code === 'unauthorized') {
             goPassword(null);
@@ -125,8 +129,9 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
           key="pin"
           title="Введите PIN"
           onSubmit={submitPin}
-          leftAction={{ label: 'Войти по паролю', onClick: () => goPassword(null) }}
-          onCancel={() => goPassword(null)}
+          blocked={pinBlocked}
+          onPassword={() => goPassword(BLOCKED_NOTICE)}
+          onCancel={() => goPassword(pinBlocked ? BLOCKED_NOTICE : null)}
         />
       )}
       {step === 'setup' && (

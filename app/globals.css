@@ -153,6 +153,11 @@
   }
 
   /* ===== Каркас ===== */
+  /* Страница строится на динамической высоте окна (100dvh): с открытой клавиатурой она сжимается
+     вместе с вьюпортом, и поле ввода остаётся над клавиатурой */
+  .app-body {
+    min-height: calc(100dvh - var(--header-h));
+  }
   .app-main {
     padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 20px);
   }
@@ -1122,7 +1127,9 @@
     gap: 8px;
   }
   .sug button {
-    min-height: 44px;
+    /* высота 36 px, текст в одну строку целиком: подсказки переносятся рядами, а не прокручиваются */
+    height: 36px;
+    max-width: 100%;
     background: var(--color-paper);
     border: 1px solid var(--color-wood);
     color: var(--color-wood-ink);
@@ -1130,6 +1137,8 @@
     padding: 0 14px;
     font-size: 14px;
     font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
   }
   .sug button:hover {
     background: var(--color-amber);
@@ -1151,38 +1160,46 @@
       bottom: 0;
     }
   }
-  /* Подсказки над полем ввода: одна строка с горизонтальной прокруткой, чтобы не закрывать ответ */
+  /* Подсказки над полем ввода: несколько рядов с зазором 8 px, без горизонтальной прокрутки */
   .composer-wrap .sug {
-    flex-wrap: nowrap;
-    overflow-x: auto;
     padding-top: 8px;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
   }
-  .composer-wrap .sug::-webkit-scrollbar {
-    display: none;
-  }
-  .composer-wrap .sug button {
-    flex: none;
-    white-space: nowrap;
-  }
+  /* Поле как в приложении Claude: от одной строки (38 px) до шести, дальше прокрутка внутри.
+     Кнопка прижата к низу и не растёт вместе с полем. */
   .composer {
     display: flex;
+    align-items: flex-end;
     gap: 8px;
     padding-block: 8px;
   }
-  .composer input {
+  .composer textarea {
     flex: 1;
     min-width: 0;
+    display: block;
+    box-sizing: border-box;
     height: 38px;
+    /* шесть строк по 22 px, поля 7 px и рамка 1 px */
+    max-height: calc(6 * 22px + 2 * 7px + 2px);
+    margin: 0;
+    padding: 7px 14px;
     font-size: 16px;
+    line-height: 22px;
     border: 1px solid var(--color-river);
     border-radius: 12px;
-    padding: 0 14px;
     background: #fff;
+    resize: none;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .composer textarea::placeholder {
+    color: var(--color-muted);
+    /* подсказка в одну строку, на узком экране обрезается многоточием, а не переносится */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .composer button {
+    flex: none;
     height: 38px;
     padding: 0 16px;
     border: 0;
@@ -1193,6 +1210,20 @@
   }
   .composer button:disabled {
     opacity: 0.55;
+  }
+
+  /* Экранная клавиатура открыта (lib/client/keyboard.ts): поле сидит прямо над ней, без зазора под
+     панель вкладок и без отступа безопасной зоны, а сама панель вкладок скрыта на телефоне. */
+  html[data-kb='open'] .composer-wrap {
+    bottom: var(--kb, 0px);
+  }
+  @media (max-width: 759px) {
+    html[data-kb='open'] .tabs {
+      display: none;
+    }
+    html[data-kb='open'] .app-main {
+      padding-bottom: 20px;
+    }
   }
 
   /* ===== Вход и PIN ===== */
@@ -1615,7 +1646,7 @@
   .sug button,
   .rate,
   .composer button,
-  .composer input,
+  .composer textarea,
   .field input,
   .field .with-eye button,
   .key,
@@ -1682,7 +1713,7 @@
     transform: scale(0.97);
     box-shadow: none;
   }
-  .composer input:focus {
+  .composer textarea:focus {
     outline: none;
     border-color: var(--color-wood);
     box-shadow: 0 0 0 3px rgb(144 109 75 / 0.25);

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, setCsrf } from '@/lib/client/api';
+import { watchKeyboard } from '@/lib/client/keyboard';
 import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
@@ -24,6 +25,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [locked, setLocked] = useState(false);
   const [online, setOnline] = useState(true);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
+  // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
+  const [pinBlocked, setPinBlocked] = useState(false);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,6 +130,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     };
   }, [sendLock]);
 
+  // Экранная клавиатура: на телефоне прячет нижнюю панель и поднимает поле ввода (lib/client/keyboard.ts)
+  useEffect(() => watchKeyboard(), []);
+
   useEffect(() => {
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => undefined);
@@ -176,12 +182,17 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     try {
       const res = await api<{ csrf: string }>('/api/auth/pin', { body: { pin } });
       setCsrf(res.csrf);
+      setPinBlocked(false);
       setLocked(false);
       window.dispatchEvent(new CustomEvent(UNLOCKED_EVENT));
       return { ok: true };
     } catch (e) {
       if (e instanceof ApiError) {
-        if (e.code === 'pin_blocked' || e.code === 'need_password' || e.code === 'unauthorized') {
+        if (e.code === 'pin_blocked') {
+          setPinBlocked(true);
+          return { ok: false, error: e.message };
+        }
+        if (e.code === 'need_password' || e.code === 'unauthorized') {
           window.location.assign('/login?mode=password');
           return { ok: true };
         }
@@ -190,6 +201,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
       return { ok: false, error: 'Не удалось проверить PIN' };
     }
   }, []);
+
+  const goPassword = useCallback(() => window.location.assign('/login?mode=password'), []);
 
   const logout = useCallback(async () => {
     try {
@@ -300,10 +313,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
           <PinPad
             title="Введите PIN"
             onSubmit={unlock}
-            leftAction={{
-              label: 'Войти по паролю',
-              onClick: () => window.location.assign('/login?mode=password'),
-            }}
+            blocked={pinBlocked}
+            onPassword={goPassword}
+            onCancel={goPassword}
           />
         </div>
       )}

@@ -64,7 +64,7 @@ test('экран PIN на разных размерах', async ({ page }) => {
 
   // пароль
   await page.waitForTimeout(700);
-  await page.getByRole('button', { name: 'Войти по паролю' }).click();
+  await page.getByRole('button', { name: 'Отмена', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel('Логин', { exact: true }).waitFor();
   await page.waitForTimeout(300);
