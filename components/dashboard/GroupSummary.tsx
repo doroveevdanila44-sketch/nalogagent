@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { entityColor } from '@/lib/theme';
 import {
   dateRu,
   dateRuYear,
   mln,
-  pluralRu,
   rub,
   rub2,
   type DashboardInput,
@@ -13,8 +13,9 @@ import {
   type Moment,
   type StaticModel,
 } from '@/lib/calc';
+import { groupCaption, groupMetrics, type GroupMetricId } from './group-metrics';
 
-type CardId = 'revenue' | 'vat' | 'vatForecast' | 'profit';
+type CardId = GroupMetricId;
 
 interface Props {
   moment: Moment;
@@ -22,8 +23,6 @@ interface Props {
   live: LiveModel;
   stat: StaticModel;
 }
-
-const regimeFamily = (r: string) => (r === 'osno' ? 'ОСНО' : 'УСН');
 
 /**
  * Четыре отдельные карточки группы. Нажатие раскрывает расшифровку по юрлицам прямо под нажатой
@@ -35,9 +34,6 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
   const [open, setOpen] = useState<CardId | null>(null);
   const { entities } = input;
 
-  const families = [...new Set(entities.map((e) => regimeFamily(e.taxRegime)))];
-  const count = entities.length;
-
   const toggle = useCallback((id: CardId) => setOpen((cur) => (cur === id ? null : id)), []);
 
   const scrollToEntities = useCallback(() => {
@@ -48,7 +44,6 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
   }, []);
 
   const payerNames = entities.filter((e) => e.status === 'payer');
-  const profitEntities = entities.filter((e) => e.taxRegime === 'osno');
 
   type Row = { id: string; name: string; color: string; tag: string; value: string };
   const detail: Record<CardId, { title: string; rows: Row[] }> = {
@@ -57,7 +52,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
       rows: entities.map((e) => ({
         id: e.id,
         name: e.name,
-        color: e.color,
+        color: entityColor(e),
         tag: e.status === 'payer' ? 'плательщик НДС' : 'освобождено от НДС',
         value: rub(live.perEntity[e.id]!.ytd),
       })),
@@ -69,7 +64,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
         return {
           id: e.id,
           name: e.name,
-          color: e.color,
+          color: entityColor(e),
           tag: e.taxRegime === 'osno' ? 'ОСНО, 22% с вычетами' : `ставка ${s.selected}%`,
           value: rub2(live.perEntity[e.id]!.accrued[s.selected]!),
         };
@@ -82,7 +77,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
         return {
           id: e.id,
           name: e.name,
-          color: e.color,
+          color: entityColor(e),
           tag: e.status === 'payer' ? (e.taxRegime === 'osno' ? '22% с вычетами' : `ставка ${s.selected}%`) : 'освобождено',
           value: mln(s.forecast[s.selected]!, 2),
         };
@@ -95,7 +90,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
         return {
           id: e.id,
           name: e.name,
-          color: e.color,
+          color: entityColor(e),
           tag: `${t.label}, ${t.ratePct.toString()}%`,
           value: mln(t.forecast, 2),
         };
@@ -114,7 +109,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
     '. Суммы ориентировочные, проверьте с бухгалтером.';
 
   /** Карточка и её расшифровка в одной ячейке списка */
-  const item = (id: CardId, label: string, value: string, sub: React.ReactNode) => {
+  const item = ({ id, label, value, sub }: { id: CardId; label: string; value: string; sub: string }) => {
     const isOpen = open === id;
     const d = detail[id];
     return (
@@ -173,29 +168,10 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
     <section className="sum" aria-labelledby="h-group">
       <div className="sum-head">
         <h2 id="h-group">Группа на {dateRuYear(moment)}</h2>
-        <p>
-          {count} {pluralRu(count, 'юрлицо', 'юрлица', 'юрлиц')} · {families.join(' и ')}
-        </p>
+        <p>{groupCaption(entities)}</p>
       </div>
 
-      <div className="sum-cards">
-        {item('revenue', 'Выручка с начала года', rub(live.ytdGroup), 'по всем юрлицам')}
-        {item(
-          'vat',
-          'НДС начислен',
-          rub2(live.taxAccruedGroup),
-          stat.saving.gt(0) ? `можно сэкономить ${mln(stat.saving, 2)} в год` : 'ставки уже лучшие',
-        )}
-        {item('vatForecast', 'Прогноз НДС за год', mln(stat.forecastGroup, 2), 'по выбранным ставкам')}
-        {item(
-          'profit',
-          'Налог на прибыль: прогноз за год',
-          mln(stat.incomeTaxGroup.profit, 2),
-          profitEntities.length
-            ? `УСН по остальным юрлицам: ${mln(stat.incomeTaxGroup.usn, 2)} в год`
-            : `УСН по группе: ${mln(stat.incomeTaxGroup.usn, 2)} в год`,
-        )}
-      </div>
+      <div className="sum-cards">{groupMetrics(live, stat, entities).map((m) => item(m))}</div>
     </section>
   );
 }

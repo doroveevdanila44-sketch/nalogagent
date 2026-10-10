@@ -1,9 +1,10 @@
 import { useLayoutEffect } from 'react';
+import { THEME } from '@/lib/theme';
 
-/** Янтарь шапки: все экраны после входа. Совпадает с theme_color манифеста */
-export const THEME_APP = '#CA9C68';
-/** Коричневый экранов входа, PIN и блокировки по простою */
-export const THEME_AUTH = '#594C3D';
+/** Озеро шапки: все экраны после входа. Совпадает с theme_color манифеста */
+export const THEME_APP: string = THEME.app;
+/** Бордо экранов входа, PIN и блокировки по простою */
+export const THEME_AUTH: string = THEME.auth;
 
 /**
  * Записывает цвет в <meta name="theme-color">. Метатег Next.js выводит один раз на маршрут, а экран

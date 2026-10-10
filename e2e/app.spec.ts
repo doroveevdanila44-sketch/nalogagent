@@ -18,7 +18,9 @@ test('Дашборд: четыре юрлица, три ставки, живые
   await toDashboard(page);
 
   await expect(page.getByText('5 юрлиц · УСН и ОСНО')).toBeVisible();
-  await expect(page.locator('.sum-card')).toHaveCount(4);
+  // 1280 px: один широкий баннер группы с четырьмя показателями, отдельных баннеров нет
+  await expect(page.locator('.band .metric')).toHaveCount(4);
+  await expect(page.locator('.sum-card')).toHaveCount(0);
   await expect(page.locator('article.ent')).toHaveCount(5);
   await expect(page.locator('.plot .col')).toHaveCount(12);
   await expect(page.getByText(/Срочных: \d+, всего: \d+/)).toBeVisible();
@@ -41,7 +43,8 @@ test('Дашборд: четыре юрлица, три ставки, живые
   }
 
   // живая выручка меняется раз в секунду
-  const metric = page.locator('.sum-value').first();
+  // 1280 px: показатель в широком баннере группы
+  const metric = page.locator('.band .metric strong').first();
   const first = await metric.innerText();
   await page.waitForTimeout(2500);
   expect(await metric.innerText()).not.toBe(first);
@@ -236,7 +239,7 @@ test('PWA: манифест, service worker не кэширует данные',
   expect(manifest.short_name).toBe('НДС');
   expect(manifest.display).toBe('standalone');
   expect(manifest.start_url).toBe('/agent');
-  expect(manifest.theme_color).toBe('#CA9C68');
+  expect(manifest.theme_color).toBe('#A0D2A8');
   expect(manifest.background_color).toBe('#FFFFFF');
   const sizes = manifest.icons.map((i: { sizes: string; purpose: string }) => `${i.sizes}:${i.purpose}`);
   expect(sizes).toEqual(expect.arrayContaining(['192x192:any', '512x512:any', '512x512:maskable']));
@@ -268,5 +271,5 @@ test('PWA: манифест, service worker не кэширует данные',
   expect(await page.locator('meta[name="apple-mobile-web-app-capable"]').getAttribute('content')).toBe('yes');
   expect(await page.locator('link[rel="apple-touch-icon"]').count()).toBeGreaterThan(0);
   expect(await page.locator('meta[name="viewport"]').getAttribute('content')).toContain('viewport-fit=cover');
-  expect(await page.locator('meta[name="theme-color"]').first().getAttribute('content')).toBe('#CA9C68');
+  expect(await page.locator('meta[name="theme-color"]').first().getAttribute('content')).toBe('#A0D2A8');
 });

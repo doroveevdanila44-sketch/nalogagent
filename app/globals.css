@@ -2,27 +2,42 @@
 
 /* Токены из SPEC.md, раздел 5. Единый источник цветов и шрифта. Чистого чёрного нет, тёмной темы нет. */
 @theme {
-  --color-river: #13191f; /* River Styx: основной текст, кнопки, знак, сообщения пользователя */
-  --color-carbon: #2b2f2e; /* Carbon Fibre: нижняя панель */
-  --color-tea: #594c3d; /* Afternoon Tea: баннер, «41» в знаке */
-  --color-wood: #906d4b; /* Tanned Wood: акценты, фокус, рамки, заливки */
-  --color-wood-ink: #6e5238; /* тот же оттенок темнее: для текста на светлом фоне, контраст не ниже 4,5:1 */
-  --color-amber: #ca9c68; /* Amber Autumn: шапка, выбранная вкладка */
+  /* Палитра «Озеро и зелень». Значения те же, что в lib/theme.ts (проверяет lib/theme.test.ts).
+     Все цвета интерфейса берутся только отсюда: в компонентах и правилах ниже литералов нет. */
+  --color-ink: #2a2b14; /* основной текст, нижняя и боковая панель, кнопки, сообщения пользователя */
+  --color-muted: #6b6a52; /* приглушённый текст */
+  --color-line: #e7e5d3; /* линии и разделители */
+  --color-page: #ffffff; /* фон страницы */
+  --color-lake: #a0d2a8; /* Vistoris Lake: шапка, метки «К сведению» */
+  --color-lemon: #fff3b2; /* Pale Lemon Yellow: выбранная вкладка, «41» на экранах входа */
+  --color-accent: #5a5c2f; /* акцент: фокус, полоса порога, подписи, кнопки подсказок */
+  --color-wine: #784244; /* баннеры группы, экраны входа, PIN и блокировки, «41» в шапке */
+  --color-wine-soft: #835150; /* строки расшифровки внутри баннера: на тон светлее */
+  --color-wine-sub: #e8cfcb; /* второстепенный текст в баннере */
+  --color-cream: #fff8e0; /* текст на баннере и на экранах входа */
+  --color-tab-idle: #e3e6c8; /* невыбранная вкладка */
+  --color-soft: #fff8d6; /* светлая подложка */
+  --color-mint: #eef6ef; /* подложка сообщений агента и меток */
+  --color-warn-ink: #4a3f00; /* текст метки «Внимание» */
+  --color-on-ink: #ffffff; /* текст на тёмных кнопках и подложках */
 
-  --color-line: #e9e1d6;
-  --color-muted: #75665a;
-  --color-paper: #f6eee2;
-  --color-beige: #efe9e1;
-  --color-cream: #f6ebdd; /* текст на баннере */
-  --color-sand: #e9d9c3; /* невыбранная вкладка */
-  --color-sand-soft: #e7d2b5; /* подписи на баннере */
-  --color-tea-soft: #695c4d; /* строки расшифровки внутри баннера: на тон светлее Afternoon Tea */
-
+  /* Состояния: зелёная и красная карточки ставок, красная метка «Срочно» */
   --color-good: #1d7a4b;
   --color-good-soft: #e3f3ea;
-  --color-good-ink: #17653d; /* зелёный текст на бежевом: контраст не ниже 4,5:1 */
+  --color-good-ink: #17653d; /* зелёный текст на светлом: контраст не ниже 4,5:1 */
+  --color-good-deep: #0f3e27;
   --color-bad: #b3372b;
   --color-bad-soft: #fceae7;
+  --color-bad-deep: #5e141b;
+  --color-bad-line: #d98a90;
+  --color-error-on-dark: #ffc2b8; /* текст ошибки на тёмно-красном фоне входа */
+
+  /* Стекло клавиш PIN и штриховка прогноза на графике */
+  --glass: rgb(255 255 255 / 0.14);
+  --glass-edge: rgb(255 255 255 / 0.2);
+  --glass-hover: rgb(255 255 255 / 0.2);
+  --glass-active: rgb(255 255 255 / 0.38);
+  --color-hatch: rgb(255 255 255 / 0.6);
 
   --font-sans: var(--font-onest), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
@@ -42,10 +57,10 @@
 }
 
 @layer base {
-  /* Фон html янтарный: под часами и при оттягивании сверху виден цвет шапки, а не белое. Страница
-     (body) белая и занимает всю высоту окна. Экраны входа ниже перекрашивают html в коричневый. */
+  /* Фон html цвета шапки: под часами и при оттягивании сверху виден цвет шапки, а не белое. Страница
+     (body) белая и занимает всю высоту окна. Экраны входа ниже перекрашивают html в бордо. */
   html {
-    background: var(--color-amber);
+    background: var(--color-lake);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overscroll-behavior-y: none;
@@ -55,8 +70,8 @@
     margin: 0;
     min-height: 100dvh;
     overscroll-behavior-y: none;
-    background: #fff;
-    color: var(--color-river);
+    background: var(--color-page);
+    color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 16px;
     font-weight: 400;
@@ -124,14 +139,14 @@
     cursor: text;
   }
 
-  /* Экран входа и PIN коричневый целиком, в том числе при перетягивании за край */
+  /* Экран входа и PIN бордовый целиком, в том числе при перетягивании за край */
   html:has(.auth-screen),
   html:has(.auth-screen) body {
-    background: #594c3d;
+    background: var(--color-wine);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-wood);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
@@ -174,8 +189,8 @@
     position: sticky;
     top: 0;
     z-index: 30;
-    background: var(--color-amber);
-    color: var(--color-river);
+    background: var(--color-lake);
+    color: var(--color-ink);
     padding-top: var(--safe-top);
   }
   .top-in {
@@ -200,10 +215,10 @@
     border: 0;
     border-radius: 12px;
     background: transparent;
-    color: var(--color-river);
+    color: var(--color-ink);
   }
   .icon-btn:hover {
-    background: rgb(19 25 31 / 0.08);
+    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
   }
   .icon-btn svg {
     width: 22px;
@@ -222,11 +237,11 @@
     font-size: 22px;
     line-height: 1;
     letter-spacing: 0.01em;
-    color: var(--color-river);
+    color: var(--color-ink);
     white-space: nowrap;
   }
   .wordmark .n41 {
-    color: var(--color-tea);
+    color: var(--color-wine);
     font-weight: 600;
   }
   .wordmark.big {
@@ -235,17 +250,17 @@
   .wordmark.small {
     font-size: 20px;
   }
-  /* На коричневом фоне входа и PIN: «luxauto» F6EBDD, «41» CA9C68 */
+  /* На бордовом фоне входа и PIN: «luxauto» цветом текста баннера, «41» лимонным */
   .wordmark.light {
-    color: #f6ebdd;
+    color: var(--color-cream);
   }
   .wordmark.light .n41 {
-    color: #ca9c68;
+    color: var(--color-lemon);
   }
 
   .offline-banner {
     background: var(--color-bad-soft);
-    color: #5e141b;
+    color: var(--color-bad-deep);
     text-align: center;
     font-size: 14px;
     font-weight: 500;
@@ -262,7 +277,7 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
-    background: var(--color-carbon);
+    background: var(--color-ink);
     padding: 8px 12px calc(8px + var(--safe-bottom));
   }
   .tab {
@@ -276,7 +291,7 @@
     border: 0;
     border-radius: 12px;
     padding: 5px 4px;
-    color: var(--color-sand);
+    color: var(--color-tab-idle);
     font-size: 12px;
     font-weight: 500;
     text-decoration: none;
@@ -291,8 +306,8 @@
     stroke-linejoin: round;
   }
   .tab[aria-current='page'] {
-    background: var(--color-amber);
-    color: var(--color-river);
+    background: var(--color-lemon);
+    color: var(--color-ink);
     font-weight: 600;
   }
   @media (min-width: 760px) {
@@ -352,8 +367,8 @@
     padding: 0 18px;
     border: 0;
     border-radius: 12px;
-    background: var(--color-river);
-    color: #fff;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
     font-weight: 600;
   }
   .btn:disabled {
@@ -362,12 +377,12 @@
   }
   .btn-ghost {
     background: transparent;
-    color: var(--color-river);
-    border: 1px solid var(--color-river);
+    color: var(--color-ink);
+    border: 1px solid var(--color-ink);
   }
   .skeleton {
     border-radius: 12px;
-    background: linear-gradient(90deg, var(--color-beige), var(--color-paper), var(--color-beige));
+    background: linear-gradient(90deg, var(--color-mint), var(--color-soft), var(--color-mint));
     background-size: 200% 100%;
     animation: shimmer 1.4s linear infinite;
   }
@@ -398,14 +413,10 @@
     /* раскрытая расшифровка растягивает только свою ячейку, соседи по ряду не вытягиваются */
     align-items: start;
   }
+  /* От 1024 px вместо четырёх баннеров показан один широкий баннер группы (.band, ниже) */
   @media (min-width: 640px) {
     .sum-cards {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (min-width: 1024px) {
-    .sum-cards {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
   .sum-card {
@@ -418,7 +429,7 @@
     padding: 16px;
     border: 0;
     border-radius: 16px;
-    background: var(--color-tea);
+    background: var(--color-wine);
     color: var(--color-cream);
     text-align: left;
     /* размер числа считается от ширины самой карточки, поэтому оно не переносится и не вылезает */
@@ -427,17 +438,8 @@
   .sum-label {
     font-size: 13px;
     font-weight: 500;
-    color: #d9c7ae;
+    color: var(--color-wine-sub);
     padding-right: 24px;
-  }
-  @media (min-width: 1024px) {
-    /* подпись и пояснение могут занять две строки: числа и высота карточек в ряду одинаковы */
-    .sum-label {
-      min-height: 2.9em; /* две строки при line-height 1.45 */
-    }
-    .sum-sub {
-      min-height: 2.7em; /* две строки при line-height 1.35 */
-    }
   }
   .sum-value {
     display: block;
@@ -451,7 +453,7 @@
   .sum-sub {
     font-size: 12px;
     line-height: 1.35;
-    color: #d9c7ae;
+    color: var(--color-wine-sub);
   }
   .sum-chev {
     position: absolute;
@@ -460,7 +462,7 @@
     width: 20px;
     height: 20px;
     fill: none;
-    stroke: #d9c7ae;
+    stroke: var(--color-wine-sub);
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -470,7 +472,7 @@
     transform: rotate(180deg);
   }
   .sum-card:focus-visible {
-    outline: 2px solid var(--color-amber);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 
@@ -481,7 +483,7 @@
     border-radius: 16px;
   }
   .sum-item.open {
-    box-shadow: 0 0 0 2px var(--color-amber);
+    box-shadow: 0 0 0 2px var(--color-lake);
   }
   .sum-card {
     transition:
@@ -523,7 +525,7 @@
   .sum-detail {
     padding: 4px 14px 14px;
     border-radius: 0 0 16px 16px;
-    background: var(--color-tea);
+    background: var(--color-wine);
     color: var(--color-cream);
   }
   .sum-detail h3 {
@@ -547,7 +549,7 @@
     gap: 4px 12px;
     padding: 10px 12px;
     border-radius: 12px;
-    background: var(--color-tea-soft);
+    background: var(--color-wine-soft);
     color: var(--color-cream);
   }
   .sum-detail li b {
@@ -567,7 +569,7 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
-    border: 1px solid rgb(246 235 221 / 0.55);
+    border: 1px solid color-mix(in srgb, var(--color-cream) 55%, transparent);
   }
   .sum-row-name small {
     display: block;
@@ -596,20 +598,77 @@
     outline-offset: -2px;
   }
 
+  /* Баннер группы на компьютере (от 1024 px): один широкий баннер, внутри четыре показателя в ряду.
+     Первый вид баннера из первой версии, в новой палитре. Не раскрывается, как и тогда. */
+  .band {
+    margin-top: 18px;
+    padding: 22px 24px;
+    border-radius: 22px;
+    background: var(--color-wine);
+    color: var(--color-cream);
+  }
+  .band-h {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 12px;
+    margin-bottom: 18px;
+  }
+  .band-h h2 {
+    font-size: 19px;
+  }
+  .band-h span {
+    font-size: 14px;
+    color: var(--color-wine-sub);
+  }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px 24px;
+  }
+  .metric {
+    min-width: 0;
+    /* размер числа считается от ширины самого показателя: число не переносится и не вылезает */
+    container-type: inline-size;
+  }
+  .metric .eyebrow {
+    display: block;
+    /* подпись до двух строк: числа в ряду стоят на одной линии */
+    min-height: 2.9em;
+    color: var(--color-wine-sub);
+  }
+  .metric strong {
+    display: block;
+    margin-top: 4px;
+    font-size: clamp(17px, 10.5cqi, 24px);
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric small {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--color-wine-sub);
+  }
+
   /* Предупреждения: в списке заголовок, метка и стрелка, пояснение раскрывается по строке. Список
      выступает на 8 px за поля, чтобы фон открытой строки не прилегал к тексту вплотную. */
   .warns {
     list-style: none;
     margin: 0 -8px;
     padding: 0;
-    border-top: 1px solid var(--color-river);
+    border-top: 1px solid var(--color-ink);
   }
   li.warn {
     border-bottom: 1px solid var(--color-line);
     transition: background-color var(--acc);
   }
   li.warn.open {
-    background: var(--color-beige);
+    background: var(--color-mint);
   }
   /* Телефон: заголовок на всю ширину до стрелки (одна-две строки без обрезки), метка под ним.
      От 640 px метка стоит справа от заголовка. */
@@ -686,15 +745,15 @@
   }
   .pill.crit {
     background: var(--color-bad);
-    color: #fff;
+    color: var(--color-on-ink);
   }
   .pill.warn {
-    background: var(--color-paper);
-    color: #4a3418;
+    background: var(--color-soft);
+    color: var(--color-warn-ink);
   }
   .pill.info {
-    background: var(--color-amber);
-    color: var(--color-river);
+    background: var(--color-lake);
+    color: var(--color-ink);
   }
 
   .chart {
@@ -744,7 +803,7 @@
     grid-template-columns: repeat(12, minmax(40px, 1fr));
     gap: 4px;
     height: var(--plot-h);
-    border-bottom: 1px solid var(--color-river);
+    border-bottom: 1px solid var(--color-ink);
     background: repeating-linear-gradient(
       to top,
       transparent 0,
@@ -782,7 +841,7 @@
   .col.sel {
     z-index: 3;
     transform: scale(1.1, 1.03);
-    filter: drop-shadow(0 6px 10px rgb(19 25 31 / 0.3));
+    filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--color-ink) 30%, transparent));
   }
   .col.sel .seg {
     opacity: 1;
@@ -809,7 +868,7 @@
   }
   .col.fc .seg {
     --seg-op: 0.55;
-    background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.6) 0 2px, transparent 2px 6px);
+    background-image: repeating-linear-gradient(135deg, var(--color-hatch) 0 2px, transparent 2px 6px);
   }
   /* Выбран один сегмент: остальные приглушены, выбранный приподнят */
   .plot[data-active='true'] .seg:not(.on) {
@@ -819,11 +878,11 @@
     z-index: 3;
     opacity: 1;
     transform: translateZ(10px) scale(1.08);
-    box-shadow: 0 6px 14px rgb(19 25 31 / 0.38);
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--color-ink) 38%, transparent);
   }
   .seg:focus-visible {
     z-index: 4;
-    outline: 2px solid var(--color-river);
+    outline: 2px solid var(--color-ink);
     outline-offset: 1px;
   }
   .mon {
@@ -859,19 +918,19 @@
     }
   }
   .mon-btn:hover {
-    background: var(--color-beige);
-    color: var(--color-river);
+    background: var(--color-mint);
+    color: var(--color-ink);
   }
   .mon-btn[aria-pressed='true'] {
-    background: var(--color-river);
-    color: #fff;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
   }
   .mon .now {
-    color: var(--color-river);
+    color: var(--color-ink);
     font-weight: 600;
   }
   .mon-btn[aria-pressed='true'] .now {
-    color: #fff;
+    color: var(--color-on-ink);
   }
   /* Текущий месяц отмечен точкой над подписью, обводки столбца нет */
   .mon .now::before {
@@ -881,10 +940,10 @@
     height: 4px;
     margin: 0 auto 2px;
     border-radius: 50%;
-    background: var(--color-river);
+    background: var(--color-ink);
   }
   .mon-btn[aria-pressed='true'] .now::before {
-    background: #fff;
+    background: var(--color-on-ink);
   }
   .legend {
     display: grid;
@@ -911,7 +970,7 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
-    border: 1px solid rgb(19 25 31 / 0.25);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent);
   }
   .legend .legend-note {
     color: var(--color-muted);
@@ -926,14 +985,14 @@
     padding: 12px 14px;
     border: 1px solid var(--color-line);
     border-radius: 14px;
-    background: var(--color-paper);
+    background: var(--color-soft);
   }
   .seg-dot {
     flex: none;
     width: 14px;
     height: 14px;
     border-radius: 4px;
-    border: 1px solid rgb(19 25 31 / 0.3);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
   }
   .seg-text {
     display: flex;
@@ -1002,7 +1061,7 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
-    border: 1px solid rgb(19 25 31 / 0.3);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
   }
 
   .ents {
@@ -1031,7 +1090,7 @@
     width: 12px;
     height: 12px;
     border-radius: 3px;
-    border: 1px solid rgb(19 25 31 / 0.3);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
     flex: none;
   }
   .ent-d {
@@ -1050,25 +1109,25 @@
     font-weight: 500;
     padding: 3px 8px;
     border-radius: 6px;
-    background: var(--color-beige);
+    background: var(--color-mint);
     white-space: nowrap;
   }
   .chip.ex {
-    background: var(--color-paper);
-    color: var(--color-wood-ink);
+    background: var(--color-soft);
+    color: var(--color-accent);
   }
   .chip.pay {
-    background: var(--color-river);
-    color: #fff;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
   }
   .chip.regime {
-    background: var(--color-amber);
-    color: var(--color-river);
+    background: var(--color-lake);
+    color: var(--color-ink);
   }
   .chip.demo {
     background: transparent;
-    border: 1px solid var(--color-wood);
-    color: var(--color-wood-ink);
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent);
   }
   .ent-m {
     display: grid;
@@ -1091,7 +1150,7 @@
   .bar i {
     position: absolute;
     inset: 0 auto 0 0;
-    background: var(--color-wood);
+    background: var(--color-accent);
     border-radius: 99px;
   }
   .bar-l {
@@ -1132,12 +1191,12 @@
   .rate.sel {
     background: var(--color-good-soft);
     border-color: var(--color-good);
-    color: #0f3e27;
+    color: var(--color-good-deep);
   }
   .rate.alt {
     background: var(--color-bad-soft);
-    border-color: #d98a90;
-    color: #5e141b;
+    border-color: var(--color-bad-line);
+    color: var(--color-bad-deep);
   }
   .rate.alt:hover {
     border-color: var(--color-bad);
@@ -1158,7 +1217,7 @@
     padding: 14px;
     border: 1px solid var(--color-line);
     border-radius: 14px;
-    background: var(--color-paper);
+    background: var(--color-soft);
   }
   .taxblock h4 {
     margin: 0;
@@ -1215,7 +1274,7 @@
     text-transform: uppercase;
     padding: 2px 7px;
     border-radius: 999px;
-    color: #fff;
+    color: var(--color-on-ink);
   }
   .sel .tag {
     background: var(--color-good);
@@ -1239,7 +1298,7 @@
     gap: 8px;
     font-size: 12px;
     margin-top: 4px;
-    border-top: 1px solid rgb(19 25 31 / 0.12);
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
     padding-top: 4px;
   }
   .rate-row b {
@@ -1257,13 +1316,13 @@
     max-width: min(680px, 94%);
     padding: 12px 14px;
     border-radius: 18px 18px 18px 5px;
-    background: var(--color-beige);
+    background: var(--color-mint);
     overflow-wrap: anywhere;
   }
   .msg.me {
     align-self: flex-end;
-    background: var(--color-river);
-    color: #fff;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
     border-radius: 18px 18px 5px 18px;
     white-space: pre-wrap;
   }
@@ -1328,7 +1387,7 @@
   .msg details div {
     margin-top: 4px;
     line-height: 1.7;
-    color: var(--color-river);
+    color: var(--color-ink);
   }
   .src {
     display: block;
@@ -1336,7 +1395,7 @@
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--color-wood-ink);
+    color: var(--color-accent);
     margin-top: 8px;
   }
   .typing {
@@ -1348,7 +1407,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-wood);
+    background: var(--color-accent);
     animation: pulse 1s infinite;
   }
   .typing i:nth-child(2) {
@@ -1371,9 +1430,9 @@
     /* высота 36 px, текст в одну строку целиком: подсказки переносятся рядами, а не прокручиваются */
     height: 36px;
     max-width: 100%;
-    background: var(--color-paper);
-    border: 1px solid var(--color-wood);
-    color: var(--color-wood-ink);
+    background: var(--color-soft);
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent);
     border-radius: 999px;
     padding: 0 14px;
     font-size: 14px;
@@ -1382,8 +1441,8 @@
     white-space: nowrap;
   }
   .sug button:hover {
-    background: var(--color-amber);
-    color: var(--color-river);
+    background: var(--color-lake);
+    color: var(--color-ink);
   }
   .composer-wrap {
     position: fixed;
@@ -1391,7 +1450,7 @@
     right: 0;
     bottom: calc(var(--nav-h) + var(--safe-bottom));
     z-index: 35;
-    background: #fff;
+    background: var(--color-page);
     border-top: 1px solid var(--color-line);
   }
   /* Компьютер: поле ввода начинается справа от боковой панели и прижато к низу окна */
@@ -1425,9 +1484,9 @@
     padding: 7px 14px;
     font-size: 16px;
     line-height: 22px;
-    border: 1px solid var(--color-river);
+    border: 1px solid var(--color-ink);
     border-radius: 12px;
-    background: #fff;
+    background: var(--color-page);
     resize: none;
     overflow-y: hidden;
     scrollbar-width: thin;
@@ -1445,8 +1504,8 @@
     padding: 0 16px;
     border: 0;
     border-radius: 12px;
-    background: var(--color-river);
-    color: #fff;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
     font-weight: 500;
   }
   .composer button:disabled {
@@ -1469,10 +1528,10 @@
 
   /* ===== Вход и PIN ===== */
   .auth-screen {
-    --a-ink: #f6ebdd;
-    --a-sub: #d9c7ae;
-    --a-accent: #ca9c68;
-    --a-line: rgb(246 235 221 / 0.35);
+    --a-ink: var(--color-cream);
+    --a-sub: var(--color-wine-sub);
+    --a-accent: var(--color-lemon);
+    --a-line: color-mix(in srgb, var(--color-cream) 35%, transparent);
     width: 100%;
     min-height: 100dvh;
     display: flex;
@@ -1482,10 +1541,10 @@
     gap: 28px;
     /* симметричные поля: блок строго по центру */
     padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
-    background: var(--color-tea);
+    background: var(--color-wine);
     color: var(--a-ink);
   }
-  /* Область под часами и батареей закрашена тем же коричневым, что экран: песочный не мелькает,
+  /* Область под часами и батареей закрашена тем же бордо, что экран: цвет шапки не мелькает,
      даже если страница прокручена или фон html ещё не сменился */
   .auth-screen::before {
     content: '';
@@ -1494,7 +1553,7 @@
     left: 0;
     right: 0;
     height: var(--safe-top);
-    background: var(--color-tea);
+    background: var(--color-wine);
     pointer-events: none;
   }
   .auth-overlay {
@@ -1526,16 +1585,16 @@
     padding: 0 14px;
     font-size: 16px;
     color: var(--a-ink);
-    background: rgb(246 235 221 / 0.08);
+    background: color-mix(in srgb, var(--color-cream) 8%, transparent);
   }
   .field input:hover {
-    border-color: rgb(246 235 221 / 0.6);
+    border-color: color-mix(in srgb, var(--color-cream) 60%, transparent);
   }
   .field input:focus {
     outline: 2px solid var(--a-accent);
     outline-offset: 0;
     border-color: var(--a-accent);
-    background: rgb(246 235 221 / 0.12);
+    background: color-mix(in srgb, var(--color-cream) 12%, transparent);
   }
   .field .with-eye {
     position: relative;
@@ -1569,7 +1628,7 @@
     min-height: 52px;
     border-radius: 14px;
     background: var(--a-accent);
-    color: var(--color-river);
+    color: var(--color-ink);
     font-size: 17px;
   }
   .form-error {
@@ -1579,7 +1638,7 @@
     min-height: 20px;
   }
   .auth-screen .form-error {
-    color: #ffc2b8;
+    color: var(--color-error-on-dark);
   }
 
   /* ===== Экран PIN по образцу iPhone ===== */
@@ -1596,7 +1655,7 @@
     max-width: 360px;
     height: 100dvh;
     margin-inline: auto;
-    color: #fff;
+    color: var(--color-cream);
     animation: pin-in 220ms ease both;
   }
   .pin-screen.leaving {
@@ -1637,7 +1696,7 @@
     font-weight: 500;
     line-height: 1.25;
     text-align: center;
-    color: #f6ebdd;
+    color: var(--color-cream);
   }
   .pin-sub {
     margin-top: 4px;
@@ -1647,7 +1706,7 @@
     color: var(--color-muted);
   }
   .auth-screen .pin-sub {
-    color: #d9c7ae;
+    color: var(--color-wine-sub);
   }
   /* точки на высоте около 25%: диаметр 13 px, расстояние между центрами 37 px */
   .pin-dots {
@@ -1665,12 +1724,12 @@
     width: 13px;
     height: 13px;
     border-radius: 50%;
-    border: 1.5px solid #f6ebdd;
+    border: 1.5px solid var(--color-cream);
     background: transparent;
     transition: background-color 150ms ease;
   }
   .pin-dots i.on {
-    background: #f6ebdd;
+    background: var(--color-cream);
   }
   .pin-dots.shake {
     animation: shake 400ms ease;
@@ -1712,11 +1771,11 @@
     border-radius: 50%;
     padding: 0;
     /* стекло: полупрозрачная заливка, тонкий контур, размытие фона */
-    background: rgb(255 255 255 / 0.14);
-    border: 1px solid rgb(255 255 255 / 0.18);
+    background: var(--glass);
+    border: 1px solid var(--glass-edge);
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
-    color: #fff;
+    color: var(--color-cream);
     font-size: 36px;
     font-weight: 500;
     line-height: 1;
@@ -1734,12 +1793,12 @@
     opacity: 1;
   }
   .key:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.2);
+    background: var(--glass-hover);
   }
   /* Нажатие: мгновенное осветление до .38 и лёгкое уменьшение, без перехода на входе */
   .key.pressed,
   .key:active:not(:disabled) {
-    background: rgb(255 255 255 / 0.38);
+    background: var(--glass-active);
     transform: scale(0.96);
     transition: none;
   }
@@ -1772,7 +1831,7 @@
     border: 0;
     border-radius: 10px;
     background: none;
-    color: #fff;
+    color: var(--color-cream);
     font-size: 17px;
     font-weight: 500;
     text-decoration: none;
@@ -1789,7 +1848,7 @@
     background: none;
     border: 0;
     border-radius: 8px;
-    color: var(--color-wood-ink);
+    color: var(--color-accent);
     font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 3px;
@@ -1841,7 +1900,7 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: rgb(19 25 31 / 0.45);
+    background: color-mix(in srgb, var(--color-ink) 45%, transparent);
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -1849,7 +1908,7 @@
   .sheet {
     width: 100%;
     max-width: 420px;
-    background: #fff;
+    background: var(--color-page);
     border-radius: 22px 22px 0 0;
     padding: 12px 16px calc(16px + var(--safe-bottom));
     display: flex;
@@ -1869,7 +1928,7 @@
       gap: 4px;
       border-radius: 14px;
       border: 1px solid var(--color-line);
-      box-shadow: 0 14px 34px rgb(19 25 31 / 0.22);
+      box-shadow: 0 14px 34px color-mix(in srgb, var(--color-ink) 22%, transparent);
     }
     .sheet .row-close {
       display: none;
@@ -1879,13 +1938,13 @@
     min-height: 48px;
     border: 0;
     border-radius: 12px;
-    background: var(--color-paper);
+    background: var(--color-soft);
     text-align: left;
     padding: 0 16px;
     font-weight: 500;
   }
   .sheet button.row:hover {
-    background: var(--color-beige);
+    background: var(--color-mint);
   }
   .sheet button.row.danger {
     color: var(--color-bad);
@@ -1917,15 +1976,15 @@
   }
   .btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgb(19 25 31 / 0.2);
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--color-ink) 20%, transparent);
   }
   .btn:active:not(:disabled) {
     transform: scale(0.98);
     box-shadow: none;
   }
   .tab:hover:not([aria-current='page']) {
-    background: rgb(246 235 221 / 0.1);
-    color: #fff;
+    background: color-mix(in srgb, var(--color-cream) 10%, transparent);
+    color: var(--color-cream);
   }
   .tab:active {
     transform: scale(0.97);
@@ -1935,24 +1994,24 @@
   }
   .sug button:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgb(19 25 31 / 0.14);
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--color-ink) 14%, transparent);
   }
   .sug button:active:not(:disabled) {
     transform: scale(0.97);
   }
   .rate:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 18px rgb(19 25 31 / 0.14);
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--color-ink) 14%, transparent);
   }
   /* Подъём при наведении только там, где есть мышь: на телефоне после касания :hover залипает, и
      раскрытая карточка вместе с расшифровкой оставалась бы приподнятой */
   @media (hover: hover) {
     .sum-item:has(> .sum-card:hover) {
       transform: translateY(-2px);
-      box-shadow: 0 10px 22px rgb(19 25 31 / 0.22);
+      box-shadow: 0 10px 22px color-mix(in srgb, var(--color-ink) 22%, transparent);
     }
     .sum-item.open:has(> .sum-card:hover) {
-      box-shadow: 0 0 0 2px var(--color-amber), 0 10px 22px rgb(19 25 31 / 0.22);
+      box-shadow: 0 0 0 2px var(--color-lake), 0 10px 22px color-mix(in srgb, var(--color-ink) 22%, transparent);
     }
   }
   .sum-item:has(> .sum-card:active) {
@@ -1964,7 +2023,7 @@
   }
   .composer button:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgb(19 25 31 / 0.2);
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--color-ink) 20%, transparent);
   }
   .composer button:active:not(:disabled) {
     transform: scale(0.97);
@@ -1972,14 +2031,14 @@
   }
   .composer textarea:focus {
     outline: none;
-    border-color: var(--color-wood);
-    box-shadow: 0 0 0 3px rgb(144 109 75 / 0.25);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
   }
   .sheet button.row:active {
     transform: scale(0.99);
   }
   .tabs :focus-visible {
-    outline-color: var(--color-amber);
+    outline-color: var(--color-lemon);
   }
 
   @media (prefers-reduced-motion: reduce) {

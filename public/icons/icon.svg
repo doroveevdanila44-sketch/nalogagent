@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#CA9C68"/>
+  <rect width="512" height="512" fill="#A0D2A8"/>
   <g fill="none" stroke-width="38" stroke-linecap="butt">
-    <path d="M168 140 V292 H300" stroke="#13191F" stroke-linejoin="miter"/>
-    <path d="M262 140 V374" stroke="#13191F"/>
-    <path d="M326 192 L376 142 V374" stroke="#594C3D" stroke-linejoin="bevel"/>
+    <path d="M168 140 V292 H300" stroke="#784244" stroke-linejoin="miter"/>
+    <path d="M262 140 V374" stroke="#784244"/>
+    <path d="M326 192 L376 142 V374" stroke="#784244" stroke-linejoin="bevel"/>
   </g>
 </svg>

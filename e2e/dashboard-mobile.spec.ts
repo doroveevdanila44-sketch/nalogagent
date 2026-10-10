@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { firstLogin, resetChat } from './helpers';
 
 const PIN = '8246';
-const TEA = 'rgb(89, 76, 61)'; // #594C3D
-const AMBER = 'rgb(202, 156, 104)'; // #CA9C68
+const WINE = 'rgb(120, 66, 68)'; // #784244
+const LAKE = 'rgb(160, 210, 168)'; // #A0D2A8
 
 test.describe.configure({ mode: 'serial' });
 
@@ -15,24 +15,23 @@ const themeColor = (page: Page) => page.locator('meta[name="theme-color"]').firs
 async function toDashboard(page: Page) {
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
-  await expect(page.locator('.sum-card')).toHaveCount(4);
 }
 
 /** Дать анимации 450 мс закончиться */
 const settle = (page: Page) => page.waitForTimeout(650);
 
-test('Полоса под часами: theme-color коричневый на входе и PIN, янтарный в приложении, меняется при блокировке', async ({
+test('Полоса под часами: theme-color бордо на входе и PIN, озеро в приложении, меняется при блокировке', async ({
   page,
 }) => {
   await page.goto('/login');
-  expect(await themeColor(page)).toBe('#594C3D');
+  expect(await themeColor(page)).toBe('#784244');
   await expect(page.locator('meta[name="theme-color"]')).toHaveCount(1);
   // установленное приложение: страница рисуется под часами
   expect(await page.locator('meta[name="apple-mobile-web-app-status-bar-style"]').getAttribute('content')).toBe(
     'black-translucent',
   );
 
-  // фон html и body коричневый, полоса под safe-area закрашена тем же цветом
+  // фон html и body бордо, полоса под safe-area закрашена тем же цветом
   const login = await page.evaluate(() => {
     document.documentElement.style.setProperty('--safe-top', '47px');
     const strip = getComputedStyle(document.querySelector('.auth-screen')!, '::before');
@@ -44,42 +43,42 @@ test('Полоса под часами: theme-color коричневый на в
       stripH: strip.height,
     };
   });
-  expect(login).toEqual({ html: TEA, body: TEA, stripBg: TEA, stripPos: 'fixed', stripH: '47px' });
+  expect(login).toEqual({ html: WINE, body: WINE, stripBg: WINE, stripPos: 'fixed', stripH: '47px' });
 
-  // экран PIN при создании PIN остаётся коричневым
+  // экран PIN при создании PIN остаётся бордовым
   await firstLogin(page, PIN);
   expect(new URL(page.url()).pathname).toBe('/agent');
-  expect(await themeColor(page)).toBe('#CA9C68');
+  expect(await themeColor(page)).toBe('#A0D2A8');
   await toDashboard(page);
-  expect(await themeColor(page)).toBe('#CA9C68');
+  expect(await themeColor(page)).toBe('#A0D2A8');
 
-  // блокировка: коричневый, разблокировка: янтарный
+  // блокировка: бордо, разблокировка: озеро
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#594C3D');
+  expect(await themeColor(page)).toBe('#784244');
 
   // возврат из фона: система могла сбросить полосу, значение выставляется заново
   await page.evaluate(() => {
     document.querySelector('meta[name="theme-color"]')!.setAttribute('content', '#FFFFFF');
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  expect(await themeColor(page)).toBe('#594C3D');
+  expect(await themeColor(page)).toBe('#784244');
 
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
-  expect(await themeColor(page)).toBe('#CA9C68');
+  expect(await themeColor(page)).toBe('#A0D2A8');
 
-  // экран PIN после перезагрузки (маршрут /login): коричневый с первого кадра
+  // экран PIN после перезагрузки (маршрут /login): бордо с первого кадра
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#594C3D');
+  expect(await themeColor(page)).toBe('#784244');
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
-  expect(await themeColor(page)).toBe('#CA9C68');
+  expect(await themeColor(page)).toBe('#A0D2A8');
 });
 
-test('Шапка прилипает к верху без отрыва: свой padding-top под safe-area, фон html янтарный', async ({ page }) => {
+test('Шапка прилипает к верху без отрыва: свой padding-top под safe-area, фон html цвета шапки', async ({ page }) => {
   await resetChat();
   await firstLogin(page, PIN);
 
@@ -107,8 +106,8 @@ test('Шапка прилипает к верху без отрыва: свой 
     expect(m.padTop, label).toBe('47px'); // safe-area один раз, внутри шапки
     expect(m.marginTop, label).toBe('0px');
     expect(m.height, label).toBe(47 + 54); // отступ учтён один раз: 47 + 54, а не 47 + 47 + 54
-    expect(m.bg, label).toBe(AMBER);
-    expect(m.htmlBg, label).toBe(AMBER);
+    expect(m.bg, label).toBe(LAKE);
+    expect(m.htmlBg, label).toBe(LAKE);
     expect(m.overscroll, label).toBe('none');
     expect(m.htmlOverscroll, label).toBe('none');
 
@@ -202,14 +201,14 @@ test('Баннеры: расшифровка раскрывается под н�
       })(),
     };
   });
-  expect(look.bg).toBe(TEA);
-  expect(look.color).toBe('rgb(246, 235, 221)'); // #F6EBDD
-  expect(look.rowColor).toBe('rgb(246, 235, 221)');
-  expect(look.rowBg).not.toBe(TEA); // строки на тон светлее
+  expect(look.bg).toBe(WINE);
+  expect(look.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
+  expect(look.rowColor).toBe('rgb(255, 248, 224)');
+  expect(look.rowBg).not.toBe(WINE); // строки на тон светлее
   const [r, g, b] = look.rowBg.match(/\d+/g)!.map(Number) as [number, number, number];
-  expect(r).toBeGreaterThan(89);
-  expect(g).toBeGreaterThan(76);
-  expect(b).toBeGreaterThan(61);
+  expect(r).toBeGreaterThan(120);
+  expect(g).toBeGreaterThan(66);
+  expect(b).toBeGreaterThan(68);
   expect(look.chev).toMatch(/^matrix\(-1,/); // стрелка повёрнута на 180 градусов
   expect(look.acc).toEqual({
     prop: 'grid-template-rows',
@@ -245,6 +244,37 @@ test('Баннеры: расшифровка раскрывается под н�
   await expect(page.locator('.sum-item.open')).toHaveCount(0);
   const closed = await geometry();
   expect(closed.tops).toEqual(before.tops);
+});
+
+test('390 px: четыре отдельных баннера группы, широкого баннера нет', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDashboard(page);
+
+  await expect(page.locator('.sum-card')).toHaveCount(4);
+  await expect(page.locator('.band')).toHaveCount(0);
+  await expect(page.locator('.metric')).toHaveCount(0);
+
+  const m = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('.sum-card')].map((e) => e.getBoundingClientRect());
+    const cs = getComputedStyle(document.querySelector('.sum-card')!);
+    return {
+      lefts: new Set(boxes.map((b) => Math.round(b.left))).size,
+      tops: new Set(boxes.map((b) => Math.round(b.top))).size,
+      bg: cs.backgroundColor,
+      color: cs.color,
+      scrollX: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  expect(m.lefts).toBe(1); // один столбец
+  expect(m.tops).toBe(4); // четыре отдельных баннера друг под другом
+  expect(m.bg).toBe(WINE);
+  expect(m.color).toBe('rgb(255, 248, 224)');
+  expect(m.scrollX).toBeLessThanOrEqual(0);
+
+  // подпись справа от заголовка группы на телефоне под заголовком, раскрытие по месту работает
+  await expect(page.locator('.sum-head p')).toHaveText('5 юрлиц · УСН и ОСНО');
+  await page.locator('.sum-card').nth(0).click();
+  await expect(page.locator('#sum-detail-revenue')).toBeVisible();
 });
 
 test('Баннеры: prefers-reduced-motion отключает анимацию раскрытия', async ({ page }) => {
@@ -482,14 +512,74 @@ test.describe('Компьютер', () => {
     await expect(page.locator('.col.sel')).toHaveCount(0);
   });
 
-  test('Баннеры на компьютере: в ряду из четырёх раскрывается только своя ячейка', async ({ page }) => {
+  test('1440 px: один широкий баннер группы, четыре показателя в одном ряду, баннер не раскрывается', async ({
+    page,
+  }) => {
     await firstLogin(page, PIN);
+    await page.setViewportSize({ width: 1440, height: 900 });
     await toDashboard(page);
-    const before = await page.evaluate(() => [...document.querySelectorAll('.sum-card')].map((e) => e.getBoundingClientRect().height));
-    await page.locator('.sum-card').nth(0).click();
-    await settle(page);
-    const after = await page.evaluate(() => [...document.querySelectorAll('.sum-card')].map((e) => e.getBoundingClientRect().height));
-    expect(after).toEqual(before); // соседние карточки не вытягиваются
-    await expect(page.locator('#sum-detail-revenue')).toBeVisible();
+
+    // один баннер группы вместо четырёх отдельных
+    await expect(page.locator('.band')).toHaveCount(1);
+    await expect(page.locator('.sum-card')).toHaveCount(0);
+    await expect(page.locator('.sum-cards')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Группа на \d+ \S+ \d{4}$/ })).toHaveCount(1);
+    await expect(page.locator('.band-h span')).toHaveText('5 юрлиц · УСН и ОСНО');
+
+    const m = await page.evaluate(() => {
+      const band = document.querySelector('.band')!;
+      const bandBox = band.getBoundingClientRect();
+      const metrics = [...band.querySelectorAll('.metric')] as HTMLElement[];
+      const boxes = metrics.map((e) => e.getBoundingClientRect());
+      const cs = getComputedStyle(band);
+      return {
+        labels: metrics.map((e) => e.querySelector('.eyebrow')!.textContent),
+        values: metrics.map((e) => e.querySelector('strong')!.textContent),
+        tops: boxes.map((b) => Math.round(b.top)),
+        lefts: boxes.map((b) => Math.round(b.left)),
+        inside: boxes.every((b) => b.left >= bandBox.left && b.right <= bandBox.right),
+        valueTops: metrics.map((e) => Math.round(e.querySelector('strong')!.getBoundingClientRect().top)),
+        clipped: metrics.some((e) => {
+          const v = e.querySelector('strong') as HTMLElement;
+          return v.scrollWidth > e.clientWidth;
+        }),
+        bg: cs.backgroundColor,
+        color: cs.color,
+        radius: cs.borderTopLeftRadius,
+        sub: getComputedStyle(band.querySelector('.metric small')!).color,
+        interactive: band.querySelectorAll('button, a, [role="button"], [aria-expanded]').length,
+        scrollX: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    expect(m.labels).toEqual([
+      'Выручка с начала года',
+      'НДС начислен',
+      'Прогноз НДС за год',
+      'Налог на прибыль: прогноз за год',
+    ]);
+    expect(m.values.every((v) => v && v.length > 0)).toBe(true);
+    expect(new Set(m.tops).size).toBe(1); // один ряд
+    expect(new Set(m.valueTops).size).toBe(1); // числа на одной линии
+    expect(new Set(m.lefts).size).toBe(4); // четыре столбца
+    expect(m.inside).toBe(true);
+    expect(m.clipped).toBe(false);
+    expect(m.bg).toBe(WINE);
+    expect(m.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
+    expect(m.sub).toBe('rgb(232, 207, 203)'); // #E8CFCB
+    expect(m.radius).toBe('22px');
+    expect(m.interactive).toBe(0); // как в первой версии: баннер не раскрывается
+    expect(m.scrollX).toBeLessThanOrEqual(0);
+
+    // живая выручка тикает
+    const before = await page.locator('.band .metric strong').first().textContent();
+    await expect.poll(async () => page.locator('.band .metric strong').first().textContent(), { timeout: 5000 }).not.toBe(before);
+
+    // 1024 px: ещё баннер группы; 1023 px: уже четыре отдельных
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await expect(page.locator('.band .metric')).toHaveCount(4);
+    await expect(page.locator('.sum-card')).toHaveCount(0);
+    await page.setViewportSize({ width: 1023, height: 800 });
+    await expect(page.locator('.sum-card')).toHaveCount(4);
+    await expect(page.locator('.band')).toHaveCount(0);
   });
 });

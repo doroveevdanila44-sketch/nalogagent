@@ -12,7 +12,7 @@ const orbitron = Orbitron({
   variable: '--font-orbitron',
 });
 
-/** tone="light" для тёмного коричневого фона экранов входа и PIN */
+/** tone="light" для тёмного бордового фона экранов входа и PIN */
 export function Wordmark({
   big = false,
   size,

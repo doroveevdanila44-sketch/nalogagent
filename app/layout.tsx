@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Onest } from 'next/font/google';
+import { THEME } from '@/lib/theme';
 import './globals.css';
 
 /**
@@ -40,7 +41,7 @@ export const viewport: Viewport = {
   // Экранная клавиатура уменьшает раскладочный вьюпорт (Chrome на Android): поле ввода и 100dvh
   // оказываются прямо над ней. Для Safari на iOS то же делает lib/client/keyboard.ts.
   interactiveWidget: 'resizes-content',
-  themeColor: '#CA9C68',
+  themeColor: THEME.app,
   colorScheme: 'light',
 };
 

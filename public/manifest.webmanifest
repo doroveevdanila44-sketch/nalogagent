@@ -9,7 +9,7 @@
   "id": "/agent",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#CA9C68",
+  "theme_color": "#A0D2A8",
   "background_color": "#FFFFFF",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

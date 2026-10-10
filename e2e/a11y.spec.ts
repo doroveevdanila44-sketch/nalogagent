@@ -7,7 +7,7 @@ const PIN = '8246';
 async function violations(page: Page) {
   const result = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    // Знак luxauto41: «41» цвета Afternoon Tea на янтарной шапке (3,4:1) задан клиентом.
+    // Знак luxauto41: «41» цвета бордо на шапке цвета озера (4,6:1) задан клиентом.
     // Для логотипов WCAG 1.4.3 не требует минимального контраста (см. docs/DECISIONS.md).
     .exclude('.wordmark')
     .analyze();

@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { entityColor } from '@/lib/theme';
 import {
   MONTHS_NOMINATIVE,
   MONTHS_SHORT,
@@ -245,7 +246,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
                         style={
                           {
                             '--share': (b.amount.toNumber() / top).toFixed(5),
-                            background: entities[index]?.color,
+                            background: entities[index] ? entityColor(entities[index]) : undefined,
                           } as React.CSSProperties
                         }
                         aria-label={`${nameOf(index)}, ${MONTHS_NOMINATIVE[c.month]}: ${mln(b.amount, 2)}, ${STATUS_LABEL[c.status]}`}
@@ -314,7 +315,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
       <div className="legend">
         {entities.map((e) => (
           <span key={e.id}>
-            <i style={{ background: e.color }} />
+            <i style={{ background: entityColor(e) }} />
             {e.name}
           </span>
         ))}
@@ -324,7 +325,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
       <div className="seg-card" aria-live="polite" aria-atomic="true">
         {activeSeg && activeColumn && activeAmount && activeEntity ? (
           <>
-            <span className="seg-dot" style={{ background: activeEntity.color }} />
+            <span className="seg-dot" style={{ background: entityColor(activeEntity) }} />
             <div className="seg-text">
               <span className="seg-name">{activeEntity.name}</span>
               <span className="seg-meta">
@@ -346,7 +347,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
               {entities.map((e, index) => (
                 <li key={e.id}>
                   <span className="seg-split-name">
-                    <i style={{ background: e.color }} />
+                    <i style={{ background: entityColor(e) }} />
                     {e.name}
                   </span>
                   <b>{mln(activeColumn.byEntity[index]!.amount, 2)}</b>

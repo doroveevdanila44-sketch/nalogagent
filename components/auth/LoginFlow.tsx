@@ -21,7 +21,7 @@ const BLOCKED_NOTICE = 'PIN заблокирован. Войдите по пар
  */
 export function LoginFlow({ initial, next, notice }: { initial: Initial; next: string; notice?: string }) {
   const router = useRouter();
-  // верхняя полоса под часами коричневая на пароле и на всех шагах PIN
+  // верхняя полоса под часами бордовая на пароле и на всех шагах PIN
   useThemeColor(THEME_AUTH);
   const [step, setStep] = useState<Step>(
     initial === 'locked' ? 'pin' : initial === 'needPinSetup' ? 'setup' : 'password',

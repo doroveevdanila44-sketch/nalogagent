@@ -4,7 +4,7 @@
  *  - запросы к /api/ сюда не попадают (respondWith не вызывается);
  *  - навигации идут в сеть, при отсутствии сети показывается /offline.html.
  */
-const VERSION = 'pva-shell-v1';
+const VERSION = 'pva-shell-v2';
 const SHELL = [
   '/offline.html',
   '/manifest.webmanifest',

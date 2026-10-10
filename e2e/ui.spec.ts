@@ -17,7 +17,7 @@ async function offsets(page: Page, selector: string): Promise<number> {
   }, selector);
 }
 
-test('Вход и PIN: коричневый фон, светлые тексты, блок строго по центру на 390, 768, 1440', async ({ page }) => {
+test('Вход и PIN: бордовый фон, светлые тексты, блок строго по центру на 390, 768, 1440', async ({ page }) => {
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/login');
@@ -39,15 +39,16 @@ test('Вход и PIN: коричневый фон, светлые тексты,
         formWidth: document.querySelector('.auth-screen form')!.getBoundingClientRect().width,
       };
     });
-    expect(colors.bg).toBe('rgb(89, 76, 61)'); // #594C3D
-    expect(colors.bodyBg).toBe('rgb(89, 76, 61)');
-    expect(colors.mark).toBe('rgb(246, 235, 221)'); // #F6EBDD
-    expect(colors.n41).toBe('rgb(202, 156, 104)'); // #CA9C68
-    expect(colors.label).toBe('rgb(217, 199, 174)'); // #D9C7AE
-    expect(colors.input).toBe('rgb(246, 235, 221)');
-    expect(colors.inputBorder).toMatch(/rgba\(246, 235, 221, 0\.35\)/);
-    expect(colors.btnBg).toBe('rgb(202, 156, 104)');
-    expect(colors.btnText).toBe('rgb(19, 25, 31)');
+    expect(colors.bg).toBe('rgb(120, 66, 68)'); // #784244
+    expect(colors.bodyBg).toBe('rgb(120, 66, 68)');
+    expect(colors.mark).toBe('rgb(255, 248, 224)'); // #FFF8E0
+    expect(colors.n41).toBe('rgb(255, 243, 178)'); // #FFF3B2
+    expect(colors.label).toBe('rgb(232, 207, 203)'); // #E8CFCB
+    expect(colors.input).toBe('rgb(255, 248, 224)');
+    // color-mix сериализуется как color(srgb ...), в других движках как rgba(...)
+    expect(colors.inputBorder).toMatch(/^(rgba\(255, 248, 224, 0\.35\)|color\(srgb 1 0\.97\d* 0\.87\d* \/ 0\.35\))$/);
+    expect(colors.btnBg).toBe('rgb(255, 243, 178)');
+    expect(colors.btnText).toBe('rgb(42, 43, 20)'); // #2A2B14
     expect(Math.abs(colors.btnWidth - colors.formWidth)).toBeLessThan(1);
 
     expect(await offsets(page, '.wordmark')).toBeLessThanOrEqual(1);
@@ -153,7 +154,7 @@ test('PIN-экран как на iPhone: расположение, размер�
     // заголовок и точки
     expect(m.titleSize).toBe('19px');
     expect(m.titleWeight).toBe('500');
-    expect(m.titleColor).toBe('rgb(246, 235, 221)');
+    expect(m.titleColor).toBe('rgb(255, 248, 224)');
     expect(m.dotSize).toBe(13);
     expect(Math.round(m.dotStep)).toBe(37);
     // задано 1.5 px; при масштабе экрана 1x Chrome округляет границу до целого пикселя
@@ -169,9 +170,9 @@ test('PIN-экран как на iPhone: расположение, размер�
     expect(Math.abs(m.padCx - m.vw / 2), `центр ${at}`).toBeLessThan(1);
     expect(m.keyFont).toBe('36px');
     expect(m.keyWeight).toBe('500');
-    expect(m.keyColor).toBe('rgb(255, 255, 255)');
+    expect(m.keyColor).toBe('rgb(255, 248, 224)');
     expect(m.keyBg).toBe('rgba(255, 255, 255, 0.14)');
-    expect(m.keyBorder).toBe('rgba(255, 255, 255, 0.18)');
+    expect(m.keyBorder).toBe('rgba(255, 255, 255, 0.2)');
     expect(m.keyBlur).toContain('blur(14px)');
 
     // действия: слева пусто, справа одна кнопка «Отмена», у нижнего края, под колонками 1 и 3
@@ -184,7 +185,7 @@ test('PIN-экран как на iPhone: расположение, размер�
     expect(Math.abs(m.rightCx - m.key3Cx)).toBeLessThan(2);
     expect(m.actFont).toBe('17px');
     expect(m.actWeight).toBe('500');
-    expect(m.actColor).toBe('rgb(255, 255, 255)');
+    expect(m.actColor).toBe('rgb(255, 248, 224)');
     expect(m.actDecor).toBe('none');
     expect(m.actBorder).toBe('0px');
   }
@@ -208,7 +209,7 @@ test('PIN-экран как на iPhone: расположение, размер�
   await expect(page.locator('.pin-dots i.on')).toHaveCount(1);
   await page.waitForTimeout(250); // заливка точки плавная, 150 мс
   expect(await page.locator('.pin-dots i.on').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
-    'rgb(246, 235, 221)',
+    'rgb(255, 248, 224)',
   );
   await expect(page.getByRole('button', { name: 'Удалить', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отмена', exact: true })).toHaveCount(0);
@@ -346,9 +347,9 @@ test('Боковая панель на компьютере и нижняя на
   expect(desk.composer.x).toBeGreaterThanOrEqual(desk.nav.w - 1);
   expect(desk.tabs[1]!.y).toBeGreaterThan(desk.tabs[0]!.y); // столбиком
   expect(desk.tabs[0]!.x).toBeCloseTo(desk.tabs[1]!.x, 0);
-  expect(desk.curBg).toBe('rgb(202, 156, 104)');
+  expect(desk.curBg).toBe('rgb(255, 243, 178)'); // #FFF3B2
   expect(desk.curWeight).toBe('600');
-  expect(desk.navBg).toBe('rgb(43, 47, 46)'); // #2B2F2E
+  expect(desk.navBg).toBe('rgb(42, 43, 20)'); // #2A2B14
   expect(desk.mainPaddingBottom).not.toMatch(/^(8\d|9\d|1\d\d)px$/); // нет отступа под нижнюю панель
 
   // шапка прилипает к верху при прокрутке
@@ -464,17 +465,17 @@ test('Курсоры, переходы 150-200 мс, нет левых поло�
   expect(await page.locator('.rate').first().evaluate((e) => getComputedStyle(e).transform)).toBe('none');
 });
 
-test('Вход: ошибка и поля читаемы на коричневом, контраст проходит axe', async ({ page }) => {
+test('Вход: ошибка и поля читаемы на бордовом, контраст проходит axe', async ({ page }) => {
   await page.goto('/login');
   await fillPassword(page, 'wrong-password-for-style-check');
   await expect(page.getByRole('alert').filter({ hasText: 'Неверный логин или пароль' })).toBeVisible();
   const errColor = await page.locator('.auth-screen .form-error').first().evaluate((e) => getComputedStyle(e).color);
-  expect(errColor).toBe('rgb(255, 194, 184)'); // #FFC2B8 на #594C3D
+  expect(errColor).toBe('rgb(255, 194, 184)'); // #FFC2B8 на #784244
 });
 
 // ===== Дашборд: карточки группы, график на телефоне, режимы налогообложения =====
 
-test('Карточки группы: четыре отдельные, раскладка 1, 2 на 2 и 4 в ряд, числа не переносятся', async ({ page }) => {
+test('Баннеры группы до 1024 px: четыре отдельные, раскладка 1 и 2 на 2, числа не переносятся', async ({ page }) => {
   await firstLogin(page, PIN);
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.getByRole('heading', { name: /Группа на \d+ \S+ \d{4}/ })).toBeVisible();
@@ -512,11 +513,11 @@ test('Карточки группы: четыре отдельные, раскл
   expect(phone.count).toBe(4);
   expect(phone.xs).toBe(1); // один столбец
   expect(phone.ys).toBe(4);
-  expect(phone.bg).toBe('rgb(89, 76, 61)'); // #594C3D
+  expect(phone.bg).toBe('rgb(120, 66, 68)'); // #784244
   expect(phone.radius).toBe('16px');
   expect(phone.padding).toBe('16px');
-  expect(phone.label).toBe('rgb(217, 199, 174)'); // #D9C7AE
-  expect(phone.value).toBe('rgb(246, 235, 221)'); // #F6EBDD
+  expect(phone.label).toBe('rgb(232, 207, 203)'); // #E8CFCB
+  expect(phone.value).toBe('rgb(255, 248, 224)'); // #FFF8E0
   expect(phone.tabular).toContain('tabular-nums');
   expect(phone.gap).toBe(12);
   expect(phone.overflow).toBe(false);
@@ -532,25 +533,23 @@ test('Карточки группы: четыре отдельные, раскл
   expect(tablet.ys).toBe(2);
   expect(tablet.overflow).toBe(false);
 
-  const desktop = await layout(1440);
-  expect(desktop.xs).toBe(4); // четыре в ряд
-  expect(desktop.ys).toBe(1);
-  expect(desktop.overflow).toBe(false);
-
-  const narrow = await layout(1024);
-  expect(narrow.xs).toBe(4);
-  expect(narrow.overflow).toBe(false);
+  // последний размер с отдельными баннерами: 1023 px, всё ещё два на два
+  const edge = await layout(1023);
+  expect(edge.count).toBe(4);
+  expect(edge.xs).toBe(2);
+  expect(edge.ys).toBe(2);
+  expect(edge.overflow).toBe(false);
   await layout(360).then((r) => expect(r.overflow).toBe(false));
 
   // «можно сэкономить» внутри карточки НДС
   await expect(page.locator('.sum-card').nth(1)).toContainText(/можно сэкономить .* в год|ставки уже лучшие/);
 });
 
-test('Карточки группы нажимаются: расшифровка под карточкой, одна раскрыта, переход к карточкам юрлиц', async ({
+test('Баннеры группы нажимаются: расшифровка под баннером, один раскрыт, переход к карточкам юрлиц', async ({
   page,
 }) => {
   await firstLogin(page, PIN);
-  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.setViewportSize({ width: 768, height: 1024 });
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.locator('.sum-card')).toHaveCount(4);
 

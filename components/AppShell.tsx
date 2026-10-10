@@ -28,7 +28,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
-  // Полоса под часами: коричневая на экране блокировки и смены PIN, янтарная на остальных
+  // Полоса под часами: бордо на экране блокировки и смены PIN, озеро на остальных
   useThemeColor(locked || sheet === 'changePin' ? THEME_AUTH : THEME_APP);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);

@@ -10,6 +10,7 @@ import {
   type RuleSet,
 } from '@/lib/calc';
 import type { LiveModel, StaticModel } from '@/lib/calc';
+import { entityColor } from '@/lib/theme';
 
 interface Props {
   entity: EntityInput;
@@ -53,7 +54,7 @@ export function EntityCard({ entity: e, rules, live, stat, onChoose }: Props) {
       <div className="ent-h">
         <div>
           <h3>
-            <i style={{ background: e.color }} />
+            <i style={{ background: entityColor(e) }} />
             {e.name}
           </h3>
           <p className="ent-d">
