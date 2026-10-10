@@ -29,6 +29,11 @@
 :root {
   color-scheme: light;
   --nav-h: 68px;
+  --side-w: 96px;
+  /* высота шапки; AppShell уточняет её, когда показан баннер «Нет сети» */
+  --header-h: calc(54px + env(safe-area-inset-top, 0px));
+  /* единая длительность и кривая переходов на наведение, нажатие и фокус */
+  --t: 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -88,8 +93,33 @@
     color: inherit;
   }
   button {
-    cursor: pointer;
     touch-action: manipulation;
+  }
+
+  /* Курсор: pointer на всём интерактивном, текстовый на полях ввода */
+  a[href],
+  button:not(:disabled),
+  summary,
+  select,
+  label[for],
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  input:not([type]),
+  input[type='text'],
+  input[type='password'],
+  input[type='search'],
+  textarea {
+    cursor: text;
+  }
+
+  /* Экран входа и PIN коричневый целиком, в том числе при перетягивании за край */
+  html:has(.auth-screen),
+  html:has(.auth-screen) body {
+    background: #594c3d;
   }
 
   :focus-visible {
@@ -189,6 +219,13 @@
   .wordmark.big {
     font-size: 30px;
   }
+  /* На коричневом фоне входа и PIN: «luxauto» F6EBDD, «41» CA9C68 */
+  .wordmark.light {
+    color: #f6ebdd;
+  }
+  .wordmark.light .n41 {
+    color: #ca9c68;
+  }
 
   .offline-banner {
     background: var(--color-bad-soft);
@@ -199,6 +236,7 @@
     padding: 6px 16px;
   }
 
+  /* Телефон: панель вкладок внизу. Компьютер (от 760 px): вертикальная панель слева под шапкой */
   .tabs {
     position: fixed;
     left: 0;
@@ -243,8 +281,27 @@
   }
   @media (min-width: 760px) {
     .tabs {
-      grid-template-columns: repeat(2, minmax(0, 190px));
-      justify-content: center;
+      top: var(--header-h);
+      right: auto;
+      bottom: 0;
+      width: var(--side-w);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 6px;
+      padding: 12px 8px;
+    }
+    .tab {
+      min-height: 72px;
+      gap: 6px;
+    }
+    /* Контент сдвинут на ширину панели, нижнего отступа под панель на компьютере нет */
+    .app-body {
+      padding-left: var(--side-w);
+    }
+    .app-main {
+      padding-bottom: 24px;
     }
   }
 
@@ -426,24 +483,35 @@
     flex-direction: column-reverse;
     height: 100%;
     min-width: 0;
-    background: none;
-    border: 0;
-    padding: 0;
-    border-radius: 3px;
+    /* перспектива нужна, чтобы смещение сегмента по оси z давало заметное приближение */
+    perspective: 420px;
   }
-  .col .seg {
+  .seg {
+    position: relative;
     display: block;
+    flex: none;
     width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    opacity: var(--seg-op, 1);
   }
   .col.fc .seg {
-    opacity: 0.55;
+    --seg-op: 0.55;
     background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.6) 0 2px, transparent 2px 6px);
   }
-  .col.cur {
-    box-shadow: 0 0 0 2px var(--color-wood);
-    border-radius: 3px;
+  /* Выбран один сегмент: остальные приглушены, выбранный приподнят */
+  .plot[data-active='true'] .seg:not(.on) {
+    opacity: calc(var(--seg-op, 1) * 0.5);
   }
-  .col[aria-pressed='true'] {
+  .seg.on {
+    z-index: 3;
+    opacity: 1;
+    transform: translateZ(10px) scale(1.08);
+    box-shadow: 0 6px 14px rgb(19 25 31 / 0.38);
+  }
+  .seg:focus-visible {
+    z-index: 4;
     outline: 2px solid var(--color-river);
     outline-offset: 1px;
   }
@@ -460,6 +528,16 @@
   .mon .now {
     color: var(--color-river);
     font-weight: 600;
+  }
+  /* Текущий месяц отмечен точкой над подписью, обводки столбца нет */
+  .mon .now::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 4px;
+    margin: 0 auto 2px;
+    border-radius: 50%;
+    background: var(--color-river);
   }
   .legend {
     display: flex;
@@ -787,6 +865,13 @@
     background: #fff;
     border-top: 1px solid var(--color-line);
   }
+  /* Компьютер: поле ввода начинается справа от боковой панели и прижато к низу окна */
+  @media (min-width: 760px) {
+    .composer-wrap {
+      left: var(--side-w);
+      bottom: 0;
+    }
+  }
   /* Подсказки над полем ввода: одна строка с горизонтальной прокруткой, чтобы не закрывать ответ */
   .composer-wrap .sug {
     flex-wrap: nowrap;
@@ -833,14 +918,21 @@
 
   /* ===== Вход и PIN ===== */
   .auth-screen {
+    --a-ink: #f6ebdd;
+    --a-sub: #d9c7ae;
+    --a-accent: #ca9c68;
+    --a-line: rgb(246 235 221 / 0.35);
+    width: 100%;
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 28px;
-    padding: calc(24px + var(--safe-top)) 24px calc(24px + var(--safe-bottom));
-    background: #fff;
+    /* симметричные поля: блок строго по центру */
+    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+    background: var(--color-tea);
+    color: var(--a-ink);
   }
   .auth-overlay {
     position: fixed;
@@ -848,30 +940,39 @@
     z-index: 100;
     overflow-y: auto;
   }
+  .auth-screen :focus-visible {
+    outline-color: var(--a-accent);
+  }
   .field {
     display: block;
     width: 100%;
+    max-width: 360px;
   }
   .field > label {
     display: block;
     font-size: 13px;
     font-weight: 500;
-    color: var(--color-muted);
+    color: var(--a-sub);
     margin-bottom: 6px;
   }
   .field input {
     width: 100%;
     height: 44px;
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--a-line);
     border-radius: 12px;
     padding: 0 14px;
     font-size: 16px;
-    background: #fff;
+    color: var(--a-ink);
+    background: rgb(246 235 221 / 0.08);
+  }
+  .field input:hover {
+    border-color: rgb(246 235 221 / 0.6);
   }
   .field input:focus {
-    outline: 2px solid var(--color-wood);
+    outline: 2px solid var(--a-accent);
     outline-offset: 0;
-    border-color: var(--color-wood);
+    border-color: var(--a-accent);
+    background: rgb(246 235 221 / 0.12);
   }
   .field .with-eye {
     position: relative;
@@ -886,11 +987,23 @@
     width: 44px;
     height: 44px;
     border: 0;
+    border-radius: 12px;
     background: none;
-    color: var(--color-muted);
+    color: var(--a-sub);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+  .field .with-eye button:hover {
+    color: var(--a-ink);
+  }
+  .auth-screen form {
+    width: 100%;
+    max-width: 360px;
+  }
+  .auth-screen .btn {
+    background: var(--a-accent);
+    color: var(--color-river);
   }
   .form-error {
     color: var(--color-bad);
@@ -898,17 +1011,24 @@
     font-weight: 500;
     min-height: 20px;
   }
+  .auth-screen .form-error {
+    color: #ffc2b8;
+  }
 
   .pin-title {
     font-size: 19px;
     font-weight: 600;
     text-align: center;
+    color: var(--a-ink);
   }
   .pin-sub {
     color: var(--color-muted);
     font-size: 14px;
     text-align: center;
     margin-top: 4px;
+  }
+  .auth-screen .pin-sub {
+    color: var(--a-sub);
   }
   .dots {
     display: flex;
@@ -920,13 +1040,17 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid var(--color-river);
+    border: 2px solid var(--a-ink);
     background: transparent;
-    transition: background 0.1s;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 150ms ease;
   }
   .dots i.on {
-    background: var(--color-wood);
-    border-color: var(--color-wood);
+    background: var(--a-accent);
+    border-color: var(--a-accent);
+    transform: scale(1.1);
   }
   .dots.shake {
     animation: shake 0.4s;
@@ -951,8 +1075,9 @@
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    border: 1px solid var(--color-line);
-    background: #fff;
+    border: 1px solid var(--a-line);
+    background: transparent;
+    color: var(--a-ink);
     font-size: 24px;
     font-weight: 500;
     display: inline-flex;
@@ -963,18 +1088,24 @@
   }
   .key:disabled {
     opacity: 1;
-    cursor: default;
   }
+  .key:hover:not(:disabled) {
+    background: rgb(246 235 221 / 0.1);
+    border-color: rgb(246 235 221 / 0.6);
+  }
+  /* Нажатие: плавная заливка акцентом и тёмная цифра. .pressed держит заливку на быстром тапе */
+  .key.pressed,
   .key:active:not(:disabled) {
-    background: var(--color-amber);
-    border-color: var(--color-amber);
+    background: var(--a-accent);
+    border-color: var(--a-accent);
+    color: var(--color-river);
+    transform: scale(0.96);
   }
   .key.plain {
     border-color: transparent;
-    background: transparent;
   }
-  .key.plain:active {
-    background: var(--color-paper);
+  .key.plain:hover:not(:disabled) {
+    border-color: transparent;
   }
   .key svg {
     width: 26px;
@@ -988,6 +1119,7 @@
   .linkish {
     background: none;
     border: 0;
+    border-radius: 8px;
     color: var(--color-wood-ink);
     font-weight: 600;
     text-decoration: underline;
@@ -995,7 +1127,41 @@
     min-height: 44px;
     padding: 0 8px;
   }
+  .auth-screen .linkish {
+    color: var(--color-sand-soft);
+  }
+  .auth-screen .linkish:hover {
+    color: #fff;
+  }
 
+  /* Низкие окна: клавиатура компактнее, чтобы не появлялась прокрутка и блок не смещался */
+  @media (max-height: 700px) {
+    .auth-screen {
+      gap: 16px;
+    }
+    .pad {
+      grid-template-columns: repeat(3, 56px);
+      gap: 10px 18px;
+    }
+    .key {
+      width: 56px;
+      height: 56px;
+      font-size: 22px;
+    }
+  }
+  @media (max-height: 580px) {
+    .pad {
+      grid-template-columns: repeat(3, 48px);
+      gap: 8px 14px;
+    }
+    .key {
+      width: 48px;
+      height: 48px;
+      font-size: 20px;
+    }
+  }
+
+  /* ===== Меню из трёх точек: лист на телефоне, выпадающее меню на компьютере ===== */
   .sheet-backdrop {
     position: fixed;
     inset: 0;
@@ -1017,11 +1183,21 @@
   }
   @media (min-width: 760px) {
     .sheet-backdrop {
-      align-items: center;
+      background: transparent;
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding: calc(var(--header-h) + 4px) 16px 0 0;
     }
     .sheet {
-      border-radius: 22px;
-      padding-bottom: 16px;
+      width: 240px;
+      padding: 8px;
+      gap: 4px;
+      border-radius: 14px;
+      border: 1px solid var(--color-line);
+      box-shadow: 0 14px 34px rgb(19 25 31 / 0.22);
+    }
+    .sheet .row-close {
+      display: none;
     }
   }
   .sheet button.row {
@@ -1033,15 +1209,106 @@
     padding: 0 16px;
     font-weight: 500;
   }
+  .sheet button.row:hover {
+    background: var(--color-beige);
+  }
   .sheet button.row.danger {
     color: var(--color-bad);
   }
 
+  /* ===== Переходы на наведение, нажатие и фокус (150-200 мс) ===== */
+  .btn,
+  .tab,
+  .icon-btn,
+  .sug button,
+  .rate,
+  .composer button,
+  .composer input,
+  .field input,
+  .field .with-eye button,
+  .key,
+  .linkish,
+  .sheet button.row,
+  .seg,
+  .msg summary {
+    transition:
+      background-color var(--t),
+      color var(--t),
+      border-color var(--t),
+      box-shadow var(--t),
+      transform var(--t),
+      opacity var(--t);
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgb(19 25 31 / 0.2);
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+    box-shadow: none;
+  }
+  .tab:hover:not([aria-current='page']) {
+    background: rgb(246 235 221 / 0.1);
+    color: #fff;
+  }
+  .tab:active {
+    transform: scale(0.97);
+  }
+  .icon-btn:active {
+    transform: scale(0.92);
+  }
+  .sug button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgb(19 25 31 / 0.14);
+  }
+  .sug button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .rate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgb(19 25 31 / 0.14);
+  }
+  .rate:active {
+    transform: scale(0.99);
+    box-shadow: none;
+  }
+  .composer button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgb(19 25 31 / 0.2);
+  }
+  .composer button:active:not(:disabled) {
+    transform: scale(0.97);
+    box-shadow: none;
+  }
+  .composer input:focus {
+    outline: none;
+    border-color: var(--color-wood);
+    box-shadow: 0 0 0 3px rgb(144 109 75 / 0.25);
+  }
+  .sheet button.row:active {
+    transform: scale(0.99);
+  }
+  .tabs :focus-visible {
+    outline-color: var(--color-amber);
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .typing i,
-    .skeleton,
-    .dots.shake {
-      animation: none;
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+    .btn:hover,
+    .sug button:hover,
+    .rate:hover,
+    .composer button:hover,
+    .tab:active,
+    .key.pressed,
+    .key:active,
+    .seg.on {
+      transform: none !important;
     }
   }
 }

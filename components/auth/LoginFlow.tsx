@@ -105,7 +105,7 @@ export function LoginFlow({ initial, next, notice }: { initial: Initial; next: s
 
   return (
     <main className="auth-screen">
-      <Wordmark big />
+      <Wordmark big tone="light" />
       {step === 'password' && (
         <PasswordForm
           notice={passwordNotice}

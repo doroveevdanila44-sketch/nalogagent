@@ -33,6 +33,22 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
   const input = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
   const valueRef = useRef('');
+  const [pressed, setPressed] = useState<string | null>(null);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Подсветка клавиши держится 180 мс, чтобы быстрый тап успевал показать заливку */
+  const flash = useCallback((key: string) => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    setPressed(key);
+    pressTimer.current = setTimeout(() => setPressed(null), 180);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+    },
+    [],
+  );
 
   const update = useCallback((next: string) => {
     valueRef.current = next;
@@ -145,15 +161,44 @@ export function PinPad({ title, subtitle, onSubmit, resetKey, footer, initialErr
 
       <div className="pad" role="group" aria-label="Цифровая клавиатура">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-          <button key={d} type="button" className="key" onClick={() => push(d)} disabled={busy || !hydrated}>
+          <button
+            key={d}
+            type="button"
+            className={`key ${pressed === d ? 'pressed' : ''}`}
+            onPointerDown={() => flash(d)}
+            onClick={() => {
+              flash(d);
+              push(d);
+            }}
+            disabled={busy || !hydrated}
+          >
             {d}
           </button>
         ))}
         <span aria-hidden="true" />
-        <button type="button" className="key" onClick={() => push('0')} disabled={busy || !hydrated}>
+        <button
+          type="button"
+          className={`key ${pressed === '0' ? 'pressed' : ''}`}
+          onPointerDown={() => flash('0')}
+          onClick={() => {
+            flash('0');
+            push('0');
+          }}
+          disabled={busy || !hydrated}
+        >
           0
         </button>
-        <button type="button" className="key plain" onClick={back} disabled={busy || !hydrated} aria-label="Удалить цифру">
+        <button
+          type="button"
+          className={`key plain ${pressed === 'del' ? 'pressed' : ''}`}
+          onPointerDown={() => flash('del')}
+          onClick={() => {
+            flash('del');
+            back();
+          }}
+          disabled={busy || !hydrated}
+          aria-label="Удалить цифру"
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />
             <path d="m12.5 9.5 5 5m0-5-5 5" />

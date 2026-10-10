@@ -25,6 +25,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [online, setOnline] = useState(true);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   const pendingServerLock = useRef(false);
+  const headerRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // CSRF-токен текущей сессии: layout-эффекты выполняются раньше эффектов дочерних компонентов
   useLayoutEffect(() => {
@@ -131,6 +133,45 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     }
   }, []);
 
+  // Высота шапки (она растёт, когда показан баннер «Нет сети»): боковая панель и нижние элементы
+  // привязаны к ней через CSS-переменную --header-h
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const apply = () => document.documentElement.style.setProperty('--header-h', `${el.offsetHeight}px`);
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty('--header-h');
+    };
+  }, [locked]);
+
+  // Пока открыт полноэкранный PIN, страница под ним не прокручивается: полоса прокрутки не сдвигает
+  // центр экрана PIN и не остаётся видимой
+  useEffect(() => {
+    if (!locked && sheet !== 'changePin') return;
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = 'hidden';
+    return () => {
+      root.style.overflow = prev;
+    };
+  }, [locked, sheet]);
+
+  // Меню: фокус на первый пункт, Escape закрывает
+  useEffect(() => {
+    if (sheet !== 'menu') return;
+    menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSheet('none');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheet]);
+
   const unlock = useCallback(async (pin: string): Promise<PinResult> => {
     try {
       const res = await api<{ csrf: string }>('/api/auth/pin', { body: { pin } });
@@ -174,7 +215,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   return (
     <>
       <div hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
-        <header className="top">
+        <header className="top" ref={headerRef}>
           <div className="wrap top-in">
             <span />
             <Wordmark />
@@ -192,12 +233,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
                   <circle cx="12" cy="18.5" r="1.2" />
                 </svg>
               </button>
-              <button type="button" className="icon-btn" aria-label="Заблокировать на PIN" onClick={lockNow}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="5" y="10.5" width="14" height="9.5" rx="2" />
-                  <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
-                </svg>
-              </button>
             </div>
           </div>
           {!online && (
@@ -207,7 +242,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
           )}
         </header>
 
-        <main className="wrap app-main">{children}</main>
+        <div className="app-body">
+          <main className="wrap app-main">{children}</main>
+        </div>
 
         <nav className="tabs" aria-label="Разделы">
           {tab(
@@ -237,15 +274,19 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             role="dialog"
             aria-modal="true"
             aria-label="Меню"
+            ref={menuRef}
             onClick={(e) => e.stopPropagation()}
           >
+            <button type="button" className="row" onClick={lockNow}>
+              Заблокировать
+            </button>
             <button type="button" className="row" onClick={() => setSheet('changePin')}>
               Сменить PIN
             </button>
             <button type="button" className="row danger" onClick={logout}>
               Выйти
             </button>
-            <button type="button" className="row" onClick={() => setSheet('none')}>
+            <button type="button" className="row row-close" onClick={() => setSheet('none')}>
               Закрыть
             </button>
           </div>
@@ -256,7 +297,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
       {locked && (
         <div className="auth-screen auth-overlay" role="dialog" aria-modal="true" aria-label="Ввод PIN">
-          <Wordmark big />
+          <Wordmark big tone="light" />
           <PinPad
             title="Введите PIN"
             onSubmit={unlock}

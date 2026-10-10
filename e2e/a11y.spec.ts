@@ -39,9 +39,7 @@ test('доступность: вход, PIN, агент, дашборд, мен�
 
   await page.getByRole('button', { name: 'Меню' }).click();
   await check('menu');
-  await page.getByRole('button', { name: 'Закрыть' }).click();
-
-  await page.getByRole('button', { name: 'Заблокировать на PIN' }).click();
+  await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
   await check('locked');
 

@@ -104,7 +104,8 @@ test('4. повторный вход по PIN, ошибки, блокировк�
 
 test('5. блокировка замком: экран PIN поверх, API отвечает 401 до ввода PIN', async ({ page }) => {
   await firstLogin(page, PIN);
-  await page.getByRole('button', { name: 'Заблокировать на PIN' }).click();
+  await page.getByRole('button', { name: 'Меню' }).click();
+  await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
 
   const locked = await page.request.get('/api/dashboard');

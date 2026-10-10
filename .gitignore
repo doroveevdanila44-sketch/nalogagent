@@ -17,6 +17,9 @@ next-env.d.ts
 *.log
 npm-debug.log*
 
+# пароль владельца, сохранённый локально
+.owner-password.txt
+
 # результаты тестов
 playwright-report
 test-results

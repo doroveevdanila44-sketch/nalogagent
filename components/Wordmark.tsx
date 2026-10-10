@@ -12,9 +12,10 @@ const orbitron = Orbitron({
   variable: '--font-orbitron',
 });
 
-export function Wordmark({ big = false }: { big?: boolean }) {
+/** tone="light" для тёмного коричневого фона экранов входа и PIN */
+export function Wordmark({ big = false, tone = 'header' }: { big?: boolean; tone?: 'header' | 'light' }) {
   return (
-    <div className={`wordmark ${big ? 'big' : ''} ${orbitron.variable}`} role="img" aria-label="luxauto41">
+    <div className={`wordmark ${big ? 'big' : ''} ${tone === 'light' ? 'light' : ''} ${orbitron.variable}`} role="img" aria-label="luxauto41">
       <span aria-hidden="true">luxauto</span>
       <span aria-hidden="true" className="n41">
         41

@@ -71,14 +71,57 @@ test('Дашборд: четыре юрлица, три ставки, живые
   await expect(again.locator('.rate.sel')).toContainText('5%');
 });
 
-test('График: столбцы это кнопки, нажатие показывает суммы', async ({ page }) => {
+test('График: сегменты юрлиц это кнопки, выделяется только сегмент, подпись с суммой', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDashboard(page);
+
   const col = page.locator('.plot .col').nth(6);
   await expect(col).toHaveAttribute('aria-label', /Июль: .*млн, (факт|прогноз|идёт сейчас)/);
-  await col.click();
-  await expect(page.locator('.caption')).toContainText('Июль:');
-  await expect(col).toHaveAttribute('aria-pressed', 'true');
+  const segs = col.locator('button.seg');
+  await expect(segs).toHaveCount(4);
+  await expect(segs.first()).toHaveAttribute('aria-label', /ООО «Альфа», Июль: .*млн, (факт|прогноз|идёт сейчас)/);
+
+  // у столбца нет обводки
+  const frame = await col.evaluate((e) => {
+    const c = getComputedStyle(e);
+    return { outline: c.outlineStyle, shadow: c.boxShadow };
+  });
+  expect(frame).toEqual({ outline: 'none', shadow: 'none' });
+
+  // клик по сегменту: выделен он один, остальные приглушены
+  await segs.first().click();
+  await expect(page.locator('.caption')).toContainText('ООО «Альфа», июль:');
+  await expect(segs.first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.seg.on')).toHaveCount(1);
+  await page.waitForTimeout(260);
+  const lifted = await segs.first().evaluate((e) => getComputedStyle(e).transform);
+  expect(lifted).not.toBe('none');
+  const dimmed = await segs.nth(1).evaluate((e) => Number(getComputedStyle(e).opacity));
+  expect(dimmed).toBeLessThan(0.7);
+  const otherCol = await page.locator('.plot .col').nth(2).locator('button.seg').first().evaluate((e) => Number(getComputedStyle(e).opacity));
+  expect(otherCol).toBeLessThan(0.7);
+
+  // второй клик снимает выбор; пока курсор над сегментом он подсвечен наведением, после ухода нет
+  await segs.first().click();
+  await expect(segs.first()).toHaveAttribute('aria-pressed', 'false');
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.seg.on')).toHaveCount(0);
+
+  // наведение мышью выделяет сегмент без клика
+  await segs.nth(2).hover();
+  await expect(page.locator('.seg.on')).toHaveCount(1);
+  await expect(page.locator('.caption')).toContainText('ИП Дельта, июль:');
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.seg.on')).toHaveCount(0);
+
+  // клавиатура: стрелки двигают по месяцам и юрлицам, подпись следует за фокусом
+  await segs.first().focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.caption')).toContainText('ООО «Альфа», август:');
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('.caption')).toContainText('ИП Бета, август:');
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('.caption')).toContainText('ИП Бета, июль:');
   await expect(page.locator('.plot .col.fc').first()).toBeVisible();
 });
 
