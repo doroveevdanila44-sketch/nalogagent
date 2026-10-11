@@ -1,4 +1,6 @@
 import { dec } from './decimal';
+import type { PeriodKind } from './period';
+import type { SourceRef } from './provenance';
 import type { CalcCtx, DashboardInput, EntityInput, RuleSet, Selections, TaxRegime } from './types';
 
 /** Вид входа калькулятора для передачи по сети: деньги строками, чтобы не терять точность. */
@@ -6,6 +8,10 @@ export interface DashboardPayload {
   /** Время сервера, мс. Клиент считает смещение своих часов и тикает по серверному времени */
   serverNow: number;
   tz: string;
+  /** Откуда цифры: единая демо-база (data_sources). null, если источник в базе не заведён */
+  source: SourceRef | null;
+  /** Признак данных года: все месяцы факт, все прогноз или смесь */
+  kind: PeriodKind;
   weights: string[];
   rules: {
     asOf: string;
@@ -43,11 +49,16 @@ export interface DashboardPayload {
   selections: Selections;
 }
 
-export function toPayload(input: DashboardInput, meta: { serverNow: number; tz: string }): DashboardPayload {
+export function toPayload(
+  input: DashboardInput,
+  meta: { serverNow: number; tz: string; source: SourceRef | null; kind: PeriodKind },
+): DashboardPayload {
   const r = input.ctx.rules;
   return {
     serverNow: meta.serverNow,
     tz: meta.tz,
+    source: meta.source,
+    kind: meta.kind,
     weights: input.ctx.weights.map((w) => w.toString()),
     rules: {
       asOf: r.asOf,

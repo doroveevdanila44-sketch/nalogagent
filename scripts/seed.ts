@@ -2,12 +2,10 @@ import './_env';
 import { closeDb, getDb } from '@/lib/db/client';
 import { seedDatabase } from '@/lib/db/seed';
 import { getEnv } from '@/lib/env';
-import { momentFromEpoch } from '@/lib/calc/time';
 
 async function main() {
-  const now = momentFromEpoch(Date.now(), getEnv().appTz);
-  await seedDatabase(getDb(), { year: now.year, month: now.month + 1 });
-  console.log(`Сид выполнен (год ${now.year}, месяц ${now.month + 1})`);
+  await seedDatabase(getDb(), { tz: getEnv().appTz });
+  console.log('Сид выполнен: демо-источник «Выгрузка из 1С (демо)», выручка за 2025 и 2026 годы');
 }
 
 main()

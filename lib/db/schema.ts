@@ -184,6 +184,23 @@ export const legalEntities = pgTable(
   ],
 );
 
+/**
+ * Откуда пришли цифры. В демо один источник: условная выгрузка из 1С (kind demo_1c).
+ * Все цифры дашборда, чата, документов и выгрузок идут из таблиц базы, а у помесячной выручки
+ * есть ссылка на источник и дата обновления: по ним расчёт показывает происхождение числа.
+ */
+export const dataSources = pgTable(
+  'data_sources',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    isDemo: boolean('is_demo').notNull().default(true),
+    loadedAt: tstz('loaded_at').notNull(),
+  },
+  (t) => [check('data_sources_kind', sql`${t.kind} in ('demo_1c')`)],
+);
+
 export const revenueMonthly = pgTable(
   'revenue_monthly',
   {
@@ -194,6 +211,9 @@ export const revenueMonthly = pgTable(
     month: integer('month').notNull(),
     amount: numeric('amount', { precision: 18, scale: 2 }).notNull(),
     isFact: boolean('is_fact').notNull().default(false),
+    /** Источник строки. null только у строк, записанных до появления data_sources */
+    sourceId: text('source_id').references(() => dataSources.id),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.entityId, t.year, t.month] }),

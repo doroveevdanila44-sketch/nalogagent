@@ -1,19 +1,60 @@
 import { sql } from 'drizzle-orm';
-import { round2, dec } from '@/lib/calc/decimal';
-import { SEED_ENTITIES, SEED_RULE_ROWS, SEED_WEIGHTS } from '@/lib/calc/demo-data';
+import {
+  SEED_ENTITIES,
+  SEED_RULE_ROWS,
+  SEED_SOURCE,
+  SEED_WEIGHTS,
+  seedRevenueRows,
+} from '@/lib/calc/demo-data';
+import { epochFromWallClock } from '@/lib/calc/time';
+import { getEnv } from '@/lib/env';
 import type { Db } from './client';
-import { legalEntities, revenueMonthly, rules, seasonality } from './schema';
+import { dataSources, legalEntities, revenueMonthly, rules, seasonality } from './schema';
 
 /**
- * Сид выдуманных данных демо. Идемпотентен:
+ * Сид выдуманных данных демо. Детерминирован (не зависит от часов) и идемпотентен:
+ *  - один источник data_sources «Выгрузка из 1С (демо)», дата загрузки 10 октября 2026, 18:00
+ *    по часовому поясу приложения; повторный запуск возвращает эти значения;
+ *  - помесячная выручка пяти юрлиц за 2025 и 2026 годы со ссылкой на источник: факт по сентябрь
+ *    2026 включительно, октябрь идёт, ноябрь и декабрь прогноз (признак факта не зависит от даты);
  *  - правила и веса вставляются, существующие записи не трогаются, чтобы правка владельца
  *    (например, дефлятор) не затиралась повторным запуском;
  *  - юрлица демо вставляются и ОБНОВЛЯЮТСЯ (название, цифры, режим налогообложения): сид
- *    приводит демо-данные к описанным в CALC.md;
- *  - помесячная выручка текущего года пересчитывается: is_fact = месяц меньше текущего.
+ *    приводит демо-данные к описанным в CALC.md.
  * Пользователь luxautoowner сидом не создаётся, только командой npm run user:create.
  */
-export async function seedDatabase(db: Db, now: { year: number; month: number }): Promise<void> {
+export interface SeedOptions {
+  /** Часовой пояс, в котором задана дата загрузки; по умолчанию APP_TZ */
+  tz?: string;
+  /** Прежний вызов передавал текущий год и месяц. Сид больше не зависит от даты, поля игнорируются */
+  year?: number;
+  month?: number;
+}
+
+export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void> {
+  const tz = opts.tz ?? getEnv().appTz;
+  const at = SEED_SOURCE.loadedAt;
+  const loadedAt = new Date(epochFromWallClock(tz, at.year, at.month, at.day, at.hour, at.minute));
+
+  await db
+    .insert(dataSources)
+    .values({
+      id: SEED_SOURCE.id,
+      kind: SEED_SOURCE.kind,
+      title: SEED_SOURCE.title,
+      isDemo: SEED_SOURCE.isDemo,
+      loadedAt,
+    })
+    .onConflictDoUpdate({
+      target: dataSources.id,
+      set: {
+        kind: sql`excluded.kind`,
+        title: sql`excluded.title`,
+        isDemo: sql`excluded.is_demo`,
+        loadedAt: sql`excluded.loaded_at`,
+      },
+    });
+
   await db
     .insert(seasonality)
     .values(SEED_WEIGHTS.map((w, i) => ({ month: i + 1, weight: w.toFixed(4) })))
@@ -72,20 +113,26 @@ export async function seedDatabase(db: Db, now: { year: number; month: number })
     )
     .onConflictDoNothing();
 
-  const monthly = SEED_ENTITIES.flatMap((e) =>
-    SEED_WEIGHTS.map((w, i) => ({
-      entityId: e.id,
-      year: now.year,
-      month: i + 1,
-      amount: round2(dec(e.annualRevenue).times(w)).toFixed(2),
-      isFact: i + 1 < now.month,
-    })),
-  );
   await db
     .insert(revenueMonthly)
-    .values(monthly)
+    .values(
+      seedRevenueRows().map((r) => ({
+        entityId: r.entityId,
+        year: r.year,
+        month: r.month,
+        amount: r.amount.toFixed(2),
+        isFact: r.isFact,
+        sourceId: SEED_SOURCE.id,
+        updatedAt: loadedAt,
+      })),
+    )
     .onConflictDoUpdate({
       target: [revenueMonthly.entityId, revenueMonthly.year, revenueMonthly.month],
-      set: { amount: sql`excluded.amount`, isFact: sql`excluded.is_fact` },
+      set: {
+        amount: sql`excluded.amount`,
+        isFact: sql`excluded.is_fact`,
+        sourceId: sql`excluded.source_id`,
+        updatedAt: sql`excluded.updated_at`,
+      },
     });
 }

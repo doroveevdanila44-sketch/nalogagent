@@ -51,6 +51,29 @@ export function momentFromEpoch(epochMs: number, tz: string): Moment {
   return { year: pick('year'), month: pick('month') - 1, day: pick('day'), secondsOfDay: seconds };
 }
 
+/**
+ * Момент в UTC (мс) для «стенных часов» часового пояса: 10 октября 2026, 18:00 по APP_TZ.
+ * Нужен сиду, чтобы дата загрузки выглядела одинаково в любом поясе приложения.
+ */
+export function epochFromWallClock(
+  tz: string,
+  year: number,
+  month1: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+): number {
+  const wanted = Date.UTC(year, month1 - 1, day, hour, minute, 0);
+  let t = wanted;
+  // два шага достаточно: смещение пояса меняется не чаще раза в полгода
+  for (let i = 0; i < 2; i++) {
+    const m = momentFromEpoch(t, tz);
+    const shown = Date.UTC(m.year, m.month, m.day) + Math.floor(m.secondsOfDay) * 1000;
+    t += wanted - shown;
+  }
+  return t;
+}
+
 /** Удобный конструктор для тестов и сидов: moment(2026, 10, 10, 12, 0, 0), месяц 1..12. */
 export function moment(year: number, month1: number, day: number, h = 0, m = 0, s = 0): Moment {
   return { year, month: month1 - 1, day, secondsOfDay: h * 3600 + m * 60 + s };

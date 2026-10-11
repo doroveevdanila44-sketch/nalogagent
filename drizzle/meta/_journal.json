@@ -15,6 +15,13 @@
       "when": 1791646113450,
       "tag": "0001_tax_regimes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791721903529,
+      "tag": "0002_data_sources",
+      "breakpoints": true
     }
   ]
 }

@@ -32,7 +32,7 @@ export function frac(weights: Dec[], m: Moment): Dec {
 }
 
 /** Выручка месяца: факт (если есть и месяц уже прошёл) или годовой прогноз × вес. */
-export function monthAmount(e: EntityInput, ctx: CalcCtx, month: number, now: Moment): Dec {
+export function monthAmount(e: EntityInput, ctx: Pick<CalcCtx, 'weights'>, month: number, now: Moment): Dec {
   if (month < now.month && e.monthly) {
     const f = e.monthly.find((x) => x.month === month && x.isFact);
     if (f) return f.amount;

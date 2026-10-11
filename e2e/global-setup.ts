@@ -40,8 +40,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   process.env.PIN_PEPPER = 'e2e-pepper-0123456789abcdef0123456789abcdef-xyz';
   process.env.SESSION_SECRET = 'e2e-session-secret-0123456789abcdef0123456789-xyz';
 
-  const now = new Date();
-  await seedDatabase(db as never, { year: now.getFullYear(), month: now.getMonth() + 1 });
+  await seedDatabase(db as never, { tz: 'Asia/Kamchatka' });
 
   const password = `E2e-${randomBytes(12).toString('base64url')}`;
   await createOwner(db as never, { login: 'luxautoowner', password });

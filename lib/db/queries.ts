@@ -1,45 +1,29 @@
 import { and, desc, eq, asc } from 'drizzle-orm';
-import { dec, type Dec } from '@/lib/calc/decimal';
-import { buildRuleSet, type RuleRow } from '@/lib/calc/rules';
+import { dec } from '@/lib/calc/decimal';
+import { sourceRef } from '@/lib/calc/provenance';
+import type { RuleRow } from '@/lib/calc/rules';
+import { buildCalcData, dashboardInput, type CalcData, type RevenueRow } from '@/lib/calc/service';
 import type { Moment } from '@/lib/calc/time';
-import type { DashboardInput, EntityInput, MonthFact, Selections } from '@/lib/calc/types';
+import type { DashboardInput, EntityInput, Selections } from '@/lib/calc/types';
 import type { Db } from './client';
-import { legalEntities, rateChoices, revenueMonthly, rules, seasonality } from './schema';
+import { dataSources, legalEntities, rateChoices, revenueMonthly, rules, seasonality } from './schema';
 
 /**
- * Собирает вход калькулятора из базы: сущности, веса, правила на дату, факты месяцев и выбранные ставки.
- * Единственное место, где строки numeric превращаются в Decimal.
+ * Снимок данных для расчётного сервиса: юрлица, веса, правила, помесячная выручка всех лет,
+ * выбранные ставки по годам и источник. Единственное место, где строки numeric превращаются
+ * в Decimal; все цифры дашборда, чата, документов и выгрузок идут отсюда.
  */
-export async function loadDashboardInput(db: Db, now: Moment): Promise<DashboardInput> {
-  const [ruleRows, weightRows, entityRows, monthlyRows, choiceRows] = await Promise.all([
+export async function loadCalcData(db: Db, today: Moment): Promise<CalcData> {
+  const [ruleRows, weightRows, entityRows, revenueRows, choiceRows, sourceRows] = await Promise.all([
     db.select().from(rules),
     db.select().from(seasonality).orderBy(asc(seasonality.month)),
     db.select().from(legalEntities).orderBy(asc(legalEntities.sort), asc(legalEntities.id)),
-    db.select().from(revenueMonthly).where(eq(revenueMonthly.year, now.year)),
-    db
-      .select()
-      .from(rateChoices)
-      .where(eq(rateChoices.year, now.year))
-      .orderBy(desc(rateChoices.chosenAt), desc(rateChoices.id)),
+    db.select().from(revenueMonthly),
+    db.select().from(rateChoices).orderBy(desc(rateChoices.chosenAt), desc(rateChoices.id)),
+    db.select().from(dataSources).orderBy(desc(dataSources.loadedAt), desc(dataSources.id)).limit(1),
   ]);
 
-  if (weightRows.length !== 12) {
-    throw new Error('Справочник seasonality должен содержать 12 месяцев');
-  }
-  const weights: Dec[] = weightRows.map((w) => dec(w.weight));
-  const total = weights.reduce((a, b) => a.plus(b), dec(0));
-  if (total.minus(1).abs().gt('0.0001')) {
-    throw new Error(`Сумма весов сезонности ${total.toString()}, ожидается 1`);
-  }
-
-  const byEntity = new Map<string, MonthFact[]>();
-  for (const m of monthlyRows) {
-    const list = byEntity.get(m.entityId) ?? [];
-    list.push({ month: m.month - 1, amount: dec(m.amount), isFact: m.isFact });
-    byEntity.set(m.entityId, list);
-  }
-
-  const entities: EntityInput[] = entityRows.map((r) => ({
+  const entities: Omit<EntityInput, 'monthly'>[] = entityRows.map((r) => ({
     id: r.id,
     name: r.name,
     form: r.form,
@@ -53,13 +37,24 @@ export async function loadDashboardInput(db: Db, now: Moment): Promise<Dashboard
       r.taxRegime === 'osno' || r.taxRegime === 'usn_income_expense' ? r.taxRegime : 'usn_income',
     usnRate: r.usnRate === null ? null : dec(r.usnRate),
     annualExpenses: dec(r.annualExpenses),
-    monthly: byEntity.get(r.id) ?? [],
   }));
 
-  const selections: Selections = {};
+  // записи отсортированы от новых к старым: действует первая по юрлицу и году
+  const choices: Record<number, Selections> = {};
   for (const c of choiceRows) {
-    if (selections[c.entityId] === undefined) selections[c.entityId] = c.rate;
+    const year = (choices[c.year] ??= {});
+    if (year[c.entityId] === undefined) year[c.entityId] = c.rate;
   }
+
+  const revenue: RevenueRow[] = revenueRows.map((r) => ({
+    entityId: r.entityId,
+    year: r.year,
+    month: r.month,
+    amount: dec(r.amount),
+    isFact: r.isFact,
+    sourceId: r.sourceId,
+    updatedAt: r.updatedAt.toISOString(),
+  }));
 
   const ruleInput: RuleRow[] = ruleRows.map((r) => ({
     key: r.key,
@@ -73,7 +68,25 @@ export async function loadDashboardInput(db: Db, now: Moment): Promise<Dashboard
     note: r.note,
   }));
 
-  return { entities, selections, ctx: { weights, rules: buildRuleSet(ruleInput, now) } };
+  const source = sourceRows[0] ? sourceRef(sourceRows[0]) : null;
+
+  return buildCalcData({
+    today,
+    entities,
+    weights: weightRows.map((w) => dec(w.weight)),
+    ruleRows: ruleInput,
+    choices,
+    revenue,
+    source,
+  });
+}
+
+/**
+ * Вход дашборда и чата на момент `now`: тот же снимок, что у расчётного сервиса, правила на
+ * сегодня и выбранные ставки текущего года. Бросает MissingRuleError, если правил на дату нет.
+ */
+export async function loadDashboardInput(db: Db, now: Moment): Promise<DashboardInput> {
+  return dashboardInput(await loadCalcData(db, now));
 }
 
 export async function saveRateChoice(
