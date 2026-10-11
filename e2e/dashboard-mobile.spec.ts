@@ -243,7 +243,10 @@ test('Баннеры: расшифровка раскрывается под н�
   await settle(page);
   await expect(page.locator('.sum-item.open')).toHaveCount(0);
   const closed = await geometry();
-  expect(closed.tops).toEqual(before.tops);
+  // баннеры стали выше (строка происхождения), и нажатие на третий прокручивает страницу к нему:
+  // сравнивается расстояние между баннерами, а не положение в окне
+  const rel = (tops: number[]) => tops.map((t) => t - tops[0]!);
+  expect(rel(closed.tops)).toEqual(rel(before.tops));
 });
 
 test('390 px: четыре отдельных баннера группы, широкого баннера нет', async ({ page }) => {

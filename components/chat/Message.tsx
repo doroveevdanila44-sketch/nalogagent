@@ -1,4 +1,6 @@
 import type { ChatTurn, Table } from '@/lib/agent/types';
+import { CalcActions } from '@/components/provenance/CalcActions';
+import { SourceLine } from '@/components/provenance/SourceLine';
 import { QuickReplies } from './QuickReplies';
 import { Understood } from './Understood';
 
@@ -67,6 +69,7 @@ export function Message({
         <TableView key={i} table={t} />
       ))}
       {turn.fromCalc ? <span className="src">Цифры из калькулятора</span> : null}
+      {turn.provenance ? <SourceLine data={turn.provenance.line} /> : null}
       {turn.how.length > 0 ? (
         <details>
           <summary>Как посчитано</summary>
@@ -76,6 +79,9 @@ export function Message({
             ))}
           </div>
         </details>
+      ) : null}
+      {turn.provenance ? (
+        <CalcActions label="Действия с расчётом" getTarget={() => ({ message: turn.id })} />
       ) : null}
       {turn.quick.length > 0 ? (
         <QuickReplies

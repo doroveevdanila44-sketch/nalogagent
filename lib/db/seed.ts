@@ -9,7 +9,7 @@ import {
 import { epochFromWallClock } from '@/lib/calc/time';
 import { getEnv } from '@/lib/env';
 import type { Db } from './client';
-import { dataSources, legalEntities, revenueMonthly, rules, seasonality } from './schema';
+import { dataSources, legalEntities, people, revenueMonthly, rules, seasonality } from './schema';
 
 /**
  * Сид выдуманных данных демо. Детерминирован (не зависит от часов) и идемпотентен:
@@ -21,8 +21,17 @@ import { dataSources, legalEntities, revenueMonthly, rules, seasonality } from '
  *    (например, дефлятор) не затиралась повторным запуском;
  *  - юрлица демо вставляются и ОБНОВЛЯЮТСЯ (название, цифры, режим налогообложения): сид
  *    приводит демо-данные к описанным в CALC.md.
+ *  - справочник people для «Передать специалисту»: три вымышленных получателя, имена выдуманы,
+ *    настоящих людей и адресов нет; повторный запуск приводит записи к этому списку.
  * Пользователь luxautoowner сидом не создаётся, только командой npm run user:create.
  */
+
+/** Вымышленный справочник получателей (демо). Фамилии нарочно «образцовые». */
+export const SEED_PEOPLE = [
+  { id: 'demo-accountant', name: 'Елена Образцова', role: 'Бухгалтер', sort: 1 },
+  { id: 'demo-cfo', name: 'Сергей Примеров', role: 'Финансовый директор', sort: 2 },
+  { id: 'demo-consultant', name: 'Анна Шаблонова', role: 'Налоговый консультант', sort: 3 },
+] as const;
 export interface SeedOptions {
   /** Часовой пояс, в котором задана дата загрузки; по умолчанию APP_TZ */
   tz?: string;
@@ -53,6 +62,14 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         isDemo: sql`excluded.is_demo`,
         loadedAt: sql`excluded.loaded_at`,
       },
+    });
+
+  await db
+    .insert(people)
+    .values(SEED_PEOPLE.map((p) => ({ ...p })))
+    .onConflictDoUpdate({
+      target: people.id,
+      set: { name: sql`excluded.name`, role: sql`excluded.role`, sort: sql`excluded.sort` },
     });
 
   await db

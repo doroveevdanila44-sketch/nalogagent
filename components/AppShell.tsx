@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { watchKeyboard } from '@/lib/client/keyboard';
@@ -23,6 +23,7 @@ const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 
 
 export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
   const [locked, setLocked] = useState(false);
   const [online, setOnline] = useState(true);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
@@ -234,6 +235,10 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     <>
       <div hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
         <header className="top" ref={headerRef}>
+          {/* Метка демо: один раз в шапке, на всех экранах после входа */}
+          <span className="demo-badge" data-testid="demo-badge">
+            Демо-данные
+          </span>
           <div className="wrap top-in">
             <Wordmark />
             <div className="top-actions">
@@ -282,6 +287,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             </svg>,
           )}
         </nav>
+
+        {/* Сюда выводятся окна расчёта, проверки и передачи: при блокировке они прячутся со страницей */}
+        <div id="overlay-root" />
       </div>
 
       {sheet === 'menu' && !locked && (
@@ -296,6 +304,16 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
           >
             <button type="button" className="row" onClick={lockNow}>
               Заблокировать
+            </button>
+            <button
+              type="button"
+              className="row"
+              onClick={() => {
+                setSheet('none');
+                router.push('/statuses');
+              }}
+            >
+              Статусы проверок
             </button>
             <button type="button" className="row" onClick={() => setSheet('changePin')}>
               Сменить PIN

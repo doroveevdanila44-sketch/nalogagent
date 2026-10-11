@@ -12,8 +12,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // Нативные модули и драйвер БД не бандлим: их грузит Node
-  serverExternalPackages: ['@node-rs/argon2', 'pg', 'bcryptjs'],
+  // Нативные модули, драйвер БД и библиотека Excel не бандлим: их грузит Node
+  serverExternalPackages: ['@node-rs/argon2', 'pg', 'bcryptjs', 'exceljs'],
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

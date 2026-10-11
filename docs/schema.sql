@@ -184,6 +184,45 @@ insert into legal_entities(id,name,form,owner_label,vat_status,annual_revenue,in
  ('gamma','ООО «Гамма»','ООО','Собственник 2','exempt', 6400000,.80,'#FFF3B2','Аренда с экипажем и трансферы',4,'usn_income_expense',.15,5200000),
  ('epsilon','ООО «Эпсилон»','ООО','Собственник 1','payer',74000000,.55,'#2A2B14','Демо: условное юрлицо на ОСНО, данные выдуманы',5,'osno',null,44000000);
 
+-- Действия над расчётом (миграция 0003): справочник получателей, отметки «сверил», запросы на проверку.
+-- Демо: получатели вымышленные, письма не отправляются.
+create table people (
+  id text primary key,
+  name text not null,
+  role text not null,
+  sort integer not null default 0
+);
+
+create table checks (
+  id bigserial primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  subject text not null,            -- ключ расчёта: налог, период, юрлица, ставки
+  item text not null,               -- пункт чек-листа
+  amount text,                      -- итог расчёта на момент отметки
+  checked_at timestamptz not null default now(),
+  unique (user_id, subject, item)
+);
+
+create table review_requests (
+  id uuid primary key default gen_random_uuid(),
+  type text not null default 'calc' check (type in ('calc')),
+  created_by uuid not null references users(id) on delete cascade,
+  recipient_id text not null references people(id),
+  comment text not null default '',
+  status text not null default 'sent' check (status in ('sent','in_review','confirmed','returned')),
+  title text not null,
+  snapshot jsonb not null,          -- снимки CalcResult на момент отправки
+  excel_name text not null,
+  excel_file bytea not null,
+  created_at timestamptz not null default now()
+);
+create index review_requests_user_created_idx on review_requests (created_by, created_at desc);
+
+insert into people(id,name,role,sort) values
+ ('demo-accountant','Елена Образцова','Бухгалтер',1),
+ ('demo-cfo','Сергей Примеров','Финансовый директор',2),
+ ('demo-consultant','Анна Шаблонова','Налоговый консультант',3);
+
 insert into rules(key,value,unit,valid_from,valid_to,norm,note) values
  ('vat_exempt_limit', 20000000,'rub','2026-01-01','2026-12-31','НК РФ, ст. 145','Порог освобождения'),
  ('limit_5',          272500000,'rub','2026-01-01','2026-12-31','НК РФ, ст. 164','Верхняя граница для ставки 5%'),

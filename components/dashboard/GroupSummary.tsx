@@ -14,6 +14,10 @@ import {
   type Moment,
   type StaticModel,
 } from '@/lib/calc';
+import { CalcActions } from '@/components/provenance/CalcActions';
+import { SourceLine } from '@/components/provenance/SourceLine';
+import type { SourceLineData } from '@/lib/provenance/line';
+import { bannerQueries } from '@/lib/provenance/dashboard';
 import { groupCaption, groupMetrics, type GroupMetricId } from './group-metrics';
 
 type CardId = GroupMetricId;
@@ -23,6 +27,12 @@ interface Props {
   input: DashboardInput;
   live: LiveModel;
   stat: StaticModel;
+  /** Строки происхождения под баннерами (из результатов calcTax) */
+  lines: Record<GroupMetricId, SourceLineData>;
+  /** Год расчёта: для запросов «за год» */
+  year: number;
+  /** Момент (мс UTC), на который сейчас показаны цифры */
+  getAt: () => number;
 }
 
 /**
@@ -75,7 +85,7 @@ function SumPanel({ openId, render }: { openId: CardId | null; render: (id: Card
  * Раскрыта одна, повторное нажатие закрывает, при нажатии на другую открывается она. Из расшифровки
  * можно перейти к карточкам юрлиц. Живые значения идут из LiveModel.
  */
-export function GroupSummary({ moment, input, live, stat }: Props) {
+export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: Props) {
   const [open, setOpen] = useState<CardId | null>(null);
   const wide = useMediaQuery('(min-width: 1024px)');
   const { entities } = input;
@@ -175,6 +185,12 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
           ))}
         </ul>
         {id === 'profit' && <p className="sum-note">{profitNote}</p>}
+        <CalcActions
+          tone="dark"
+          focus={id === 'revenue' ? 'revenue' : 'tax'}
+          label={`Действия с расчётом: ${d.title}`}
+          getTarget={() => ({ queries: bannerQueries(id, year), at: getAt() })}
+        />
         <button type="button" className="sum-more" onClick={scrollToEntities}>
           К карточкам юрлиц
         </button>
@@ -198,6 +214,7 @@ export function GroupSummary({ moment, input, live, stat }: Props) {
           <span className="sum-label">{label}</span>
           <strong className="sum-value">{value}</strong>
           <span className="sum-sub">{sub}</span>
+          <SourceLine data={lines[id]} tone="dark" inline />
           <svg className="sum-chev" viewBox="0 0 24 24" aria-hidden="true">
             <path d="m7 10 5 5 5-5" />
           </svg>

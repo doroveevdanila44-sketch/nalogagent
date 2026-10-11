@@ -325,6 +325,7 @@ async function amountReply(p: PipelineInput, interp: Interpretation, ectx: Expla
     change: changeOptions(p.entities, p.now),
     interp,
     intent: 'amount',
+    calcs: answer.calcs,
   });
 }
 

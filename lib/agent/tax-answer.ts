@@ -42,11 +42,20 @@ export interface TaxAnswerContext {
   canDo: string;
 }
 
+/** Расчёт, на котором стоит ответ: по нему панель «Показать расчёт» и Excel показывают те же цифры. */
+export interface AnswerCalc {
+  result: TaxCalc;
+  /** Юрлица вопроса: 'all' для группы целиком */
+  scope: string[] | 'all';
+}
+
 export interface TaxAnswer {
   result: CalcResult;
   kind: PeriodKind;
   /** Юрлица, по которым посчитано */
   scope: string[];
+  /** Расчёты calcTax, из которых собран ответ */
+  calcs: AnswerCalc[];
 }
 
 const VAT_THIRD = ['первая треть', 'вторая треть', 'третья треть'] as const;
@@ -63,6 +72,11 @@ const RULE_TITLE: Record<string, string> = {
 };
 
 const mln2 = (d: Dec) => mln(d, 2);
+
+/** «Вся группа», если в вопросе названы все юрлица, иначе список. */
+function askedScope(c: TaxAnswerContext, scope: string[]): string[] | 'all' {
+  return scope.length === c.data.entities.length ? 'all' : scope;
+}
 
 function isoToRu(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
@@ -278,6 +292,7 @@ function vatAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], name
     },
     kind,
     scope,
+    calcs: [{ result: r, scope: askedScope(c, scope) }],
   };
 }
 
@@ -386,6 +401,7 @@ function incomeAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], n
     },
     kind,
     scope,
+    calcs: results.map((r) => ({ result: r, scope: askedScope(c, scope) })),
   };
 }
 

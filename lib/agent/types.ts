@@ -1,4 +1,5 @@
-import type { Moment, Period, PeriodKind } from '@/lib/calc';
+import type { CalcResult as TaxCalc, Moment, Period, PeriodKind } from '@/lib/calc';
+import type { SourceLineData } from '@/lib/provenance/line';
 
 /** A по теме, B этикет, C служебное, D вне темы, E непонятное, F за границей продукта */
 export type AgentClass = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
@@ -90,6 +91,8 @@ export interface AgentReply {
   awaiting?: Slot[];
   /** Вид пояснения, если агент не берётся за запрос */
   unsupported?: Unsupported['kind'] | null;
+  /** Расчёты calcTax, из которых собран ответ: основа строки происхождения и действий */
+  calcs?: { result: TaxCalc; scope: string[] | 'all' }[];
 }
 
 export interface ChatTurn {
@@ -104,6 +107,14 @@ export interface ChatTurn {
   understood: Understanding | null;
   quick: QuickReply[];
   change: ChangeOptions | null;
+  /** Происхождение цифр ответа; null, если в ответе нет расчёта */
+  provenance: TurnProvenance | null;
+}
+
+/** Строка происхождения под ответом и число расчётов за ней (панель, Excel, проверка, передача). */
+export interface TurnProvenance {
+  line: SourceLineData;
+  count: number;
 }
 
 // ===== Понимание вопроса =====

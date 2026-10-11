@@ -11,12 +11,20 @@ import {
 } from '@/lib/calc';
 import type { LiveModel, StaticModel } from '@/lib/calc';
 import { entityColor } from '@/lib/theme';
+import { CalcActions } from '@/components/provenance/CalcActions';
+import { SourceLine } from '@/components/provenance/SourceLine';
+import { entityQueries, type EntityLines } from '@/lib/provenance/dashboard';
 
 interface Props {
   entity: EntityInput;
   rules: RuleSet;
   live: LiveModel['perEntity'][string];
   stat: StaticModel['perEntity'][string];
+  /** Строки происхождения под блоками карточки (из результатов calcTax) */
+  lines: EntityLines;
+  year: number;
+  /** Момент (мс UTC), на который показаны цифры */
+  getAt: () => number;
   onChoose: (rate: number) => void;
 }
 
@@ -35,7 +43,7 @@ function baseNote(e: EntityInput, t: StaticModel['perEntity'][string]['incomeTax
   }
 }
 
-export function EntityCard({ entity: e, rules, live, stat, onChoose }: Props) {
+export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, onChoose }: Props) {
   const payer = e.status === 'payer';
   const osno = e.taxRegime === 'osno';
   const demo = e.description.startsWith('Демо');
@@ -81,6 +89,7 @@ export function EntityCard({ entity: e, rules, live, stat, onChoose }: Props) {
           <b>{mln(e.annualRevenue, 1)}</b>
         </div>
       </div>
+      <SourceLine data={lines.metrics} />
 
       {osno ? null : (
         <>
@@ -148,6 +157,7 @@ export function EntityCard({ entity: e, rules, live, stat, onChoose }: Props) {
           })}
         </div>
       )}
+      <SourceLine data={lines.vat} />
 
       <section className="taxblock" aria-label={`${tax.taxName}, прогноз`}>
         <h4>{tax.taxName}, прогноз</h4>
@@ -185,6 +195,15 @@ export function EntityCard({ entity: e, rules, live, stat, onChoose }: Props) {
         </dl>
         <p className="taxblock-note">{baseNote(e, tax)}. Проверить с бухгалтером.</p>
       </section>
+      <SourceLine data={lines.income} />
+
+      <CalcActions
+        label={`Действия с расчётом: ${e.name}`}
+        getTarget={() => ({
+          queries: entityQueries({ id: e.id, taxRegime: e.taxRegime, selected: stat.selected }, year),
+          at: getAt(),
+        })}
+      />
     </article>
   );
 }

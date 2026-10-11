@@ -5,6 +5,8 @@ import { momentFromEpoch } from '@/lib/calc/time';
 import type { Db } from '@/lib/db/client';
 import { loadCalcData } from '@/lib/db/queries';
 import { agentState, chatMessages, llmUsage } from '@/lib/db/schema';
+import { lineFromSnapshots } from '@/lib/provenance/line';
+import { toSnapshot, type CalcSnapshot } from '@/lib/provenance/snapshot';
 import { getEnv } from '@/lib/env';
 import { aliasesFor, runPipeline } from './pipeline';
 import type { LlmProvider } from './provider';
@@ -20,6 +22,7 @@ import type {
   QuickReply,
   Slot,
   Table,
+  TurnProvenance,
   Understanding,
   Unsupported,
 } from './types';
@@ -46,9 +49,32 @@ interface StoredCalc {
   interp?: Interpretation | null;
   awaiting?: Slot[];
   unsupported?: Unsupported['kind'] | null;
+  /** Снимки расчётов ответа (CalcSnapshot): по ним панель, Excel и передача специалисту */
+  results?: CalcSnapshot[];
+  /** Строка происхождения цифр, собранная при сохранении ответа */
+  provenance?: TurnProvenance | null;
 }
 
-function toTurn(r: typeof chatMessages.$inferSelect): ChatTurn {
+/**
+ * Строка сообщения без снимков расчёта. Снимки занимают десятки килобайт на ответ и нужны только
+ * по кнопкам действий, поэтому из ленты и из прежнего контекста их вычитает сама база (jsonb - 'results').
+ */
+const leanColumns = {
+  id: chatMessages.id,
+  userId: chatMessages.userId,
+  role: chatMessages.role,
+  class: chatMessages.class,
+  content: chatMessages.content,
+  createdAt: chatMessages.createdAt,
+  calc: sql<unknown>`${chatMessages.calc} - 'results'`.as('calc'),
+};
+
+type MessageRow = Pick<
+  typeof chatMessages.$inferSelect,
+  'id' | 'role' | 'class' | 'content' | 'createdAt'
+> & { calc: unknown };
+
+function toTurn(r: MessageRow): ChatTurn {
   const calc = (r.calc ?? {}) as StoredCalc;
   return {
     id: r.id,
@@ -62,13 +88,14 @@ function toTurn(r: typeof chatMessages.$inferSelect): ChatTurn {
     understood: calc.understood ?? null,
     quick: calc.quick ?? [],
     change: calc.change ?? null,
+    provenance: calc.provenance ?? null,
   };
 }
 
 /** Последние 50 сообщений по возрастанию времени. */
 export async function loadHistory(db: Db, userId: string): Promise<ChatTurn[]> {
   const rows = await db
-    .select()
+    .select(leanColumns)
     .from(chatMessages)
     .where(eq(chatMessages.userId, userId))
     .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
@@ -99,7 +126,7 @@ export async function handleChat(
   const [state] = await db.select().from(agentState).where(eq(agentState.userId, args.userId)).limit(1);
 
   const [lastAgent] = await db
-    .select()
+    .select(leanColumns)
     .from(chatMessages)
     .where(eq(chatMessages.userId, args.userId))
     .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
@@ -110,7 +137,7 @@ export async function handleChat(
   let refine = false;
   if (args.baseId !== undefined) {
     const [row] = await db
-      .select()
+      .select(leanColumns)
       .from(chatMessages)
       .where(
         and(eq(chatMessages.id, args.baseId), eq(chatMessages.userId, args.userId), eq(chatMessages.role, 'agent')),
@@ -199,6 +226,11 @@ export async function handleChat(
     };
   }
 
+  // расчёты ответа сохраняются снимками: что сказал агент, то и открывают кнопки под ответом
+  const results = (reply.calcs ?? []).map((c) => toSnapshot(c.result, { at: nowMs, tz: appTz, scope: c.scope }));
+  const provenance: TurnProvenance | null =
+    results.length > 0 ? { line: lineFromSnapshots(results), count: results.length } : null;
+
   const stored: StoredCalc = {
     tables: reply.tables,
     how: reply.how,
@@ -212,6 +244,8 @@ export async function handleChat(
     interp: reply.interp ?? null,
     awaiting: reply.awaiting ?? [],
     unsupported: reply.unsupported ?? null,
+    results,
+    provenance,
   };
 
   const [userRow, agentRow] = await db.transaction(async (tx) => {

@@ -35,6 +35,19 @@ const inet = customType<{ data: string }>({
 
 const tstz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
+/** bytea: файл Excel, приложенный к запросу на проверку. node-postgres отдаёт Buffer, PGlite Uint8Array. */
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType() {
+    return 'bytea';
+  },
+  toDriver(value) {
+    return value;
+  },
+  fromDriver(value) {
+    return Buffer.isBuffer(value) ? value : Buffer.from(value);
+  },
+});
+
 // ===== Вход =====
 export const users = pgTable(
   'users',
@@ -283,3 +296,72 @@ export const llmUsage = pgTable('llm_usage', {
   ok: boolean('ok').notNull().default(true),
   note: text('note'),
 });
+
+// ===== Действия над расчётом: сверка, передача специалисту =====
+
+/**
+ * Вымышленный справочник получателей для «Передать специалисту» (демо). Настоящих людей и адресов
+ * здесь нет: имена выдуманы, письма не отправляются.
+ */
+export const people = pgTable('people', {
+  id: text('id').primaryKey(),
+  /** Вымышленное имя, видно в окне передачи и в статусах */
+  name: text('name').notNull(),
+  /** Роль: «Бухгалтер», «Финансовый директор» */
+  role: text('role').notNull(),
+  sort: integer('sort').notNull().default(0),
+});
+
+/**
+ * Отметки «сверил» из экрана «Проверить самому»: кто, что, когда. subject это ключ расчёта
+ * (налог, период, юрлица, ставка), item пункт чек-листа внутри него.
+ */
+export const checks = pgTable(
+  'checks',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    subject: text('subject').notNull(),
+    item: text('item').notNull(),
+    /** Итог расчёта на момент отметки, строкой: по нему видно, что именно сверено */
+    amount: text('amount'),
+    checkedAt: tstz('checked_at').notNull().defaultNow(),
+  },
+  (t) => [unique('checks_user_subject_item_unique').on(t.userId, t.subject, t.item)],
+);
+
+/**
+ * Запрос на проверку специалисту (демо). Снимок расчёта и Excel сохраняются в момент отправки,
+ * поэтому история показывает ровно то, что видел пользователь. Реальной отправки нет.
+ */
+export const reviewRequests = pgTable(
+  'review_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Тип запроса: пока только расчёт */
+    type: text('type').notNull().default('calc'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    recipientId: text('recipient_id')
+      .notNull()
+      .references(() => people.id),
+    comment: text('comment').notNull().default(''),
+    /** sent: «Отправлено на проверку». Остальные значения под будущую обработку специалистом */
+    status: text('status').notNull().default('sent'),
+    /** Заголовок для списка: «НДС, ООО «Альфа», февраль 2026» */
+    title: text('title').notNull(),
+    /** Снимок результатов расчёта (CalcSnapshot[]), деньги строками */
+    snapshot: jsonb('snapshot').notNull(),
+    excelName: text('excel_name').notNull(),
+    excelFile: bytea('excel_file').notNull(),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('review_requests_type', sql`${t.type} in ('calc')`),
+    check('review_requests_status', sql`${t.status} in ('sent','in_review','confirmed','returned')`),
+    index('review_requests_user_created_idx').on(t.createdBy, t.createdAt.desc()),
+  ],
+);

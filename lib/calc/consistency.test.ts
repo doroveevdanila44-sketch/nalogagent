@@ -252,7 +252,12 @@ describe('миграция 0002 только добавляет', () => {
     const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8')) as {
       entries: { idx: number; when: number; tag: string }[];
     };
-    expect(journal.entries.map((e) => e.tag)).toEqual(['0000_init', '0001_tax_regimes', '0002_data_sources']);
+    expect(journal.entries.map((e) => e.tag)).toEqual([
+      '0000_init',
+      '0001_tax_regimes',
+      '0002_data_sources',
+      '0003_provenance_actions',
+    ]);
     for (let i = 1; i < journal.entries.length; i++) {
       expect(journal.entries[i]!.when).toBeGreaterThan(journal.entries[i - 1]!.when);
     }

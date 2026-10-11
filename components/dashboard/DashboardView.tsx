@@ -1,16 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_RATE,
   computeLive,
   computeStatic,
   fromPayload,
   momentFromEpoch,
-  type DashboardPayload,
   type Selections,
 } from '@/lib/calc';
 import { api, ApiError } from '@/lib/client/api';
+import { LIVE_HOLD_EVENT, isLiveHeld } from '@/lib/client/live';
+import type { DashboardResponse } from '@/lib/provenance/dashboard';
+import { SourceLine } from '@/components/provenance/SourceLine';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { EntityCard } from './EntityCard';
 import { GroupSummary } from './GroupSummary';
@@ -23,7 +25,7 @@ import { Warnings } from './Warnings';
  * живые цифры раз в секунду, считается здесь по тем же функциям lib/calc, без запросов к серверу.
  */
 export function DashboardView() {
-  const [payload, setPayload] = useState<DashboardPayload | null>(null);
+  const [payload, setPayload] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selections, setSelections] = useState<Selections>({});
   const [clockOffset, setClockOffset] = useState(0);
@@ -33,7 +35,7 @@ export function DashboardView() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await api<DashboardPayload>('/api/dashboard');
+      const data = await api<DashboardResponse>('/api/dashboard');
       setPayload(data);
       setSelections(data.selections);
       setClockOffset(data.serverNow - Date.now());
@@ -54,14 +56,30 @@ export function DashboardView() {
     return () => window.removeEventListener(UNLOCKED_EVENT, onUnlocked);
   }, [load]);
 
-  // Секундный тик. На скрытой вкладке не считаем.
+  // Секундный тик. На скрытой вкладке не считаем; пока открыто окно расчёта, проверки или передачи,
+  // цифры стоят: окно показывает расчёт на тот момент, и они совпадают до копейки.
   useEffect(() => {
     setNowMs(Date.now());
     const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') setNowMs(Date.now());
+      if (document.visibilityState === 'visible' && !isLiveHeld()) setNowMs(Date.now());
     }, 1000);
-    return () => window.clearInterval(id);
+    // окно закрылось: цифры обновляются сразу, а не со следующего тика
+    const onRelease = () => {
+      if (!isLiveHeld() && document.visibilityState === 'visible') setNowMs(Date.now());
+    };
+    window.addEventListener(LIVE_HOLD_EVENT, onRelease);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener(LIVE_HOLD_EVENT, onRelease);
+    };
   }, []);
+
+  // Момент, на который показаны цифры: по нему кнопки действий считают расчёт
+  const atRef = useRef(0);
+  useLayoutEffect(() => {
+    atRef.current = (nowMs ?? Date.now()) + clockOffset;
+  }, [nowMs, clockOffset]);
+  const getAt = useCallback(() => atRef.current || Date.now() + clockOffset, [clockOffset]);
 
   const input = useMemo(() => {
     if (!payload) return null;
@@ -113,7 +131,15 @@ export function DashboardView() {
 
   return (
     <div>
-      <GroupSummary moment={moment} input={input} live={live} stat={stat} />
+      <GroupSummary
+        moment={moment}
+        input={input}
+        live={live}
+        stat={stat}
+        lines={payload.provenance.banners}
+        year={payload.provenance.year}
+        getAt={getAt}
+      />
       {notice ? (
         <p role="status" className="form-error" style={{ marginTop: 12 }}>
           {notice}
@@ -126,6 +152,7 @@ export function DashboardView() {
 
       <section className="sec" aria-labelledby="h-chart">
         <RevenueChart columns={stat.columns} entities={input.entities} />
+        <SourceLine data={payload.provenance.chart} />
       </section>
 
       <section className="sec" id="entities" aria-labelledby="h-ents">
@@ -141,6 +168,9 @@ export function DashboardView() {
               rules={input.ctx.rules}
               live={live.perEntity[e.id]!}
               stat={stat.perEntity[e.id]!}
+              lines={payload.provenance.entities[e.id]!}
+              year={payload.provenance.year}
+              getAt={getAt}
               onChoose={(rate) => void choose(e.id, rate)}
             />
           ))}
