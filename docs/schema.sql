@@ -223,6 +223,82 @@ insert into people(id,name,role,sort) values
  ('demo-cfo','Сергей Примеров','Финансовый директор',2),
  ('demo-consultant','Анна Шаблонова','Налоговый консультант',3);
 
+-- Документы (миграция 0004): реквизиты юрлиц, каталог шаблонов, документы, версии, комментарии, история.
+-- Шаблоны образцы, юристом не проверены. Реквизиты демо вымышленные.
+alter table legal_entities add column requisites jsonb;
+
+create table document_templates (
+  key text primary key,
+  category text not null,           -- contract, addendum, report, declaration
+  title text not null,
+  description text not null default '',
+  body text not null,               -- текст с полями {{ключ}}
+  fields jsonb not null,            -- [{key, label, type, source: entity|calc|user, required}]
+  scope text not null default 'entity',
+  needs_period boolean not null default false,
+  output text not null default 'docx',
+  taxes jsonb not null default '[]',
+  sort integer not null default 0
+);
+
+create table documents (
+  id uuid primary key default gen_random_uuid(),
+  template_key text not null references document_templates(key),
+  title text not null,
+  entity_id text references legal_entities(id),
+  period jsonb,
+  status text not null default 'draft' check (status in ('draft','review','remarks','approved','withdrawn')),
+  current_version integer not null default 1,
+  reviewer_id text references people(id),
+  created_by uuid not null references users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index documents_user_updated_idx on documents (created_by, updated_at desc);
+
+-- Версия неизменяема: обновление строки запрещено триггером document_versions_no_update
+create table document_versions (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references documents(id) on delete cascade,
+  n integer not null,
+  body text not null,
+  fields jsonb not null,
+  values jsonb not null,
+  calc jsonb not null default '[]',
+  changes jsonb not null default '[]',
+  author_id uuid references users(id) on delete set null,
+  author_name text not null,
+  hash text not null,
+  created_at timestamptz not null default now(),
+  unique (document_id, n)
+);
+
+create table document_comments (
+  id bigserial primary key,
+  document_id uuid not null references documents(id) on delete cascade,
+  version_n integer not null,
+  field_key text,
+  kind text not null default 'comment' check (kind in ('comment','remark','approval')),
+  body text not null,
+  author_user_id uuid references users(id) on delete set null,
+  author_person_id text references people(id),
+  author_name text not null,
+  is_demo boolean not null default false,
+  resolved boolean not null default false,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table document_events (
+  id bigserial primary key,
+  document_id uuid not null references documents(id) on delete cascade,
+  kind text not null,               -- created, version, submitted, withdrawn, comment, remark, approval, resolved
+  version_n integer,
+  actor text not null,
+  data jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+
 insert into rules(key,value,unit,valid_from,valid_to,norm,note) values
  ('vat_exempt_limit', 20000000,'rub','2026-01-01','2026-12-31','НК РФ, ст. 145','Порог освобождения'),
  ('limit_5',          272500000,'rub','2026-01-01','2026-12-31','НК РФ, ст. 164','Верхняя граница для ставки 5%'),
@@ -247,3 +323,4 @@ insert into rules(key,formula,unit,valid_from,note) values
 --         октябрь идёт (прогноз месяца, is_fact = false), ноябрь и декабрь прогноз;
 --   2025: факт прошлого года, все двенадцать месяцев is_fact = true (годовые суммы и доли в lib/calc/demo-data.ts).
 -- Пользователь luxautoowner создаётся командой npm run user:create, а не сидом.
+-- Каталог шаблонов документов и реквизиты юрлиц заполняются скриптом сида (lib/documents/templates.ts, lib/db/seed.ts).

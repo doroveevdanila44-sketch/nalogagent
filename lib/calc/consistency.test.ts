@@ -252,7 +252,8 @@ describe('миграция 0002 только добавляет', () => {
     const journal = JSON.parse(fs.readFileSync(path.join(dir, 'meta/_journal.json'), 'utf8')) as {
       entries: { idx: number; when: number; tag: string }[];
     };
-    expect(journal.entries.map((e) => e.tag)).toEqual([
+    // новые миграции дописываются в конец: прежние идут в том же порядке
+    expect(journal.entries.map((e) => e.tag).slice(0, 4)).toEqual([
       '0000_init',
       '0001_tax_regimes',
       '0002_data_sources',

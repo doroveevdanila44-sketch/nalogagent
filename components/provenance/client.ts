@@ -3,7 +3,10 @@ import type { CalcQuery } from '@/lib/provenance/query';
 import type { CalcSnapshot } from '@/lib/provenance/snapshot';
 
 /** Что считать: запросы расчёта на момент `at` или сохранённый ответ чата. */
-export type TargetBody = { queries: CalcQuery[]; at: number } | { message: number };
+export type TargetBody =
+  | { queries: CalcQuery[]; at: number }
+  | { message: number }
+  | { document: string; version?: number };
 
 const cache = new Map<string, Promise<CalcSnapshot[]>>();
 const CACHE_LIMIT = 8;
@@ -75,6 +78,9 @@ export async function downloadFile(url: string): Promise<string> {
 }
 
 export function exportUrl(target: TargetBody): string {
+  if ('document' in target) {
+    return `/api/documents/${target.document}/download?calc=1${target.version ? `&version=${target.version}` : ''}`;
+  }
   return 'message' in target
     ? `/api/export?message=${target.message}`
     : `/api/export?q=${encodeURIComponent(JSON.stringify(target))}`;

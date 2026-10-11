@@ -185,6 +185,11 @@ export const legalEntities = pgTable(
     usnRate: numeric('usn_rate', { precision: 5, scale: 4 }),
     /** Расходы за год без НДС: для УСН «доходы минус расходы» и налога на прибыль */
     annualExpenses: numeric('annual_expenses', { precision: 18, scale: 2 }).notNull().default('0'),
+    /**
+     * Реквизиты для документов: ИНН, КПП, ОГРН, адрес, подписант, банк. В демо вымышленные
+     * (в объекте demo: true). null: реквизиты не заведены, поля документа останутся пустыми.
+     */
+    requisites: jsonb('requisites'),
   },
   (t) => [
     check('legal_entities_vat_status', sql`${t.vatStatus} in ('payer','exempt')`),
@@ -364,4 +369,137 @@ export const reviewRequests = pgTable(
     check('review_requests_status', sql`${t.status} in ('sent','in_review','confirmed','returned')`),
     index('review_requests_user_created_idx').on(t.createdBy, t.createdAt.desc()),
   ],
+);
+
+// ===== Документы: шаблоны, документы, версии, комментарии, история =====
+
+/**
+ * Каталог шаблонов. Заполняется сидом из lib/documents/templates.ts. Все шаблоны образцы:
+ * юридически не проверены, в интерфейсе у каждого пометка «Образец, проверить юристом».
+ */
+export const documentTemplates = pgTable('document_templates', {
+  key: text('key').primaryKey(),
+  /** contract, addendum, report, declaration */
+  category: text('category').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  /** Текст с полями {{ключ}} */
+  body: text('body').notNull(),
+  /** Список полей: ключ, подпись, тип, источник (entity, calc, user), обязательное */
+  fields: jsonb('fields').notNull(),
+  /** entity: документ по одному юрлицу, group: по группе */
+  scope: text('scope').notNull().default('entity'),
+  /** Нужен ли период (месяц, квартал, год, с начала года) */
+  needsPeriod: boolean('needs_period').notNull().default(false),
+  /** docx или xlsx */
+  output: text('output').notNull().default('docx'),
+  /** Налоги, на которых стоят суммы шаблона: для подбора из ответа чата */
+  taxes: jsonb('taxes').notNull().default([]),
+  sort: integer('sort').notNull().default(0),
+});
+
+export const documents = pgTable(
+  'documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    templateKey: text('template_key')
+      .notNull()
+      .references(() => documentTemplates.key),
+    title: text('title').notNull(),
+    /** null для документов по группе */
+    entityId: text('entity_id').references(() => legalEntities.id),
+    /** Period из lib/calc/period.ts или null, если шаблон без периода */
+    period: jsonb('period'),
+    /** draft, review, remarks, approved, withdrawn */
+    status: text('status').notNull().default('draft'),
+    currentVersion: integer('current_version').notNull().default(1),
+    /** Получатель последней отправки на проверку (вымышленный справочник people) */
+    reviewerId: text('reviewer_id').references(() => people.id),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('documents_status', sql`${t.status} in ('draft','review','remarks','approved','withdrawn')`),
+    index('documents_user_updated_idx').on(t.createdBy, t.updatedAt.desc()),
+  ],
+);
+
+/**
+ * Версия документа: неизменяемый снимок (шаблон, значения полей, расчёты, список изменений).
+ * Правка создаёт новую версию, прежняя остаётся как была: обновление строки запрещено триггером.
+ */
+export const documentVersions = pgTable(
+  'document_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    n: integer('n').notNull(),
+    /** Тело и поля шаблона на момент версии */
+    body: text('body').notNull(),
+    fields: jsonb('fields').notNull(),
+    /** Значения полей: ключ → {value, source, label}; деньги строками из расчёта */
+    values: jsonb('values').notNull(),
+    /** Снимки расчётов (CalcSnapshot[]), из которых взяты суммы */
+    calc: jsonb('calc').notNull().default([]),
+    /** Что изменилось относительно прошлой версии */
+    changes: jsonb('changes').notNull().default([]),
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    authorName: text('author_name').notNull(),
+    /** sha256 от канонической записи тела, значений и расчётов */
+    hash: text('hash').notNull(),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [unique('document_versions_doc_n_unique').on(t.documentId, t.n)],
+);
+
+export const documentComments = pgTable(
+  'document_comments',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    /** К какой версии относится комментарий */
+    versionN: integer('version_n').notNull(),
+    /** Поле или абзац документа; null: к документу целиком */
+    fieldKey: text('field_key'),
+    /** comment, remark (замечание), approval (согласование) */
+    kind: text('kind').notNull().default('comment'),
+    body: text('body').notNull(),
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    authorPersonId: text('author_person_id').references(() => people.id),
+    authorName: text('author_name').notNull(),
+    /** Ответ имитирован кнопкой «Имитировать ответ бухгалтера» */
+    isDemo: boolean('is_demo').notNull().default(false),
+    resolved: boolean('resolved').notNull().default(false),
+    resolvedAt: tstz('resolved_at'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('document_comments_kind', sql`${t.kind} in ('comment','remark','approval')`),
+    index('document_comments_doc_idx').on(t.documentId, t.createdAt),
+  ],
+);
+
+/** Лента истории документа: создание, версии, отправка, ответы, согласование, отзыв. */
+export const documentEvents = pgTable(
+  'document_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    /** created, version, submitted, withdrawn, comment, remark, approval, resolved */
+    kind: text('kind').notNull(),
+    versionN: integer('version_n'),
+    actor: text('actor').notNull(),
+    data: jsonb('data').notNull().default({}),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('document_events_doc_idx').on(t.documentId, t.createdAt)],
 );

@@ -215,17 +215,20 @@ function Result({ s, focus }: { s: CalcSnapshot; focus: 'tax' | 'revenue' }) {
 export function CalcDrawer({
   target,
   focus = 'tax',
+  initialTab = 0,
   onClose,
   footer,
 }: {
   target: TargetBody;
+  /** С какого расчёта начать, если их несколько */
+  initialTab?: number;
   /** Что показано на экране под кнопкой: налог расчёта или выручка (баннер «Выручка с начала года») */
   focus?: 'tax' | 'revenue';
   onClose: () => void;
   footer: React.ReactNode;
 }) {
   const [attempt, setAttempt] = useState(0);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(initialTab);
   const state = useSnapshots(target, attempt);
   const items = state.status === 'ready' ? state.items : [];
   const current = items[Math.min(tab, Math.max(items.length - 1, 0))];

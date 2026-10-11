@@ -63,6 +63,8 @@ export function CalcActions({
   tone = 'light',
   hide,
   focus = 'tax',
+  variant = 'bar',
+  tab = 0,
 }: {
   getTarget: () => TargetBody;
   label: string;
@@ -70,6 +72,10 @@ export function CalcActions({
   hide?: ActionId[];
   /** Какая сумма стоит на экране над кнопками: налог расчёта или выручка. Панель выделяет её */
   focus?: 'tax' | 'revenue';
+  /** icon: один значок «Показать расчёт» рядом с суммой (в документе), bar: весь набор кнопок */
+  variant?: 'bar' | 'icon';
+  /** Какой расчёт открыть первым, если их несколько */
+  tab?: number;
 }) {
   const [layers, setLayers] = useState<Layer[]>([]);
   const [busy, setBusy] = useState<ActionId | null>(null);
@@ -119,7 +125,16 @@ export function CalcActions({
 
   return (
     <>
-      <ActionBar label={label} tone={tone} hide={hide} busy={busy} onAction={onAction} />
+      {variant === 'icon' ? (
+        <button type="button" className="calc-ic" data-action="calc" aria-label={label} title={label} onClick={() => onAction('calc')}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="3.5" width="14" height="17" rx="2.2" />
+            <path d="M8.5 8h7M8.5 12h2M13.5 12h2M8.5 16h2M13.5 16h2" />
+          </svg>
+        </button>
+      ) : (
+        <ActionBar label={label} tone={tone} hide={hide} busy={busy} onAction={onAction} />
+      )}
       {error ? (
         <p className="acts-error" role="alert">
           {error}
@@ -133,6 +148,7 @@ export function CalcActions({
               key={i}
               target={l.target}
               focus={focus}
+              initialTab={tab}
               onClose={close}
               footer={
                 <ActionBar

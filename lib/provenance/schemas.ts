@@ -5,7 +5,7 @@ import { toSnapshot, type CalcSnapshot } from './snapshot';
 
 /** Разбор тела запроса и выполнение запросов. Только сервер: клиент zod не загружает. */
 
-const PeriodSchema = z.discriminatedUnion('kind', [
+export const PeriodSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('month'), year: z.number().int(), month: z.number().int() }),
   z.object({ kind: z.literal('quarter'), year: z.number().int(), quarter: z.number().int() }),
   z.object({ kind: z.literal('year'), year: z.number().int() }),
@@ -32,7 +32,13 @@ export const MessageTargetSchema = z.object({
   message: z.number().int().positive(),
 });
 
-export const TargetSchema = z.union([QueriesTargetSchema, MessageTargetSchema]);
+/** Расчёт, сохранённый в версии документа: панель и проверка показывают те же снимки, что в документе. */
+export const DocumentTargetSchema = z.object({
+  document: z.string().uuid(),
+  version: z.number().int().positive().optional(),
+});
+
+export const TargetSchema = z.union([QueriesTargetSchema, MessageTargetSchema, DocumentTargetSchema]);
 export type CalcTarget = z.infer<typeof TargetSchema>;
 
 /** «Сегодня» берётся из запроса, но не дальше суток от серверного времени. */

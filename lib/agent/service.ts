@@ -229,7 +229,17 @@ export async function handleChat(
   // расчёты ответа сохраняются снимками: что сказал агент, то и открывают кнопки под ответом
   const results = (reply.calcs ?? []).map((c) => toSnapshot(c.result, { at: nowMs, tz: appTz, scope: c.scope }));
   const provenance: TurnProvenance | null =
-    results.length > 0 ? { line: lineFromSnapshots(results), count: results.length } : null;
+    results.length > 0
+      ? {
+          line: lineFromSnapshots(results),
+          count: results.length,
+          doc: {
+            entityIds: reply.interp?.entityMode === 'named' ? reply.interp.entities : [],
+            period: reply.interp?.period ?? null,
+            tax: reply.interp?.tax ?? null,
+          },
+        }
+      : null;
 
   const stored: StoredCalc = {
     tables: reply.tables,

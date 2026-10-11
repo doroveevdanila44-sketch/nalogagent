@@ -3,6 +3,8 @@ import { cyr } from './regex';
 import { mentionsEntity } from './router';
 import type { LlmProvider } from './provider';
 import { normalize } from './text';
+import { readyVariants } from '@/lib/documents/suggest';
+import type { SuggestRequest } from '@/lib/documents/types';
 import type { CalcResult, Intent, ParseContext, ParsedIntent } from './types';
 
 /**
@@ -49,6 +51,11 @@ function detectIntent(t: string): Intent | null {
 
 export class StubProvider implements LlmProvider {
   readonly name = 'stub';
+
+  /** Готовые формулировки по полю документа; без внешних сервисов и без цифр. */
+  async suggest(req: SuggestRequest): Promise<string[]> {
+    return readyVariants(req.fieldKey);
+  }
 
   async parse(question: string, ctx: ParseContext): Promise<ParsedIntent> {
     const t = normalize(question);

@@ -115,6 +115,8 @@ export interface ChatTurn {
 export interface TurnProvenance {
   line: SourceLineData;
   count: number;
+  /** Что понято в вопросе: по нему «Сформировать документ» подставляет юрлицо и период */
+  doc?: { entityIds: string[]; period: Period | null; tax: 'vat' | 'usn' | 'profit' | null };
 }
 
 // ===== Понимание вопроса =====

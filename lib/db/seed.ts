@@ -9,7 +9,9 @@ import {
 import { epochFromWallClock } from '@/lib/calc/time';
 import { getEnv } from '@/lib/env';
 import type { Db } from './client';
-import { dataSources, legalEntities, people, revenueMonthly, rules, seasonality } from './schema';
+import { TEMPLATES } from '@/lib/documents/templates';
+import type { EntityRequisites } from '@/lib/documents/types';
+import { dataSources, documentTemplates, legalEntities, people, revenueMonthly, rules, seasonality } from './schema';
 
 /**
  * Сид выдуманных данных демо. Детерминирован (не зависит от часов) и идемпотентен:
@@ -40,6 +42,48 @@ export interface SeedOptions {
   month?: number;
 }
 
+/**
+ * Реквизиты юрлиц для документов. Все выдуманы и помечены demo: ИНН и ОГРН с кодом региона 99
+ * (такого региона нет), улица «Образцовая». Настоящих реквизитов клиента здесь нет.
+ */
+export const SEED_REQUISITES: Record<string, EntityRequisites> = {
+  alfa: {
+    inn: '9900000011', kpp: '990001001', ogrn: '1999900000011',
+    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 1, офис 1 (демо)',
+    signerName: 'Образцов Олег Иванович', signerPosition: 'генеральный директор',
+    bank: 'Банк «Образец» (демо)', bik: '049999991', account: '40702810000000000011', corrAccount: '30101810000000000991',
+    email: 'alfa@example.invalid', phone: '+7 000 000-00-11', demo: true,
+  },
+  beta: {
+    inn: '990000000022', ogrn: '399990000000022',
+    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 2 (демо)',
+    signerName: 'Шаблонов Сергей Андреевич', signerPosition: 'индивидуальный предприниматель',
+    bank: 'Банк «Образец» (демо)', bik: '049999991', account: '40802810000000000022', corrAccount: '30101810000000000991',
+    email: 'beta@example.invalid', phone: '+7 000 000-00-22', demo: true,
+  },
+  delta: {
+    inn: '990000000033', ogrn: '399990000000033',
+    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 3 (демо)',
+    signerName: 'Примеров Дмитрий Олегович', signerPosition: 'индивидуальный предприниматель',
+    bank: 'Банк «Образец» (демо)', bik: '049999991', account: '40802810000000000033', corrAccount: '30101810000000000991',
+    email: 'delta@example.invalid', phone: '+7 000 000-00-33', demo: true,
+  },
+  gamma: {
+    inn: '9900000044', kpp: '990001001', ogrn: '1999900000044',
+    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 4, офис 4 (демо)',
+    signerName: 'Условная Мария Павловна', signerPosition: 'директор',
+    bank: 'Банк «Образец» (демо)', bik: '049999991', account: '40702810000000000044', corrAccount: '30101810000000000991',
+    email: 'gamma@example.invalid', phone: '+7 000 000-00-44', demo: true,
+  },
+  epsilon: {
+    inn: '9900000055', kpp: '990001001', ogrn: '1999900000055',
+    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 5, офис 5 (демо)',
+    signerName: 'Типовой Антон Викторович', signerPosition: 'генеральный директор',
+    bank: 'Банк «Образец» (демо)', bik: '049999991', account: '40702810000000000055', corrAccount: '30101810000000000991',
+    email: 'epsilon@example.invalid', phone: '+7 000 000-00-55', demo: true,
+  },
+};
+
 export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void> {
   const tz = opts.tz ?? getEnv().appTz;
   const at = SEED_SOURCE.loadedAt;
@@ -61,6 +105,40 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         title: sql`excluded.title`,
         isDemo: sql`excluded.is_demo`,
         loadedAt: sql`excluded.loaded_at`,
+      },
+    });
+
+  // каталог шаблонов документов: образцы, юридически не проверены
+  await db
+    .insert(documentTemplates)
+    .values(
+      TEMPLATES.map((t) => ({
+        key: t.key,
+        category: t.category,
+        title: t.title,
+        description: t.description,
+        body: t.body,
+        fields: t.fields,
+        scope: t.scope,
+        needsPeriod: t.needsPeriod,
+        output: t.output,
+        taxes: t.taxes,
+        sort: t.sort,
+      })),
+    )
+    .onConflictDoUpdate({
+      target: documentTemplates.key,
+      set: {
+        category: sql`excluded.category`,
+        title: sql`excluded.title`,
+        description: sql`excluded.description`,
+        body: sql`excluded.body`,
+        fields: sql`excluded.fields`,
+        scope: sql`excluded.scope`,
+        needsPeriod: sql`excluded.needs_period`,
+        output: sql`excluded.output`,
+        taxes: sql`excluded.taxes`,
+        sort: sql`excluded.sort`,
       },
     });
 
@@ -94,6 +172,7 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         taxRegime: e.taxRegime,
         usnRate: e.usnRate ? e.usnRate.toFixed(4) : null,
         annualExpenses: e.annualExpenses.toFixed(2),
+        requisites: SEED_REQUISITES[e.id] ?? null,
       })),
     )
     .onConflictDoUpdate({
@@ -111,6 +190,7 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         taxRegime: sql`excluded.tax_regime`,
         usnRate: sql`excluded.usn_rate`,
         annualExpenses: sql`excluded.annual_expenses`,
+        requisites: sql`excluded.requisites`,
       },
     });
 

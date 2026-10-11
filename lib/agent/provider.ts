@@ -1,4 +1,5 @@
 import type { InterpretContext, RawFields } from './interpret';
+import type { SuggestRequest } from '@/lib/documents/types';
 import type { CalcResult, ParseContext, ParsedIntent } from './types';
 
 /**
@@ -18,4 +19,9 @@ export interface LlmProvider {
    * правила заглушки. Всё, что вернула модель, проходит проверку sanitizeFields.
    */
   extract?(question: string, ctx: InterpretContext): Promise<Partial<RawFields>>;
+  /**
+   * Предложения формулировки для текстового пункта документа. Модель пишет только слова: суммы и даты
+   * подставляет код из расчёта, поэтому варианты с цифрами отбрасываются (lib/documents/suggest.ts).
+   */
+  suggest?(req: SuggestRequest): Promise<string[]>;
 }

@@ -5,6 +5,7 @@ import { momentFromEpoch } from '@/lib/calc/time';
 import type { Db } from '@/lib/db/client';
 import { loadCalcData } from '@/lib/db/queries';
 import { chatMessages, checks, people, reviewRequests } from '@/lib/db/schema';
+import { documentSnapshots, DocError } from '@/lib/documents/service';
 import { buildWorkbook } from '@/lib/export/xlsx';
 import { exportFileName, requestTitle } from './query';
 import { clampAt, runQueries, type CalcTarget } from './schemas';
@@ -33,6 +34,14 @@ export async function resolveTarget(
   args: { userId: string; target: CalcTarget; nowMs: number; tz: string },
 ): Promise<CalcSnapshot[]> {
   const { target } = args;
+  if ('document' in target) {
+    try {
+      return await documentSnapshots(db, { userId: args.userId, id: target.document, version: target.version });
+    } catch (e) {
+      if (e instanceof DocError) throw new TargetError(e.message, e.status === 404 ? 404 : 422);
+      throw e;
+    }
+  }
   if ('message' in target) {
     const [row] = await db
       .select({ calc: chatMessages.calc })

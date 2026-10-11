@@ -257,16 +257,9 @@ export interface WorkbookMeta {
   title?: string;
 }
 
-export async function buildWorkbook(results: CalcResult[], meta: WorkbookMeta): Promise<Buffer> {
+/** Лист «Итог», «По месяцам», «Расчёт» и «Источник» в уже созданной книге (после листов вызывающего). */
+export function addCalcSheets(wb: ExcelJS.Workbook, results: CalcResult[], meta: WorkbookMeta): void {
   if (results.length === 0) throw new Error('Нечего выгружать: нет результатов расчёта');
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'Агент по НДС (демо)';
-  wb.title = meta.title ?? results.map(titleOf).join('; ');
-  wb.created = new Date(meta.at);
-  wb.modified = new Date(meta.at);
-  // при открытии Excel пересчитывает формулы; значения в файле уже посчитаны приложением
-  wb.calcProperties.fullCalcOnLoad = true;
-
   const total = wb.addWorksheet(SHEET_TOTAL);
   const months = wb.addWorksheet(SHEET_MONTHS);
   const calc = wb.addWorksheet(SHEET_CALC);
@@ -287,7 +280,24 @@ export async function buildWorkbook(results: CalcResult[], meta: WorkbookMeta): 
   writeMonths(months, results, where, meta);
   writeTotal(total, results, where, meta);
   writeSource(source, results, meta);
+}
 
+/** Новая книга со свойствами приложения; формулы пересчитываются при открытии. */
+export function newWorkbook(meta: WorkbookMeta, title: string): ExcelJS.Workbook {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Агент по НДС (демо)';
+  wb.title = title;
+  wb.created = new Date(meta.at);
+  wb.modified = new Date(meta.at);
+  // при открытии Excel пересчитывает формулы; значения в файле уже посчитаны приложением
+  wb.calcProperties.fullCalcOnLoad = true;
+  return wb;
+}
+
+export async function buildWorkbook(results: CalcResult[], meta: WorkbookMeta): Promise<Buffer> {
+  if (results.length === 0) throw new Error('Нечего выгружать: нет результатов расчёта');
+  const wb = newWorkbook(meta, meta.title ?? results.map(titleOf).join('; '));
+  addCalcSheets(wb, results, meta);
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out as ArrayBuffer);
 }

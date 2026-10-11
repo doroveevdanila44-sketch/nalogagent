@@ -223,7 +223,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     <Link
       href={href}
       className="tab"
-      aria-current={pathname === href ? 'page' : undefined}
+      aria-current={pathname === href || pathname.startsWith(`${href}/`) ? 'page' : undefined}
       prefetch={false}
     >
       {icon}
@@ -284,6 +284,14 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
               <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
               <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
               <rect x="3.5" y="15.5" width="7" height="5" rx="1.5" />
+            </svg>,
+          )}
+          {tab(
+            '/documents',
+            'Документы',
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z" />
+              <path d="M14 3.5V8h4M8.5 12.5h7M8.5 16h5" />
             </svg>,
           )}
         </nav>
