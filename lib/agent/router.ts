@@ -1,6 +1,8 @@
+import type { Moment } from '@/lib/calc';
+import { extractFields } from './interpret';
 import { cyr } from './regex';
 import { normalize } from './text';
-import type { AgentClass, EntityRef, Pending } from './types';
+import type { AgentClass, EntityRef, Pending, Slot } from './types';
 
 /**
  * Маршрутизатор без модели. Порядок (AGENT.md):
@@ -38,10 +40,15 @@ const BOUNDARY = cyr(
 );
 
 const STRONG_TOPIC = cyr(
-  '(ндс|ставк\\w*|порог\\w*|вычет\\w*|деклараци\\w*|квартал\\w*|упрощ\\w*|\\bусн\\b|дроблен\\w*|юрлиц\\w*|юридическ\\w+ лиц\\w*|дефлятор\\w*|лимит\\w*|(?<![0-9])(5|7|22) ?(%|процент\\w*)|единый бизнес|единого бизнеса)',
+  '(ндс|ставк\\w*|порог\\w*|вычет\\w*|деклараци\\w*|квартал\\w*|упрощ\\w*|\\bусн\\b|дроблен\\w*|юрлиц\\w*|юридическ\\w+ лиц\\w*|дефлятор\\w*|лимит\\w*|(?<![0-9])(5|7|22) ?(%|процент\\w*)|едины\\w+ бизнес\\w*)',
 );
 const WEAK_TOPIC = cyr(
-  '(налог\\w*|выруч\\w*|прибыл\\w*|плат[ее]ж\\w*|платит\\w*|заплат\\w*|прогноз\\w*|предупрежд\\w*|риск\\w*|освобожд\\w*|пересеч\\w*|машин\\w*|автомоб\\w*|лизинг\\w*|закуп\\w*|покуп\\w*|купим|купить|сценари\\w*|экономи\\w*|групп\\w*|20 млн|срок\\w*|оплат\\w*|к уплате|бюджет\\w*|счет[- ]фактур\\w*|счета[- ]фактур\\w*|сравни\\w*|объедин\\w*)',
+  '(налог\\w*|расчет\\w*|посчита\\w*|подсчита\\w*|рассчита\\w*|начисл\\w*|ндфл|взнос\\w*|енвд|патент\\w*|выруч\\w*|прибыл\\w*|плат[ее]ж\\w*|платит\\w*|заплат\\w*|прогноз\\w*|предупрежд\\w*|риск\\w*|освобожд\\w*|пересеч\\w*|машин\\w*|автомоб\\w*|лизинг\\w*|закуп\\w*|покуп\\w*|купим|купить|сценари\\w*|экономи\\w*|групп\\w*|20 млн|срок\\w*|оплат\\w*|к уплате|бюджет\\w*|счет[- ]фактур\\w*|счета[- ]фактур\\w*|сравни\\w*|объедин\\w*)',
+);
+
+/** Просьба об оценке схемы с точки зрения закона: отказ из набора, а не расчёт. */
+const LEGAL = cyr(
+  'законн\\w*|легальн\\w*|незаконн\\w*|правомерн\\w*|можно ли так|накажут|оштрафуют|уголовн\\w*|признает ли (налоговая|фнс)|юридическ\\w+ (оценк|заключени|консультац)\\w*|оцени\\w* схем\\w*|судебн\\w*',
 );
 
 const OFF_TOPIC = cyr(
@@ -70,9 +77,16 @@ export function mentionsEntity(text: string, entities: EntityRef[]): EntityRef |
   return null;
 }
 
+/** Что известно о ходе разговора: чего ждёт агент и был ли прошлый ответ с понятым вопросом. */
+export interface RouteContext {
+  today: Moment;
+  awaiting: Slot[];
+  hasPrevious: boolean;
+}
+
 export function classify(
   question: string,
-  opts: { entities?: EntityRef[]; pending?: Pending | null } = {},
+  opts: { entities?: EntityRef[]; pending?: Pending | null; context?: RouteContext } = {},
 ): Route {
   const t = normalize(question);
   const entities = opts.entities ?? [];
@@ -86,11 +100,21 @@ export function classify(
   }
   if (SERVICE.test(t) && wordCount(t) <= 8) return { cls: 'C' };
 
+  // 1а. оценка схемы с точки зрения закона: ответ строит интерпретация (отказ из набора)
+  if (LEGAL.test(t)) return { cls: 'A' };
+
   // 2. схемы обхода
   if (BOUNDARY.test(t)) return { cls: 'F' };
 
   // ответ на уточняющий вопрос: число или юрлицо при незавершённом запросе
   if (opts.pending && (/\d/.test(t) || mentionsEntity(t, entities))) return { cls: 'A' };
+
+  // короткий ответ на уточнение или поправка к прежнему вопросу: «февраль», «УСН», «по Бете»
+  if (opts.context && (opts.context.awaiting.length > 0 || opts.context.hasPrevious)) {
+    const f = extractFields(question, { entities, today: opts.context.today });
+    const slot = f.all || f.entities.length > 0 || f.taxes.length > 0 || f.periods.length > 0 || f.rate !== null;
+    if (f.fragment && slot) return { cls: 'A' };
+  }
 
   // 3. словарь темы
   if (STRONG_TOPIC.test(t)) return { cls: 'A' };

@@ -219,17 +219,20 @@ export function ChatView() {
   }, [fit]);
 
   const send = useCallback(
-    async (raw: string) => {
+    async (raw: string, baseId?: number) => {
       const text = raw.trim();
       if (!text || sending) return;
       setSendError(null);
-      setDraft('');
+      // текст в поле ввода не трогаем, если сообщение ушло с кнопки
+      if (baseId === undefined) setDraft('');
       setSending({ key: Date.now(), text });
       try {
-        const res = await api<{ user: ChatTurn; agent: ChatTurn }>('/api/chat', { body: { message: text } });
+        const res = await api<{ user: ChatTurn; agent: ChatTurn }>('/api/chat', {
+          body: baseId === undefined ? { message: text } : { message: text, baseId },
+        });
         setTurns((prev) => [...(prev ?? []), res.user, res.agent]);
       } catch (e) {
-        setDraft(text);
+        if (baseId === undefined) setDraft(text);
         if (e instanceof ApiError && e.code === 'locked') {
           // PIN-экран поверх, текст остаётся в поле
         } else if (e instanceof ApiError && e.code === 'network') {
@@ -255,6 +258,13 @@ export function ChatView() {
     void send(text);
     if (hadFocus.current) fieldRef.current?.focus();
     hadFocus.current = false;
+  };
+
+  /** Кнопка под ответом: быстрый ответ или выбор в «Изменить». Фокус поля остаётся как был. */
+  const pickQuick = (text: string, baseId: number) => {
+    const had = document.activeElement === fieldRef.current;
+    void send(text, baseId);
+    if (had) fieldRef.current?.focus();
   };
 
   const onFieldKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -317,7 +327,7 @@ export function ChatView() {
         {turns ? (
           <div className="chat" aria-live="polite">
             {turns.map((t) => (
-              <Message key={t.id} turn={t} />
+              <Message key={t.id} turn={t} onPick={pickQuick} disabled={Boolean(sending)} />
             ))}
             {sending ? (
               <>

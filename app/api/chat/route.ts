@@ -8,7 +8,11 @@ import { getDb } from '@/lib/db/client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const Body = z.object({ message: z.string().trim().min(1).max(1000) });
+const Body = z.object({
+  message: z.string().trim().min(1).max(1000),
+  /** Ответ, к которому относится нажатая кнопка («Изменить», быстрый ответ) */
+  baseId: z.number().int().positive().optional(),
+});
 
 /** История: последние 50 сообщений. */
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -26,7 +30,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const gate = await requireApiAuth(req, { mutating: true });
     if (!gate.ok) return gate.res;
     const body = await readJson(req, Body);
-    const turns = await handleChat(getDb(), { userId: gate.auth.userId, question: body.message });
+    const turns = await handleChat(getDb(), {
+      userId: gate.auth.userId,
+      question: body.message,
+      baseId: body.baseId,
+    });
     return json(turns);
   } catch (e) {
     if (e instanceof BodyError) return json({ error: 'Введите вопрос', code: 'invalid' }, 400);

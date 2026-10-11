@@ -1466,6 +1466,132 @@
     color: var(--color-accent);
     margin-top: 8px;
   }
+  /* Понимание вопроса: карточка «Понял так» над ответом и кнопки быстрых ответов. Только новые
+     классы; цвета из токенов, обводка с четырёх сторон одинаковая. */
+  .understood {
+    background: var(--color-page);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .understood .u-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .understood .u-text {
+    min-width: 0;
+  }
+  .understood .u-label {
+    color: var(--color-muted);
+  }
+  .understood b {
+    font-weight: 600;
+  }
+  .understood .u-kind {
+    color: var(--color-accent);
+    font-weight: 500;
+  }
+  .understood .u-notes {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .u-edit {
+    flex: none;
+    min-height: 36px;
+    padding: 0 10px;
+    margin-right: -6px;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: var(--color-accent);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition:
+      background-color var(--t),
+      color var(--t);
+  }
+  @media (hover: hover) {
+    .u-edit:hover {
+      background: var(--color-mint);
+    }
+  }
+  .u-edit:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .u-panel {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-line);
+  }
+  .u-panel[hidden] {
+    display: none;
+  }
+  .qreplies {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .qrow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .qlabel {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .qlist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /* Быстрые ответы в цвете подсказок чата: бордо, светлый текст, высота 36 px */
+  .qreply {
+    height: 36px;
+    max-width: 100%;
+    background: var(--color-wine);
+    border: 1px solid var(--glass-edge);
+    color: var(--color-cream);
+    border-radius: 999px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition:
+      background-color var(--t),
+      transform var(--t),
+      opacity var(--t);
+  }
+  @media (hover: hover) {
+    .qreply:hover:not(:disabled) {
+      background: var(--color-wine-hover);
+    }
+  }
+  .qreply:active:not(:disabled) {
+    background: var(--color-wine-hover);
+    transform: scale(0.97);
+  }
+  .qreply:disabled {
+    opacity: 0.55;
+  }
+  .qreply:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
   .typing {
     display: inline-flex;
     gap: 4px;

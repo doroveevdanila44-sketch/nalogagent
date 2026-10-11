@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createOwner } from '@/lib/auth/service';
 import { momentFromEpoch } from '@/lib/calc/time';
 import type { Db } from '@/lib/db/client';
-import { loadDashboardInput } from '@/lib/db/queries';
+import { dashboardInput } from '@/lib/calc/service';
+import { loadCalcData } from '@/lib/db/queries';
 import { seedDatabase } from '@/lib/db/seed';
 import { agentState, chatMessages, llmUsage, users } from '@/lib/db/schema';
 import { createTestDb } from '@/lib/db/testing';
@@ -109,9 +110,12 @@ describe('ответы по расчёту на дату теста', () => {
     expect(t.rows.at(-1)![1].replace(/\u00A0/g, ' ')).toBe('8,05 млн');
     // ближайший срок группы и формулы в «Как посчитано»
     expect(r.text.replace(/\u00A0/g, ' ')).toContain('Ближайший срок 28 октября');
-    expect(r.how.join(' ')).toContain('прибыль =');
-    expect(r.how.join(' ').replace(/\u00A0/g, ' ')).toContain('начислено на сегодня 3 324 432 ₽');
-    expect(r.how.join(' ')).toContain('минимальный налог 1% доходов');
+    // формулы в «Как посчитано» это шаги calcTax: доходы без НДС, база, налог года, минимальный налог
+    const how = r.how.join(' ').replace(/\u00A0/g, ' ');
+    expect(how).toContain('база, прибыль: 60 655 737,70 ₽ - расходы 44 000 000 ₽ = 16 655 737,70 ₽');
+    expect(how).toContain('налог на прибыль за год: база 16 655 737,70 ₽ × 25% = 4 163 934,43 ₽');
+    expect(how).toContain('минимальный налог: доходы 20 952 380,95 ₽ × 1% = 209 523,81 ₽');
+    expect(how).toContain('Источник: Выгрузка из 1С (демо), загружена 10 октября 2026, 18:00');
     expect(r.text).not.toContain('не считаю');
   });
 
@@ -243,7 +247,8 @@ function contract(name: string, make: () => LlmProvider) {
   describe(`контракт провайдера «${name}»`, () => {
     it('30 контрольных вопросов: в ответах нет числа вне расчёта', async () => {
       const provider = make();
-      const input = await loadDashboardInput(db, momentFromEpoch(NOW, 'Asia/Kamchatka'));
+      const data = await loadCalcData(db, momentFromEpoch(NOW, 'Asia/Kamchatka'));
+      const input = dashboardInput(data);
       const entities: EntityRef[] = input.entities.map((e) => ({ id: e.id, name: e.name, aliases: aliasesFor(e.name) }));
       let answered = 0;
       for (const q of CONTROL_QUESTIONS) {
@@ -251,6 +256,7 @@ function contract(name: string, make: () => LlmProvider) {
           question: q,
           entities,
           input,
+          data,
           now: momentFromEpoch(NOW, 'Asia/Kamchatka'),
           provider,
           counters: { nextRefusal: async () => 0, nextGreeting: async () => 0 },
@@ -271,12 +277,14 @@ function contract(name: string, make: () => LlmProvider) {
     });
 
     it('результат расчёта детерминирован и не зависит от провайдера', async () => {
-      const input = await loadDashboardInput(db, momentFromEpoch(NOW, 'Asia/Kamchatka'));
+      const data = await loadCalcData(db, momentFromEpoch(NOW, 'Asia/Kamchatka'));
+      const input = dashboardInput(data);
       const entities: EntityRef[] = input.entities.map((e) => ({ id: e.id, name: e.name, aliases: aliasesFor(e.name) }));
       const reply = await runPipeline({
         question: 'Какая ставка выгоднее?',
         entities,
         input,
+        data,
         now: momentFromEpoch(NOW, 'Asia/Kamchatka'),
         provider: make(),
         counters: { nextRefusal: async () => 0, nextGreeting: async () => 0 },

@@ -1,3 +1,4 @@
+import { extractFields, type InterpretContext, type RawFields } from './interpret';
 import { cyr } from './regex';
 import { mentionsEntity } from './router';
 import type { LlmProvider } from './provider';
@@ -87,11 +88,16 @@ export class StubProvider implements LlmProvider {
       };
     }
 
-    // «а по Бете?»: то же намерение, что в прошлом ответе
-    if (entity && ctx.lastIntent) {
+    // «а по Бете?»: то же намерение, что в прошлом ответе (расчёт суммы продолжает interpret.ts)
+    if (entity && ctx.lastIntent && ctx.lastIntent !== 'amount') {
       return { intent: ctx.lastIntent, entityId: entity.id };
     }
     return { intent: 'unknown', entityId: entity?.id ?? null };
+  }
+
+  /** Поля вопроса правилами. GigaChat позже вернёт те же поля из ответа модели. */
+  async extract(question: string, ctx: InterpretContext): Promise<Partial<RawFields>> {
+    return extractFields(question, ctx);
   }
 
   async explain(result: CalcResult): Promise<string> {

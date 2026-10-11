@@ -1,14 +1,28 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { dashboardInput } from '@/lib/calc/service';
 import { MissingRuleError } from '@/lib/calc/rules';
 import { momentFromEpoch } from '@/lib/calc/time';
 import type { Db } from '@/lib/db/client';
-import { loadDashboardInput } from '@/lib/db/queries';
+import { loadCalcData } from '@/lib/db/queries';
 import { agentState, chatMessages, llmUsage } from '@/lib/db/schema';
 import { getEnv } from '@/lib/env';
 import { aliasesFor, runPipeline } from './pipeline';
 import type { LlmProvider } from './provider';
 import { getProvider } from './provider-factory';
-import type { AgentReply, ChatTurn, EntityRef, Intent, Pending, Table } from './types';
+import type {
+  AgentReply,
+  ChangeOptions,
+  ChatTurn,
+  EntityRef,
+  Intent,
+  Interpretation,
+  Pending,
+  QuickReply,
+  Slot,
+  Table,
+  Understanding,
+  Unsupported,
+} from './types';
 
 const SESSION_GAP_MS = 4 * 3_600_000;
 export const HISTORY_LIMIT = 50;
@@ -22,6 +36,16 @@ interface StoredCalc {
   pending?: Pending | null;
   intent?: Intent | null;
   entityId?: string | null;
+  /** Карточка «Понял так» */
+  understood?: Understanding | null;
+  /** Кнопки быстрых ответов */
+  quick?: QuickReply[];
+  /** Варианты по «Изменить» */
+  change?: ChangeOptions | null;
+  /** Понимание вопроса для склейки с коротким ответом */
+  interp?: Interpretation | null;
+  awaiting?: Slot[];
+  unsupported?: Unsupported['kind'] | null;
 }
 
 function toTurn(r: typeof chatMessages.$inferSelect): ChatTurn {
@@ -35,6 +59,9 @@ function toTurn(r: typeof chatMessages.$inferSelect): ChatTurn {
     how: calc.how ?? [],
     fromCalc: calc.fromCalc ?? false,
     createdAt: r.createdAt.toISOString(),
+    understood: calc.understood ?? null,
+    quick: calc.quick ?? [],
+    change: calc.change ?? null,
   };
 }
 
@@ -51,7 +78,14 @@ export async function loadHistory(db: Db, userId: string): Promise<ChatTurn[]> {
 
 export async function handleChat(
   db: Db,
-  args: { userId: string; question: string; nowMs?: number; provider?: LlmProvider },
+  args: {
+    userId: string;
+    question: string;
+    nowMs?: number;
+    provider?: LlmProvider;
+    /** Ответ, к которому относится нажатая кнопка: его понимание вопроса продолжается */
+    baseId?: number;
+  },
 ): Promise<{ user: ChatTurn; agent: ChatTurn }> {
   const started = Date.now();
   const nowMs = args.nowMs ?? started;
@@ -70,12 +104,32 @@ export async function handleChat(
     .where(eq(chatMessages.userId, args.userId))
     .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
     .limit(1);
-  const lastCalc = (lastAgent?.role === 'agent' ? lastAgent.calc : null) as StoredCalc | null;
+
+  // Кнопка под ответом продолжает именно тот ответ, а не последний в ленте
+  let base = lastAgent;
+  let refine = false;
+  if (args.baseId !== undefined) {
+    const [row] = await db
+      .select()
+      .from(chatMessages)
+      .where(
+        and(eq(chatMessages.id, args.baseId), eq(chatMessages.userId, args.userId), eq(chatMessages.role, 'agent')),
+      )
+      .limit(1);
+    if (row) {
+      base = row;
+      refine = true;
+    }
+  }
+  const lastCalc = (base?.role === 'agent' ? base.calc : null) as StoredCalc | null;
+
+  // Один снимок данных на дашборд, чат и расчётный сервис
+  const data = await loadCalcData(db, now);
 
   // Нет правил на текущий год (например, в январе, пока не добавлены записи): честный ответ вместо сбоя
-  let input: Awaited<ReturnType<typeof loadDashboardInput>> | null = null;
+  let input: ReturnType<typeof dashboardInput> | null = null;
   try {
-    input = await loadDashboardInput(db, now);
+    input = dashboardInput(data);
   } catch (e) {
     if (!(e instanceof MissingRuleError)) throw e;
   }
@@ -119,11 +173,16 @@ export async function handleChat(
         question,
         entities,
         input,
+        data,
         now,
+        tz: appTz,
         provider,
         counters: { nextRefusal: () => bump('refusalIndex'), nextGreeting: () => bump('greetIndex') },
         pending: lastCalc?.pending ?? null,
         lastIntent: lastCalc?.intent ?? null,
+        previous: lastCalc?.interp ?? null,
+        awaiting: lastCalc?.awaiting ?? [],
+        refine,
         sessionActive,
         agentMessages: agentMessages ?? 0,
       });
@@ -147,6 +206,12 @@ export async function handleChat(
     pending: reply.pending ?? null,
     intent: reply.intent ?? null,
     entityId: reply.entityId ?? null,
+    understood: reply.understood ?? null,
+    quick: reply.quick ?? [],
+    change: reply.change ?? null,
+    interp: reply.interp ?? null,
+    awaiting: reply.awaiting ?? [],
+    unsupported: reply.unsupported ?? null,
   };
 
   const [userRow, agentRow] = await db.transaction(async (tx) => {

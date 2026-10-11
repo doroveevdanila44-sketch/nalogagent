@@ -1,4 +1,6 @@
 import type { ChatTurn, Table } from '@/lib/agent/types';
+import { QuickReplies } from './QuickReplies';
+import { Understood } from './Understood';
 
 function TableView({ table }: { table: Table }) {
   const best = new Set((table.best ?? []).map(([r, c]) => `${r}:${c}`));
@@ -36,14 +38,28 @@ function TableView({ table }: { table: Table }) {
 
 /**
  * Сообщение чата. Текст выводится как текст, разметки нет, подставить HTML нельзя.
- * Под ответом по расчёту подпись «Цифры из калькулятора» и раскрывающийся блок «Как посчитано».
+ * Над ответом по расчёту карточка «Понял так», под ним подпись «Цифры из калькулятора» и
+ * раскрывающийся блок «Как посчитано», ниже кнопки быстрых ответов (уточнение, сужение до юрлица).
+ * onPick отправляет текст кнопки вместе с номером этого ответа.
  */
-export function Message({ turn }: { turn: ChatTurn }) {
+export function Message({
+  turn,
+  onPick,
+  disabled,
+}: {
+  turn: ChatTurn;
+  onPick?: (text: string, baseId: number) => void;
+  disabled?: boolean;
+}) {
   if (turn.role === 'user') return <div className="msg me">{turn.text}</div>;
 
   const paragraphs = turn.text.split(/\n{2,}/).filter(Boolean);
+  const pick = (text: string) => onPick?.(text, turn.id);
   return (
     <div className="msg">
+      {turn.understood ? (
+        <Understood card={turn.understood} change={turn.change} onPick={pick} disabled={disabled || !onPick} />
+      ) : null}
       {paragraphs.map((p, i) => (
         <p key={i}>{p}</p>
       ))}
@@ -60,6 +76,15 @@ export function Message({ turn }: { turn: ChatTurn }) {
             ))}
           </div>
         </details>
+      ) : null}
+      {turn.quick.length > 0 ? (
+        <QuickReplies
+          items={turn.quick}
+          label="Быстрые ответы"
+          showGroupLabels={new Set(turn.quick.map((q) => q.group)).size > 1}
+          disabled={disabled || !onPick}
+          onPick={pick}
+        />
       ) : null}
     </div>
   );

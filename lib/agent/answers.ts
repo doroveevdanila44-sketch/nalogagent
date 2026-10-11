@@ -2,24 +2,15 @@ import {
   bestRate,
   breakEvenShare,
   buildWarnings,
-  compareDays,
-  dateRu,
   dec,
   forecast,
-  groupPayments,
   groupSaving,
   groupTotal,
-  incomeTax,
   mln,
-  nextPayment,
-  incomeTaxSchedule,
   pct,
-  quarterRevenue,
   pluralRu,
   rub,
   selectedRate,
-  REGIME_LABEL,
-  sum,
   taxFor,
   type DashboardInput,
   type Dec,
@@ -36,12 +27,14 @@ import type { CalcResult, Intent, ParsedIntent, Table } from './types';
 export interface AnswerCtx {
   input: DashboardInput;
   now: Moment;
+  /** Несколько юрлиц, названных в вопросе: ответ только по ним */
+  only?: string[];
 }
 
 const comma = (d: Dec) => d.toString().replace('.', ',');
 
 function pick(c: AnswerCtx, entityId?: string | null): EntityInput[] {
-  const all = c.input.entities;
+  const all = c.only?.length ? c.input.entities.filter((e) => c.only!.includes(e.id)) : c.input.entities;
   if (!entityId) return all;
   const one = all.filter((e) => e.id === entityId);
   return one.length ? one : all;
@@ -134,6 +127,7 @@ export function answerWarnings(c: AnswerCtx, entityId?: string | null): CalcResu
   const { entities, selections, ctx } = c.input;
   let list = buildWarnings(entities, selections, ctx, c.now).filter((w) => w.level !== 'info');
   if (entityId) list = list.filter((w) => !w.entityId || w.entityId === entityId);
+  else if (c.only?.length) list = list.filter((w) => !w.entityId || c.only!.includes(w.entityId));
   const paragraphs = list.length
     ? [
         `Сейчас вижу ${list.length} ${pluralRu(list.length, 'предупреждение', 'предупреждения', 'предупреждений')}:`,
@@ -185,59 +179,6 @@ export function answerFragmentation(c: AnswerCtx): CalcResult {
   };
 }
 
-export function answerForecast(c: AnswerCtx, entityId?: string | null): CalcResult {
-  const { selections, ctx } = c.input;
-  const g = ctx.rules.generalRate;
-  const payers = pick(c, entityId).filter((e) => e.status === 'payer');
-  const q = Math.floor(c.now.month / 3);
-  const qRev = (e: EntityInput, quarter: number): Dec => quarterRevenue(e, ctx, quarter, c.now);
-
-  const rows: string[][] = [];
-  const how: string[] = [];
-  const taxes: Dec[] = [];
-  for (const e of payers) {
-    const rate = selectedRate(e, selections);
-    const rev = qRev(e, q);
-    const t = taxFor(rate, rev, e.inputVatShare, g);
-    taxes.push(t);
-    rows.push([`${e.name} (${rate}%)`, mln(t, 2)]);
-    how.push(`${e.name}: ${rub(rev)} выручки квартала, ставка ${rate}%`);
-  }
-  const total = groupTotal(taxes);
-  rows.push([`Всего за ${q + 1} квартал`, mln(total, 2)]);
-
-  const paragraphs = [`Налог за текущий ${q + 1} квартал по выбранным ставкам, только плательщики:`];
-
-  const prev = q - 1;
-  if (prev >= 0) {
-    const prevTotal = groupTotal(
-      payers.map((e) => taxFor(selectedRate(e, selections), qRev(e, prev), e.inputVatShare, g)),
-    );
-    const today = { year: c.now.year, month: c.now.month, day: c.now.day };
-    let next: { month: number; day: number } | null = null;
-    for (let k = 0; k < 3; k++) {
-      const d = { year: c.now.year, month: (prev + 1) * 3 + k, day: 28 };
-      if (compareDays(d, today) >= 0) {
-        next = d;
-        break;
-      }
-    }
-    paragraphs.push(
-      `За ${prev + 1} квартал начислено ${mln(prevTotal, 2)}. НДС платится тремя равными частями до 28 числа трёх месяцев после квартала` +
-        (next ? `, ближайший платёж ${dateRu(next)} примерно ${rub(prevTotal.div(3))}.` : '.'),
-    );
-    how.push(`${prev + 1} квартал: ${rub(prevTotal)} ÷ 3 по 28 числам`);
-  }
-
-  return {
-    intent: 'forecast',
-    entityId,
-    paragraphs,
-    tables: [{ head: ['Юрлицо', 'Налог'], rows, totalRow: true }],
-    how,
-  };
-}
-
 export function answerDeduct(c: AnswerCtx): CalcResult {
   const { entities, ctx } = c.input;
   const g = ctx.rules.generalRate;
@@ -257,111 +198,6 @@ export function answerDeduct(c: AnswerCtx): CalcResult {
     ],
     tables: [],
     how: [`Граница: ${g}/${100 + g} × (1 − доля) = ${low}/${100 + low}, отсюда доля = ${pct(limit, 1)}`],
-  };
-}
-
-/**
- * Налог на прибыль (ОСНО) и налог по УСН по группе: режим, начислено, прогноз за год, ближайший срок.
- * Все числа из lib/calc/income-tax. Суммы ориентировочные, без страховых взносов.
- */
-export function answerIncomeTax(c: AnswerCtx, entityId?: string | null): CalcResult {
-  const { selections, ctx } = c.input;
-  const list = pick(c, entityId);
-  const today = { year: c.now.year, month: c.now.month, day: c.now.day };
-
-  const rows: string[][] = [];
-  const how: string[] = [];
-  const accrued: Dec[] = [];
-  const yearly: Dec[] = [];
-  let profit: Dec[] = [];
-  let usn: Dec[] = [];
-
-  for (const e of list) {
-    const t = incomeTax(e, ctx, selections, c.now);
-    const next = nextPayment(incomeTaxSchedule(e, ctx, selections, c.now), today);
-    accrued.push(t.accrued);
-    yearly.push(t.forecast);
-    if (e.taxRegime === 'osno') profit = [...profit, t.forecast];
-    else usn = [...usn, t.forecast];
-    // Режим второй строкой в первой ячейке, срок и сумма двумя строками: таблица помещается на телефоне
-    rows.push([
-      `${e.name}\n${REGIME_LABEL[e.taxRegime]}, ${t.ratePct.toString()}%`,
-      mln(t.forecast, 2),
-      next ? `${dateRu(next.due)}${next.kind === 'final' ? ` ${next.due.year}` : ''}\n${rub(next.amount)}` : 'нет',
-    ]);
-
-    how.push(`${e.name}: начислено на сегодня ${rub(t.accrued)} (доля накопленной выручки × налог за год)`);
-    const r = selectedRate(e, selections);
-    const vatNote = e.status === 'payer' ? ` × 100 / ${100 + r}` : '';
-    const incomeLine =
-      e.status === 'payer'
-        ? `выручка без НДС = ${rub(e.annualRevenue)}${vatNote} = ${rub(t.income)}`
-        : `выручка = ${rub(e.annualRevenue)} (НДС не платится)`;
-    switch (e.taxRegime) {
-      case 'osno':
-        how.push(
-          `${e.name}: ${incomeLine}; прибыль = ${rub(t.income)} − расходы ${rub(t.expenses)} = ${rub(t.base)}; ` +
-            `налог = ${rub(t.base)} × ${t.ratePct.toString()}% = ${rub(t.forecast)}`,
-        );
-        break;
-      case 'usn_income':
-        how.push(
-          `${e.name}: ${incomeLine}; налог = ${rub(t.income)} × ${t.ratePct.toString()}% = ${rub(t.forecast)}`,
-        );
-        break;
-      case 'usn_income_expense':
-        how.push(
-          `${e.name}: ${incomeLine}; (доходы ${rub(t.income)} − расходы ${rub(t.expenses)}) × ${t.ratePct.toString()}% = ${rub(t.calculated)}; ` +
-            `минимальный налог 1% доходов = ${rub(t.minimum)}; к уплате ${rub(t.forecast)}`,
-        );
-        break;
-    }
-  }
-
-  if (list.length > 1) {
-    rows.push(['Всего', mln(groupTotal(yearly), 2), '']);
-    how.push(`Начислено на сегодня по группе: ${rub(groupTotal(accrued))}`);
-  }
-
-  const profitTotal = groupTotal(profit);
-  const usnTotal = groupTotal(usn);
-  const paragraphs = [
-    `Налог на прибыль и УСН за год: ${mln(groupTotal(yearly), 2)}.` +
-      (profit.length ? ` Налог на прибыль по ОСНО ${mln(profitTotal, 2)}.` : '') +
-      (usn.length ? ` Налог по УСН ${mln(usnTotal, 2)}.` : ''),
-  ];
-
-  // ближайшая дата платежей по доходным налогам
-  const upcoming = groupPayments(list, selections, ctx, c.now).filter((p) => p.kind !== 'vat');
-  const first = upcoming[0];
-  if (first) {
-    const same = upcoming.filter((p) => p.due.year === first.due.year && p.due.month === first.due.month && p.due.day === first.due.day);
-    const sumUsn = groupTotal(same.filter((p) => p.kind === 'usn').map((p) => p.amount));
-    const sumProfit = groupTotal(same.filter((p) => p.kind === 'profit').map((p) => p.amount));
-    const parts = [
-      sumUsn.gt(0) ? `по УСН ${rub(sumUsn)}` : null,
-      sumProfit.gt(0) ? `по налогу на прибыль ${rub(sumProfit)}` : null,
-    ].filter((x): x is string => x !== null);
-    paragraphs.push(
-      `Ближайший срок ${dateRu(first.due)}: ${same[0]!.final ? 'итоговая уплата' : 'авансовые платежи'} ${same[0]!.periodLabel}, ${parts.join(' и ')}.`,
-    );
-  }
-  paragraphs.push(
-    'Суммы ориентировочные: без страховых взносов и региональных льгот, данные демо. Ставки и сроки взяты из справочника, проверьте с бухгалтером.',
-  );
-
-  return {
-    intent: 'profit',
-    entityId,
-    paragraphs,
-    tables: [
-      {
-        head: ['Юрлицо и режим', 'За год', 'Ближайший платёж'],
-        rows,
-        totalRow: list.length > 1,
-      },
-    ],
-    how,
   };
 }
 
@@ -445,12 +281,8 @@ export function buildAnswer(
       return answerWarnings(c, parsed.entityId);
     case 'fragmentation':
       return answerFragmentation(c);
-    case 'forecast':
-      return answerForecast(c, parsed.entityId);
     case 'deduct':
       return answerDeduct(c);
-    case 'profit':
-      return answerIncomeTax(c, parsed.entityId);
     case 'scenario':
       return answerScenario(c, {
         entityId: parsed.entityId!,
