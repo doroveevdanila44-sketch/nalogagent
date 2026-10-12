@@ -9,6 +9,7 @@ import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
+import { Tour } from './onboarding/Tour';
 
 export const UNLOCKED_EVENT = 'pva:unlocked';
 
@@ -29,6 +30,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
+  // Обучение: открывается один раз после первого входа и по кнопке «Пересмотреть обучение» в меню
+  const [tourOpen, setTourOpen] = useState(false);
+  const onboardingChecked = useRef(false);
   // Полоса под часами: бордо на экране блокировки и смены PIN, озеро на остальных
   useThemeColor(locked || sheet === 'changePin' ? THEME_AUTH : THEME_APP);
   const pendingServerLock = useRef(false);
@@ -184,6 +188,31 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     return () => document.removeEventListener('keydown', onKey);
   }, [sheet]);
 
+  // «Пройдено» хранится в базе (user_prefs), а не в браузере: обучение не повторяется на другом
+  // устройстве и после очистки данных сайта. Успешный ответ запоминается: дальше не спрашиваем.
+  useEffect(() => {
+    if (locked || onboardingChecked.current) return;
+    let cancelled = false;
+    api<{ onboardingSeenAt: string | null }>('/api/prefs')
+      .then((p) => {
+        if (cancelled) return;
+        onboardingChecked.current = true;
+        if (p.onboardingSeenAt === null) setTourOpen(true);
+      })
+      .catch(() => {
+        // не удалось узнать: обучение не показываем, при следующем запуске спросим снова
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [locked]);
+
+  const closeTour = useCallback(() => {
+    setTourOpen(false);
+    // любое закрытие (пройдено, пропущено, Escape) считается показом: повторно только из меню
+    void api('/api/prefs', { body: { onboardingSeen: true } }).catch(() => undefined);
+  }, []);
+
   const unlock = useCallback(async (pin: string): Promise<PinResult> => {
     try {
       const res = await api<{ csrf: string }>('/api/auth/pin', { body: { pin } });
@@ -298,6 +327,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
         {/* Сюда выводятся окна расчёта, проверки и передачи: при блокировке они прячутся со страницей */}
         <div id="overlay-root" />
+
+        {/* При блокировке на PIN обучение прячется вместе со страницей и возвращается после ввода PIN */}
+        <Tour open={tourOpen} onClose={closeTour} />
       </div>
 
       {sheet === 'menu' && !locked && (
@@ -325,6 +357,17 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             </button>
             <button type="button" className="row" onClick={() => setSheet('changePin')}>
               Сменить PIN
+            </button>
+            <button
+              type="button"
+              className="row"
+              data-action="tour"
+              onClick={() => {
+                setSheet('none');
+                setTourOpen(true);
+              }}
+            >
+              Пересмотреть обучение
             </button>
             <button type="button" className="row danger" onClick={logout}>
               Выйти

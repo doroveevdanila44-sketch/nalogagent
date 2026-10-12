@@ -15,9 +15,10 @@ type Tab = 'catalog' | 'mine';
 
 /**
  * Раздел «Документы»: каталог шаблонов (фильтр по категории, поиск) и мои документы со статусом,
- * версией и числом недостающих полей. Без повторов: метки «Демо-данные» и «Образец, проверить
- * юристом» здесь нет (первая в шапке приложения, вторая в колонтитуле самого файла), подпись
- * категории на карточке только когда фильтр «Все», число шаблонов не пишется.
+ * версией и числом незаполненных полей. Карточка шаблона: название, одна строка описания и кнопка
+ * «Заполнить». Без меток «Образец» и «Демо» (первая в колонтитуле файла, вторая в шапке
+ * приложения) и без повторов: категория выбрана фильтром над списком, число полей и тип файла
+ * видны уже в самом документе.
  */
 export function DocumentsView() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -156,15 +157,8 @@ export function DocumentsView() {
             <ul className="tpl-list" aria-label="Шаблоны документов">
               {shown.map((t) => (
                 <li key={t.key} className="tpl" data-template={t.key}>
-                  <div className="tpl-head">
-                    <h2>{t.title}</h2>
-                    {category === 'all' ? <span className="tpl-cat">{CATEGORY_LABEL[t.category]}</span> : null}
-                  </div>
+                  <h2>{t.title}</h2>
                   <p className="tpl-desc">{t.description}</p>
-                  <p className="tpl-meta">
-                    {t.scope === 'group' ? 'По группе' : 'По юрлицу'}
-                    {t.needsPeriod ? ', за период' : ''} · файл .{t.output} · полей: {t.fields}
-                  </p>
                   <div className="acts">
                     <button type="button" className="act primary" data-action="fill" onClick={() => setStart(t)}>
                       Заполнить

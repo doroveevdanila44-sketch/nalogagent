@@ -188,12 +188,12 @@ export function missingKeys(fields: TemplateField[], values: FieldValues): strin
   return fields.filter((f) => f.required && !values[f.key]?.value).map((f) => f.key);
 }
 
-/** Слово «поле» с числом: «Не хватает 3 поля». */
-export function missingText(n: number): string {
+/** Слово «поле» с числом: «Не заполнено: 7 полей», «Не заполнено: 1 поле», «Не заполнено: 3 поля». */
+export function unfilledText(n: number): string {
   const mod100 = n % 100;
   const mod10 = n % 10;
   const word = mod100 > 10 && mod100 < 20 ? 'полей' : mod10 === 1 ? 'поле' : mod10 >= 2 && mod10 <= 4 ? 'поля' : 'полей';
-  return n === 0 ? 'Все обязательные поля заполнены' : `Не хватает ${n} ${word}`;
+  return n === 0 ? 'Все обязательные поля заполнены' : `Не заполнено: ${n} ${word}`;
 }
 
 /** Применяет правки пользователя к значениям версии: правятся только введённые вручную поля. */

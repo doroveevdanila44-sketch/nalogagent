@@ -8,7 +8,7 @@ import { getEnv } from '@/lib/env';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Документ с предпросмотром, недостающими полями, версиями, комментариями и историей. ?version=N. */
+/** Документ для страницы: имя файла, недостающие поля, версии, комментарии, история. ?version=N. */
 export async function GET(req: NextRequest, ctx: IdContext): Promise<NextResponse> {
   return docRoute(req, 'documents/get', { mutating: false }, async ({ userId }) => {
     const { id } = await ctx.params;

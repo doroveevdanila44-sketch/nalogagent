@@ -3,7 +3,7 @@ import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { SaxesParser } from 'saxes';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -24,6 +24,7 @@ vi.mock('@/lib/auth/server', async () => {
 import * as versionsRoute from '@/app/api/documents/[id]/versions/route';
 import { GET as docGet } from '@/app/api/documents/[id]/route';
 import { GET as downloadGet } from '@/app/api/documents/[id]/download/route';
+import { GET as fileGet } from '@/app/api/documents/[id]/file/route';
 import { POST as createPost, GET as listGet } from '@/app/api/documents/route';
 import { POST as simulatePost } from '@/app/api/documents/[id]/simulate/route';
 import { POST as submitPost } from '@/app/api/documents/[id]/submit/route';
@@ -35,6 +36,7 @@ import { calcTax } from '@/lib/calc/service';
 import { momentFromEpoch } from '@/lib/calc/time';
 import type { Db } from '@/lib/db/client';
 import { loadCalcData } from '@/lib/db/queries';
+import type { CalcSnapshot } from '@/lib/provenance/snapshot';
 import { documentComments, documentEvents, documentTemplates, documentVersions, documents, legalEntities, users } from '@/lib/db/schema';
 import { SEED_REQUISITES, seedDatabase } from '@/lib/db/seed';
 import { createTestDb } from '@/lib/db/testing';
@@ -51,11 +53,13 @@ import {
   submitDocument,
   withdrawDocument,
 } from './service';
-import { FieldError, fillFields, missingKeys, missingText, normalizeInput, templateQueries } from './fill';
-import { renderBlocks } from './render';
+import { FieldError, fillFields, missingKeys, normalizeInput, templateQueries, unfilledText } from './fill';
+import { DOCX_MIME, XLSX_MIME, contentDisposition, documentFileName } from './file-name';
+import { buildDocx } from './files';
+import { renderBlocks, type RenderBlock } from './render';
 import { MONTH_WORDS, sanitizeSuggestions } from './suggest';
 import { TEMPLATES } from './templates';
-import { CATEGORIES, DRAFT_WATERMARK, SAMPLE_NOTE, STATUS_LABEL } from './types';
+import { CATEGORIES, SAMPLE_NOTE, STATUS_LABEL, type FieldValues, type TemplateField } from './types';
 import { actionsFor, transition, WorkflowError } from './workflow';
 
 const TZ = 'Asia/Kamchatka';
@@ -95,6 +99,22 @@ async function data() {
 /** Полностью заполненная справка: период февраль, юрлицо Альфа, подготовил. */
 const makeCertificate = () =>
   create('report_vat_certificate', { entityId: 'alfa', period: feb, user: { prepared_by: 'Образцов О.И.' } });
+
+/** Блоки тела нынешней версии: из них строятся и .docx, и .xlsx (на странице их больше нет). */
+async function blocksOf(id: string): Promise<RenderBlock[]> {
+  const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+  const [v] = await db
+    .select()
+    .from(documentVersions)
+    .where(and(eq(documentVersions.documentId, id), eq(documentVersions.n, doc!.currentVersion)));
+  return renderBlocks(
+    v!.body,
+    v!.fields as TemplateField[],
+    v!.values as FieldValues,
+    v!.calc as CalcSnapshot[],
+    doc!.entityId ? 'entity' : 'group',
+  );
+}
 
 describe('каталог и справочник реквизитов (сид)', () => {
   it('восемь шаблонов четырёх категорий, у каждого пометка образца в типах', async () => {
@@ -147,13 +167,15 @@ describe('заполнение: недостающие поля, суммы из
     const d = await getDocument(db, { userId, id, tz: TZ });
     // из обязательных не хватает «Подготовил»
     expect(d.missing).toEqual(['prepared_by']);
-    expect(missingText(d.missing.length)).toBe('Не хватает 1 поле');
+    expect(unfilledText(d.missing.length)).toBe('Не заполнено: 1 поле');
     expect(d.values.entity_name!.value).toBe('ООО «Альфа»');
     expect(d.values.entity_name!.source).toBe('entity');
     expect(d.values.entity_inn!.value).toBe(SEED_REQUISITES.alfa!.inn);
     expect(d.values.vat_total!.source).toBe('calc');
-    // пропущенное поле видно в блоках предпросмотра
-    const miss = d.blocks.flatMap((b) => (b.kind === 'table' ? [] : b.segs)).filter((s) => s.t === 'field' && s.state === 'missing');
+    // пропущенное поле остаётся в тексте файла в скобках
+    const miss = (await blocksOf(id))
+      .flatMap((b) => (b.kind === 'table' ? [] : b.segs))
+      .filter((s) => s.t === 'field' && s.state === 'missing');
     expect(miss.map((s) => (s.t === 'field' ? s.key : ''))).toContain('prepared_by');
   });
 
@@ -169,9 +191,11 @@ describe('заполнение: недостающие поля, суммы из
       'contract_number',
       'contract_date',
     ].sort((a, b) => d.fields.findIndex((f) => f.key === a) - d.fields.findIndex((f) => f.key === b)));
-    expect(missingText(7)).toBe('Не хватает 7 полей');
-    expect(missingText(3)).toBe('Не хватает 3 поля');
-    expect(missingText(0)).toBe('Все обязательные поля заполнены');
+    expect(unfilledText(7)).toBe('Не заполнено: 7 полей');
+    expect(unfilledText(3)).toBe('Не заполнено: 3 поля');
+    expect(unfilledText(1)).toBe('Не заполнено: 1 поле');
+    expect(unfilledText(11)).toBe('Не заполнено: 11 полей');
+    expect(unfilledText(0)).toBe('Все обязательные поля заполнены');
     // ставка НДС договора из расчёта
     expect(d.values.vat_rate!.source).toBe('calc');
     expect(d.values.city!.value).toBe('Петропавловск-Камчатский');
@@ -189,7 +213,7 @@ describe('заполнение: недостающие поля, суммы из
     expect(d.sources.vat_total).toContain('Расчёт: НДС, февраль 2026');
     expect(d.missing).toEqual([]);
     // таблица по месяцам: одна строка, та же сумма
-    const table = d.blocks.find((b) => b.kind === 'table');
+    const table = (await blocksOf(id)).find((b) => b.kind === 'table');
     expect(table && table.kind === 'table' && table.rows).toHaveLength(1);
   });
 
@@ -214,7 +238,7 @@ describe('заполнение: недостающие поля, суммы из
     const r = calcTax({ entityIds: 'all', tax: 'vat', period: { kind: 'year', year: 2026 } }, await data());
     expect(d.entityId).toBeNull();
     expect(d.values.group_vat!.value).toBe(r.total!.toString());
-    const entities = d.blocks.find((b) => b.kind === 'table' && b.table === 'entities');
+    const entities = (await blocksOf(id)).find((b) => b.kind === 'table' && b.table === 'entities');
     expect(entities && entities.kind === 'table' && entities.rows).toHaveLength(6); // пять юрлиц и итог
     expect(d.missing).toEqual([]);
   });
@@ -456,8 +480,8 @@ describe('файлы: .docx и .xlsx', () => {
       user: { contract_number: '12', contract_date: '2026-10-10', rent_price: '7500' },
     });
     const out = await downloadDocument(db, { userId, id, tz: TZ });
-    expect(out.name).toMatch(/^Договор-аренды-автомобиля-без-экипажа_ООО-Альфа_v1\.docx$/);
-    expect(out.mime).toContain('wordprocessingml');
+    expect(out.name).toBe('Договор аренды автомобиля без экипажа, ООО «Альфа».docx');
+    expect(out.mime).toBe(DOCX_MIME);
     expect(out.file.subarray(0, 2).toString()).toBe('PK');
 
     const zip = await JSZip.loadAsync(out.file);
@@ -477,6 +501,36 @@ describe('файлы: .docx и .xlsx', () => {
     expect(xml).toContain('w:highlight');
     const header = await zip.file(/^word\/header\d*\.xml$/)[0]!.async('string');
     expect(header).toContain('Образец, проверить юристом');
+    // колонтитул мелким шрифтом: 8 пт это w:sz 16
+    expect(header).toContain('<w:sz w:val="16"/>');
+    // выделен именно пропущенный реквизит, а не весь абзац
+    const highlighted = [...xml.matchAll(/<w:r>(?:(?!<\/w:r>).)*?<w:highlight w:val="yellow"\/>(?:(?!<\/w:r>).)*?<w:t[^>]*>([^<]*)<\/w:t>/gs)].map(
+      (m) => m[1],
+    );
+    expect(highlighted).toContain('[Арендатор: наименование или ФИО]');
+    expect(highlighted.every((t) => t!.startsWith('[') && t!.endsWith(']'))).toBe(true);
+    // заполненное не выделено
+    expect(highlighted.join('')).not.toContain('Альфа');
+  });
+
+  it('подсветка пропуска держится и в абзаце с переносом строки', async () => {
+    const blocks: RenderBlock[] = [
+      {
+        id: 'b0',
+        kind: 'p',
+        segs: [
+          { t: 'text', text: 'Реквизиты: ' },
+          { t: 'field', key: 'a', label: 'Первая', state: 'filled', source: 'user', type: 'longtext', text: 'строка 1\nстрока 2', value: 'x', calcIndex: null },
+          { t: 'text', text: ', подписант ' },
+          { t: 'field', key: 'b', label: 'Подписант', state: 'missing', source: 'user', type: 'text', text: '[Подписант]', value: null, calcIndex: null },
+        ],
+      },
+    ];
+    const file = await buildDocx(blocks, { title: 'Тест', version: 1, hash: 'a'.repeat(64), at: NOW, tz: TZ });
+    const xml = await (await JSZip.loadAsync(file)).file('word/document.xml')!.async('string');
+    expect(xml).toContain('<w:br/>');
+    expect(xml).toMatch(/<w:highlight w:val="yellow"\/>(?:(?!<\/w:r>).)*?<w:t[^>]*>\[Подписант\]<\/w:t>/s);
+    expect(xml.match(/<w:highlight /g)).toHaveLength(1);
   });
 
   it('отчёт: таблица по месяцам в .docx, суммы как на экране', async () => {
@@ -504,9 +558,11 @@ describe('файлы: .docx и .xlsx', () => {
       user: { ifns_code: '9900' },
     });
     const d = await getDocument(db, { userId, id, tz: TZ });
-    expect(d.watermark).toBe(DRAFT_WATERMARK);
+    expect(d.output).toBe('xlsx');
+    expect(d.fileName).toBe(`${d.title}.xlsx`);
     const out = await downloadDocument(db, { userId, id, tz: TZ });
-    expect(out.name).toMatch(/\.xlsx$/);
+    expect(out.name).toBe(d.fileName);
+    expect(out.mime).toBe(XLSX_MIME);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(out.file as unknown as ArrayBuffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Проект декларации', 'Итог', 'По месяцам', 'Расчёт', 'Источник']);
@@ -528,6 +584,94 @@ describe('файлы: .docx и .xlsx', () => {
     // файл расчёта документа: те же снимки
     const calcFile = await downloadGet(new NextRequest(`http://localhost/api/documents/${id}/download?calc=1`), ctx(id));
     expect(calcFile.status).toBe(200);
+  });
+});
+
+describe('«Открыть»: маршрут /api/documents/[id]/file', () => {
+  const get = (id: string, qs = '') => fileGet(new NextRequest(`http://localhost/api/documents/${id}/file${qs}`), ctx(id));
+  const nameOf = (cd: string) => decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(cd)![1]!);
+  const docText = async (buf: Buffer) => {
+    const xml = await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string');
+    return plain(xml.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, ''));
+  };
+
+  it('договор: .docx с верным типом и именем, по умолчанию сохраняется', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'beta' });
+    const res = await get(id);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe(DOCX_MIME);
+    const cd = res.headers.get('content-disposition')!;
+    expect(cd).toMatch(/^attachment; filename="document\.docx"; filename\*=UTF-8''/);
+    expect(nameOf(cd)).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
+    const body = Buffer.from(await res.arrayBuffer());
+    expect(body.subarray(0, 2).toString()).toBe('PK');
+    expect(Number(res.headers.get('content-length'))).toBe(body.length);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    // имя в заголовке и имя на карточке файла это одна строка
+    const d = await getDocument(db, { userId, id, tz: TZ });
+    expect(nameOf(cd)).toBe(d.fileName);
+    // в файле видны незаполненные поля в виде [поле]
+    expect(await docText(body)).toContain('[Номер договора]');
+  });
+
+  it('inline=1: встроенный просмотр на iPhone и iPad', async () => {
+    const id = await create('report_vat_certificate', { entityId: 'alfa', period: feb });
+    const res = await get(id, '?inline=1');
+    expect(res.headers.get('content-disposition')).toMatch(/^inline; /);
+    expect(res.headers.get('content-type')).toBe(DOCX_MIME);
+  });
+
+  it('декларация: .xlsx с типом Excel', async () => {
+    const id = await create('decl_vat_draft', { entityId: 'alfa', period: { kind: 'year', year: 2026 } });
+    const res = await get(id);
+    expect(res.headers.get('content-type')).toBe(XLSX_MIME);
+    const cd = res.headers.get('content-disposition')!;
+    expect(cd).toContain('filename="document.xlsx"');
+    expect(nameOf(cd)).toMatch(/^Проект декларации по НДС, ООО «Альфа», .+\.xlsx$/);
+    // незаполненное поле жёлтое: ячейка с [подписью] залита FFFF00
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await res.arrayBuffer()) as ArrayBuffer);
+    const ws = wb.getWorksheet('Проект декларации')!;
+    let yellow = 0;
+    ws.eachRow((row) => {
+      const c = row.getCell(1);
+      const fill = c.fill as { fgColor?: { argb?: string } } | undefined;
+      if (/\[[^\]]+\]/.test(String(c.value)) && fill?.fgColor?.argb === 'FFFFFF00') yellow += 1;
+    });
+    expect(yellow).toBeGreaterThan(0);
+  });
+
+  it('без версии это актуальная версия, с ?version=N версия из истории', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    await saveVersion(db, { userId, id, baseVersion: 1, edits: { contract_number: '77' }, nowMs: NOW, tz: TZ });
+    const current = await get(id);
+    expect(nameOf(current.headers.get('content-disposition')!)).toBe('Договор аренды автомобиля без экипажа, ООО «Альфа».docx');
+    const currentText = await docText(Buffer.from(await current.arrayBuffer()));
+    expect(currentText).toContain('№ 77');
+
+    const old = await get(id, '?version=1');
+    expect(nameOf(old.headers.get('content-disposition')!)).toBe(
+      'Договор аренды автомобиля без экипажа, ООО «Альфа» (версия 1).docx',
+    );
+    const oldText = await docText(Buffer.from(await old.arrayBuffer()));
+    expect(oldText).toContain('№ [Номер договора]');
+  });
+
+  it('чужого или несуществующего документа нет: 404', async () => {
+    const missing = await get('00000000-0000-4000-8000-000000000000');
+    expect(missing.status).toBe(404);
+    const id = await create('report_group_summary', { period: { kind: 'year', year: 2026 } });
+    expect((await get(id, '?version=9')).status).toBe(404);
+  });
+
+  it('имя файла: без недопустимых знаков, с версией и ASCII-запасным именем', () => {
+    expect(documentFileName('Договор: аренда/субаренда?', 'docx')).toBe('Договор аренда субаренда.docx');
+    expect(documentFileName('  ', 'xlsx')).toBe('Документ.xlsx');
+    expect(documentFileName('Справка, ООО «Альфа»', 'docx', 3)).toBe('Справка, ООО «Альфа» (версия 3).docx');
+    expect(documentFileName('а'.repeat(300), 'docx').length).toBeLessThanOrEqual(155);
+    const cd = contentDisposition('Справка, ООО «Альфа».docx', 'inline');
+    expect(cd.startsWith('inline; filename="document.docx"; filename*=UTF-8\'\'')).toBe(true);
+    expect(cd).not.toMatch(/[^\x20-\x7e]/);
   });
 });
 

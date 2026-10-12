@@ -21,6 +21,12 @@ create table users (
   password_changed_at timestamptz not null default now()
 );
 
+-- Настройки пользователя: когда закрыто обучение (null: ещё не показывалось). Хранится в базе, не в браузере.
+create table user_prefs (
+  user_id            uuid primary key references users(id) on delete cascade,
+  onboarding_seen_at timestamptz
+);
+
 create table devices (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references users(id) on delete cascade,

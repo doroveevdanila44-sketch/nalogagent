@@ -124,6 +124,18 @@ export const authEvents = pgTable(
   ],
 );
 
+/**
+ * Настройки пользователя. Пока одна: когда пройдено обучение (тур по приложению). Хранится в базе,
+ * а не в браузере, чтобы тур не повторялся на другом устройстве и после очистки данных сайта.
+ * null: обучение ещё не показывалось.
+ */
+export const userPrefs = pgTable('user_prefs', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  onboardingSeenAt: tstz('onboarding_seen_at'),
+});
+
 /** Под вход по биометрии (WebAuthn). Таблица подготовлена, функция не включена. */
 export const webauthnCredentials = pgTable('webauthn_credentials', {
   id: uuid('id').primaryKey().defaultRandom(),

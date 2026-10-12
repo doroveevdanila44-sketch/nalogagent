@@ -51,5 +51,3 @@ export function buildPeriod(kind: PeriodKind, year: number, month: number, quart
       return { kind: 'ytd' };
   }
 }
-
-export const SOURCE_CLASS = { entity: 'df-entity', calc: 'df-calc', user: 'df-user' } as const;

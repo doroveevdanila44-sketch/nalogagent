@@ -23,7 +23,7 @@ import { DRAFT_WATERMARK, SAMPLE_NOTE } from './types';
 
 /**
  * Файлы документа. Договоры и отчёты это .docx, проекты деклараций .xlsx. Файл строится из тех же
- * блоков, что и предпросмотр, и из тех же значений версии, поэтому суммы в нём совпадают с экраном.
+ * блоков и из тех же значений версии, что видны в «Проверить самому», поэтому суммы там и в файле совпадают.
  */
 
 export interface FileMeta {
@@ -37,18 +37,29 @@ export interface FileMeta {
 
 const ARGB = (hex: string) => `FF${hex.replace('#', '').toUpperCase()}`;
 
+/** Выделение пропущенного поля в файле: стандартный жёлтый, как маркер в Word. Это не цвет интерфейса. */
+const HIGHLIGHT_YELLOW = 'FFFFFF00';
+
 // ===== .docx =====
 
+/** Текст с переносами строк в прогоны одного абзаца; подсветка действует на каждую строку. */
+function textRuns(text: string, opts: { bold: boolean; missing: boolean }): TextRun[] {
+  return text.split('\n').map(
+    (line, i) =>
+      new TextRun({
+        text: line,
+        bold: opts.bold || undefined,
+        // пропущенное поле выделено жёлтым и стоит в скобках, чтобы его нельзя было пропустить при чтении
+        highlight: opts.missing ? 'yellow' : undefined,
+        break: i > 0 ? 1 : undefined,
+      }),
+  );
+}
+
 function runs(segs: Seg[], bold = false): TextRun[] {
-  return segs.map((s) => {
-    if (s.t === 'text') return new TextRun({ text: s.text, bold: bold || undefined });
-    // пропущенное поле выделено жёлтым, чтобы его нельзя было пропустить при чтении
-    return new TextRun({
-      text: s.text,
-      bold: bold || undefined,
-      highlight: s.state === 'missing' ? 'yellow' : undefined,
-    });
-  });
+  return segs.flatMap((s) =>
+    s.t === 'text' ? textRuns(s.text, { bold, missing: false }) : textRuns(s.text, { bold, missing: s.state === 'missing' }),
+  );
 }
 
 function cell(text: string, header = false): DocxCell {
@@ -75,19 +86,7 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
     } else if (b.kind === 'li') {
       children.push(new Paragraph({ bullet: { level: 0 }, children: runs(b.segs), spacing: { after: 60 } }));
     } else {
-      // перевод строки внутри длинного поля сохраняется
-      const text = segsText(b.segs);
-      if (text.includes('\n')) {
-        const lines = text.split('\n');
-        children.push(
-          new Paragraph({
-            children: lines.map((l, i) => new TextRun({ text: l, break: i > 0 ? 1 : 0 })),
-            spacing: { after: 100 },
-          }),
-        );
-      } else {
-        children.push(new Paragraph({ children: runs(b.segs), spacing: { after: 100 } }));
-      }
+      children.push(new Paragraph({ children: runs(b.segs), spacing: { after: 100 } }));
     }
   }
 
@@ -97,12 +96,15 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
     description: `${SAMPLE_NOTE}. Демо-данные. Версия ${meta.version}`,
     sections: [
       {
+        // колонтитул мелким шрифтом (8 пт): образец юридически не проверен
         headers: {
           default: new Header({
             children: [
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: `${SAMPLE_NOTE} · Демо-данные`, italics: true, size: 18 })],
+                children: [
+                  new TextRun({ text: SAMPLE_NOTE, italics: true, size: 16, color: PALETTE.muted.replace('#', '') }),
+                ],
               }),
             ],
           }),
@@ -113,7 +115,11 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
               new Paragraph({
                 alignment: AlignmentType.LEFT,
                 children: [
-                  new TextRun({ text: `Версия ${meta.version} · контрольная сумма ${meta.hash.slice(0, 12)}`, size: 16 }),
+                  new TextRun({
+                    text: `Демо-данные · версия ${meta.version} · контрольная сумма ${meta.hash.slice(0, 12)}`,
+                    size: 16,
+                    color: PALETTE.muted.replace('#', ''),
+                  }),
                 ],
               }),
             ],
@@ -145,7 +151,8 @@ export async function buildDeclarationXlsx(
   ws.getColumn(3).width = 20;
   ws.getColumn(4).width = 20;
   ws.headerFooter.oddHeader = `&C&"Arial,Bold"&14${DRAFT_WATERMARK}`;
-  ws.headerFooter.oddFooter = `&L${SAMPLE_NOTE}&RВерсия ${meta.version}`;
+  // мелкий шрифт колонтитула: код &8 задаёт 8 пт
+  ws.headerFooter.oddFooter = `&L&8${SAMPLE_NOTE}&R&8Версия ${meta.version}`;
 
   let row = 1;
   const mark = ws.getCell(row, 1);
@@ -208,7 +215,7 @@ export async function buildDeclarationXlsx(
         c.value = segsText(b.segs);
         c.alignment = { wrapText: true, vertical: 'top' };
         if (b.segs.some((s) => s.t === 'field' && s.state === 'missing')) {
-          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB(PALETTE.lemon) } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HIGHLIGHT_YELLOW } };
         }
         ws.mergeCells(row, 1, row, 4);
       }
@@ -221,5 +228,4 @@ export async function buildDeclarationXlsx(
   return Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
 }
 
-export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export { DOCX_MIME, XLSX_MIME } from './file-name';

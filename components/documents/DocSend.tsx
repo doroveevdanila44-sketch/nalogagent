@@ -4,14 +4,13 @@ import { useEffect, useId, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
-import { DEMO_MAIL_NOTE } from '@/components/provenance/SendToSpecialist';
 import { REVIEWER_IDS } from '@/lib/documents/workflow';
 import type { Person } from '@/lib/provenance/types';
 
 /**
- * Окно «Отправить бухгалтеру на проверку»: то же, что «Передать специалисту» в расчётах, но
- * получатель только бухгалтер или финансовый директор. Письмо не отправляется (демо): статус
- * документа меняется на «На проверке», получатель и комментарий пишутся в историю.
+ * Окно «Отправить»: получатель (бухгалтер или финансовый директор), комментарий и кнопка. Письмо
+ * не отправляется (демо): статус документа меняется на «На проверке», получатель и комментарий
+ * пишутся в историю. Подпись о демонстрации одна и только здесь.
  */
 export function DocSend({
   documentId,
@@ -60,17 +59,9 @@ export function DocSend({
   };
 
   return (
-    <Overlay kind="modal" label="Отправить бухгалтеру на проверку" onClose={onClose}>
-      <OverlayHead title="Отправить на проверку" onClose={onClose} />
+    <Overlay kind="modal" label="Отправить на проверку" onClose={onClose}>
+      <OverlayHead title="Отправить на проверку" sub={title} onClose={onClose} />
       <div className="ov-scroll">
-        <p className="demo-banner" data-testid="demo-mail-note">
-          {DEMO_MAIL_NOTE}. Статус документа изменится на «На проверке», получатель ничего не получит.
-        </p>
-        <div className="send-what">
-          <p className="calc-kicker">Документ</p>
-          <p className="send-title">{title}</p>
-        </div>
-
         <fieldset className="send-people">
           <legend>Кому</legend>
           {people === null && !error ? <div className="skeleton" style={{ height: 96 }} aria-busy="true" /> : null}
@@ -106,10 +97,10 @@ export function DocSend({
           <button type="button" className="act primary" data-action="send-confirm" disabled={busy || !recipient} onClick={() => void send()}>
             {busy ? 'Отправляю…' : 'Отправить'}
           </button>
-          <button type="button" className="act" onClick={onClose}>
-            Отмена
-          </button>
         </div>
+        <p className="send-demo" data-testid="demo-mail-note">
+          Письмо не отправляется, это демонстрация
+        </p>
       </div>
     </Overlay>
   );

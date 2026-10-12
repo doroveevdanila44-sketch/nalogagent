@@ -1,5 +1,4 @@
 import type { Period } from '@/lib/calc/period';
-import type { RenderBlock } from './render';
 import type {
   CommentInfo,
   DocStatus,
@@ -10,7 +9,10 @@ import type {
   VersionInfo,
 } from './types';
 
-/** Документ для страницы: версия, блоки предпросмотра, недостающие поля, история. */
+/**
+ * Документ для страницы: версия, недостающие поля, история. Тела договора здесь нет: страница
+ * показывает карточку файла, а сам текст лежит в файле (маршрут /api/documents/[id]/file).
+ */
 export interface DocumentDetail {
   id: string;
   templateKey: string;
@@ -26,9 +28,12 @@ export interface DocumentDetail {
   period: Period | null;
   periodLabel: string | null;
   output: 'docx' | 'xlsx';
+  /** Имя файла показанной версии: то же, что в Content-Disposition */
+  fileName: string;
+  /** Когда обновлён документ (для старой версии: когда она создана) */
+  updatedAt: string;
   fields: TemplateField[];
   values: FieldValues;
-  blocks: RenderBlock[];
   /** Откуда взято значение каждого поля: для чек-листа и подсказок */
   sources: Record<string, string>;
   hash: string;
@@ -43,8 +48,4 @@ export interface DocumentDetail {
   can: { edit: boolean; submit: boolean; withdraw: boolean; simulate: boolean };
   tz: string;
   readOnly: boolean;
-  /** Образец, проверить юристом */
-  sample: true;
-  /** У декларации водяной знак */
-  watermark: string | null;
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '@/lib/client/api';
 import type { DocumentDetail } from '@/lib/documents/detail';
-import { missingText } from '@/lib/documents/fill';
+import { unfilledText } from '@/lib/documents/fill';
 import type { TemplateField } from '@/lib/documents/types';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
@@ -105,7 +105,7 @@ export function FillForm({
     <Overlay kind="screen" label={mode === 'missing' ? 'Дозаполнить' : 'Править документ'} onClose={onClose}>
       <OverlayHead
         title={mode === 'missing' ? 'Дозаполнить' : 'Править документ'}
-        sub={mode === 'missing' ? missingText(doc.missing.length) : 'Правка создаст новую версию'}
+        sub={mode === 'missing' ? unfilledText(doc.missing.length) : 'Правка создаст новую версию'}
         onClose={onClose}
       />
       <div className="ov-scroll">

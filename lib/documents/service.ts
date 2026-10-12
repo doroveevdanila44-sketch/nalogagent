@@ -25,10 +25,10 @@ import {
   templateQueries,
   type EntityData,
 } from './fill';
-import { DOCX_MIME, XLSX_MIME, buildDeclarationXlsx, buildDocx } from './files';
+import { documentFileName, mimeOf } from './file-name';
+import { buildDeclarationXlsx, buildDocx } from './files';
 import { renderBlocks } from './render';
 import {
-  DRAFT_WATERMARK,
   STATUS_LABEL,
   type CommentInfo,
   type DocStatus,
@@ -662,7 +662,6 @@ export async function getDocument(
   const fields = v.fields as TemplateField[];
   const values = v.values as FieldValues;
   const snaps = v.calc as CalcSnapshot[];
-  const scope = doc.entityId ? 'entity' : 'group';
 
   const [versions, comments, events] = await Promise.all([
     db.select().from(documentVersions).where(eq(documentVersions.documentId, doc.id)).orderBy(desc(documentVersions.n)),
@@ -676,13 +675,13 @@ export async function getDocument(
   const readOnly = shown !== doc.currentVersion;
   const acts = actionsFor(status);
   const period = (doc.period as Period | null) ?? null;
-  const category = (tpl?.category ?? 'report') as TemplateCategory;
+  const output: 'docx' | 'xlsx' = tpl?.output === 'xlsx' ? 'xlsx' : 'docx';
 
   return {
     id: doc.id,
     templateKey: doc.templateKey,
     title: doc.title,
-    category,
+    category: (tpl?.category ?? 'report') as TemplateCategory,
     status,
     version: doc.currentVersion,
     shownVersion: shown,
@@ -690,10 +689,11 @@ export async function getDocument(
     entityName: entity?.name ?? null,
     period,
     periodLabel: period ? formatPeriod(period) : null,
-    output: tpl?.output === 'xlsx' ? 'xlsx' : 'docx',
+    output,
+    fileName: documentFileName(doc.title, output, readOnly ? shown : null),
+    updatedAt: (readOnly ? v.createdAt : doc.updatedAt).toISOString(),
     fields,
     values,
-    blocks: renderBlocks(v.body, fields, values, snaps, scope),
     sources: sourceTexts(fields, values, snaps, entity),
     hash: v.hash,
     missing: missingKeys(fields, values),
@@ -722,8 +722,6 @@ export async function getDocument(
     can: readOnly ? { edit: false, submit: false, withdraw: false, simulate: false } : acts,
     tz: args.tz,
     readOnly,
-    sample: true,
-    watermark: category === 'declaration' ? DRAFT_WATERMARK : null,
   };
 }
 
@@ -741,12 +739,23 @@ export async function documentSnapshots(
 
 // ===== Файл =====
 
-const unsafe = /[\\/:*?"<>|«»\u0000-\u001f]/g;
+export interface DocumentFile {
+  name: string;
+  mime: string;
+  file: Buffer;
+  kind: 'docx' | 'xlsx';
+  /** Номер версии, из которой собран файл */
+  version: number;
+}
 
+/**
+ * Файл версии документа. Без номера версии это нынешняя версия. Имя файла: название документа и
+ * расширение; для версии из истории к имени добавляется « (версия N)».
+ */
 export async function downloadDocument(
   db: Db,
   args: { userId: string; id: string; version?: number | null; tz: string },
-): Promise<{ name: string; mime: string; file: Buffer }> {
+): Promise<DocumentFile> {
   const doc = await ownDocument(db, args.userId, args.id);
   const n = args.version && args.version >= 1 ? args.version : doc.currentVersion;
   const v = await versionRow(db, doc.id, n);
@@ -762,13 +771,14 @@ export async function downloadDocument(
     at: snaps[0]?.at ?? v.createdAt.getTime(),
     tz: args.tz,
   };
-  const xlsx = tpl?.output === 'xlsx';
-  const file = xlsx ? await buildDeclarationXlsx(blocks, snaps, meta) : await buildDocx(blocks, meta);
-  const base = doc.title.replace(unsafe, '').replace(/\s*,\s*/g, '_').replace(/\s+/g, '-');
+  const kind: 'docx' | 'xlsx' = tpl?.output === 'xlsx' ? 'xlsx' : 'docx';
+  const file = kind === 'xlsx' ? await buildDeclarationXlsx(blocks, snaps, meta) : await buildDocx(blocks, meta);
   return {
-    name: `${base}_v${n}.${xlsx ? 'xlsx' : 'docx'}`,
-    mime: xlsx ? XLSX_MIME : DOCX_MIME,
+    name: documentFileName(doc.title, kind, n === doc.currentVersion ? null : n),
+    mime: mimeOf(kind),
     file,
+    kind,
+    version: n,
   };
 }
 

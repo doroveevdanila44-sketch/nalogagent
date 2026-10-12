@@ -44,6 +44,11 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
 
   const password = `E2e-${randomBytes(12).toString('base64url')}`;
   await createOwner(db as never, { login: 'luxautoowner', password });
+
+  // Обучение уже показано: иначе тур перекрывал бы страницу в каждом тесте после входа. Тесты
+  // самого обучения (e2e/onboarding.spec.ts) сбрасывают отметку сами.
+  const [owner] = await db.select({ id: schema.users.id }).from(schema.users).limit(1);
+  await db.insert(schema.userPrefs).values({ userId: owner!.id, onboardingSeenAt: new Date() });
   await client.end();
 
   // Пароль нужен только тестам этого прогона; файл в .data (в .gitignore)
