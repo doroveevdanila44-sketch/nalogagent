@@ -12,6 +12,7 @@ import {
 } from 'react';
 import type { ChatTurn } from '@/lib/agent/types';
 import { api, ApiError } from '@/lib/client/api';
+import { ASK_EVENT } from '@/lib/client/ask';
 import { KEYBOARD_EVENT } from '@/lib/client/keyboard';
 import { useMediaQuery } from '@/lib/client/media';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
@@ -258,6 +259,18 @@ export function ChatView() {
     [sending],
   );
 
+  // Обучение просит задать вопрос агенту на примере: тем же путём, что и кнопка «Отправить»
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  useEffect(() => {
+    const on = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (text) void sendRef.current(text);
+    };
+    window.addEventListener(ASK_EVENT, on);
+    return () => window.removeEventListener(ASK_EVENT, on);
+  }, []);
+
   const empty = turns !== null && turns.length === 0 && !sending;
 
   /** Кнопки под полем: если поле было в фокусе, оно остаётся в нём и клавиатура не закрывается */
@@ -310,7 +323,7 @@ export function ChatView() {
   );
 
   return (
-    <div className="chat-root" onMouseDown={onRootMouseDown}>
+    <div className="chat-root" data-ready={turns !== null} onMouseDown={onRootMouseDown}>
       <div
         className="chat-scroll"
         ref={listRef}
@@ -358,7 +371,7 @@ export function ChatView() {
 
         {empty && !phone ? (
           <div className="chat-empty">
-            <div className="sug" style={{ justifyContent: 'center' }}>
+            <div className="sug" data-tour="suggestions" style={{ justifyContent: 'center' }}>
               {SUGGESTIONS.map((s) => suggestionButton(s))}
             </div>
           </div>
@@ -371,6 +384,7 @@ export function ChatView() {
             <button
               type="button"
               className="sug-handle"
+              data-tour="suggestions-handle"
               aria-expanded={suggestionsOpen}
               aria-controls="chat-suggestions"
               onPointerDown={down}
@@ -384,7 +398,9 @@ export function ChatView() {
             </button>
             <div id="chat-suggestions" className="sug-panel" data-open={suggestionsOpen}>
               <div inert={!suggestionsOpen}>
-                <div className="sug">{SUGGESTIONS.map((s) => suggestionButton(s, Boolean(sending)))}</div>
+                <div className="sug" data-tour="suggestions">
+                  {SUGGESTIONS.map((s) => suggestionButton(s, Boolean(sending)))}
+                </div>
               </div>
             </div>
           </>
@@ -394,7 +410,7 @@ export function ChatView() {
             {sendError}
           </p>
         ) : null}
-        <div className="composer">
+        <div className="composer" data-tour="chat-input">
           <textarea
             ref={fieldRef}
             rows={1}

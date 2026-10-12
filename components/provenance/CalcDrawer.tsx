@@ -261,7 +261,7 @@ export function CalcDrawer({
           </div>
         ) : null}
         {items.length > 1 ? (
-          <div className="calc-tabs" role="tablist" aria-label="Расчёты">
+          <div className="calc-tabs" role="tablist" aria-label="Расчёты" data-tour="tax-switch">
             {items.map((s, i) => (
               <button
                 key={i}

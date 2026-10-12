@@ -4157,6 +4157,9 @@
     box-shadow: 0 18px 44px color-mix(in srgb, var(--color-ink) 35%, transparent);
     touch-action: none;
     animation: tour-in 220ms ease-out;
+    /* три строки на шаг: на низком окне карточка прокручивается, а не уходит за край */
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
   }
   .tour-card.placed {
     transition:
@@ -4172,10 +4175,18 @@
     }
   }
   .tour-count {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     color: var(--color-muted);
+  }
+  .tour-chapter {
+    letter-spacing: 0;
+    color: var(--color-wine);
   }
   .tour-title {
     margin-top: 4px;
@@ -4185,6 +4196,13 @@
     margin-top: 6px;
     font-size: 15px;
     line-height: 1.45;
+  }
+  /* «Что это», «Как читать», «Что делать»: три строки с жирными метками */
+  .tour-body p + p {
+    margin-top: 6px;
+  }
+  .tour-body b {
+    font-weight: 700;
   }
   .tour-acts {
     display: flex;

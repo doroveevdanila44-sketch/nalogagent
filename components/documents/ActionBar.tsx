@@ -51,7 +51,13 @@ export function SheetActionBar({
     </button>
   );
   return (
-    <div className="sheet-actions" role="region" aria-label="Действия с документом" data-testid="sheet-actions">
+    <div
+      className="sheet-actions"
+      role="region"
+      aria-label="Действия с документом"
+      data-testid="sheet-actions"
+      data-tour="doc-bar"
+    >
       {missing > 0 ? (
         <div className="bar-count">
           <button type="button" id={counterId} className="bar-counter" data-action="missing-first" onClick={onFirst}>
@@ -65,7 +71,7 @@ export function SheetActionBar({
       )}
       <div className="bar-buttons">
         {canFill && missing > 0 ? (
-          <button type="button" className="act" data-action="complete" onClick={onFill}>
+          <button type="button" className="act" data-action="complete" data-tour="doc-complete" onClick={onFill}>
             Дозаполнить
           </button>
         ) : null}
@@ -74,6 +80,7 @@ export function SheetActionBar({
             type="button"
             className="act"
             data-action="submit"
+            data-tour="doc-send"
             disabled={!canSubmit}
             aria-describedby={canSubmit ? undefined : counterId}
             onClick={onSend}

@@ -92,6 +92,7 @@ export function Message({
         <QuickReplies
           items={turn.quick}
           label="Быстрые ответы"
+          tour="quick"
           showGroupLabels={new Set(turn.quick.map((q) => q.group)).size > 1}
           disabled={disabled || !onPick}
           onPick={pick}

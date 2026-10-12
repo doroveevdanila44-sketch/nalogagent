@@ -111,7 +111,7 @@ export function DocumentsView({
         )}
       </div>
 
-      <div className="seg-tabs" role="tablist" aria-label="Раздел документов">
+      <div className="seg-tabs" role="tablist" aria-label="Раздел документов" data-tour="doc-tabs">
         <button
           type="button"
           role="tab"
@@ -145,7 +145,7 @@ export function DocumentsView({
 
       {catalog ? (
         <section id="panel-catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden={tab !== 'catalog'}>
-          <div className="doc-filters">
+          <div className="doc-filters" data-tour="doc-catalog">
             <label className="fld">
               <input
                 aria-label="Поиск по названию"
@@ -190,7 +190,13 @@ export function DocumentsView({
                   <h2>{t.title}</h2>
                   <p className="tpl-desc">{t.description}</p>
                   <div className="acts">
-                    <button type="button" className="act primary" data-action="fill" onClick={() => setStart(t)}>
+                    <button
+                      type="button"
+                      className="act primary"
+                      data-action="fill"
+                      data-tour="doc-fill"
+                      onClick={() => setStart(t)}
+                    >
                       Заполнить
                     </button>
                   </div>

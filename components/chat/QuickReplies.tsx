@@ -22,6 +22,7 @@ export function QuickReplies({
   label,
   showGroupLabels = false,
   isSelected,
+  tour,
 }: {
   items: QuickReply[];
   onPick: (text: string) => void;
@@ -31,6 +32,8 @@ export function QuickReplies({
   showGroupLabels?: boolean;
   /** Какой вариант сейчас выбран: он бордовый, остальные белые. Без функции все белые */
   isSelected?: (q: QuickReply) => boolean;
+  /** Метка data-tour для обучения: ставится только у набора под ответом */
+  tour?: string;
 }) {
   // ряды по виду кнопки; без вида одна общая строка
   const rows: { group: Slot | null; list: QuickReply[] }[] = [];
@@ -41,7 +44,7 @@ export function QuickReplies({
     else rows.push({ group: g, list: [q] });
   }
   return (
-    <div className="qreplies" role="group" aria-label={label}>
+    <div className="qreplies" role="group" aria-label={label} data-tour={tour}>
       {rows.map((row, r) => (
         <div className="qrow" key={r}>
           {showGroupLabels && row.group ? <span className="qlabel">{GROUP_LABEL[row.group]}</span> : null}

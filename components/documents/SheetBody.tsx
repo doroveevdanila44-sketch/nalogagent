@@ -38,6 +38,7 @@ function SheetField({ seg, ctx }: { seg: FieldSeg; ctx: SheetCtx }) {
     'data-state': seg.state,
     'data-source': seg.source,
     'data-value': seg.value ?? '',
+    'data-tour': missing ? 'doc-gap' : undefined,
     ...(missing ? {} : ctx.tipProps(note)),
   };
   const body = (

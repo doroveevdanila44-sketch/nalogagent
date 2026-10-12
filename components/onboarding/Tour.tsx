@@ -1,13 +1,25 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { TOUR_STEPS, type TourStep } from './steps';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { computeLive, computeStatic, fromPayload, momentFromEpoch, type DashboardInput, type StaticModel } from '@/lib/calc';
+import { api } from '@/lib/client/api';
+import { askAgent } from '@/lib/client/ask';
+import type { DashboardResponse } from '@/lib/provenance/dashboard';
+import type { Catalog } from '@/components/documents/api';
+import type { DocumentSummary } from '@/lib/documents/types';
+import { CHAPTER_TITLE, TOUR_STEPS, stepLines, stepTitle, type TourStep } from './chapters';
+import { tourNumbers } from './numbers';
 
 /**
- * Обучение: шесть шагов поверх приложения. Затемнение с вырезом вокруг нужного элемента (вырез
- * плавно переезжает с шага на шаг), карточка с заголовком, строками, счётчиком «2 из 6» и кнопками
- * «Назад», «Дальше», «Пропустить»; на последнем шаге «Готово».
+ * Обучение: главы и шаги поверх приложения (chapters.ts). Затемнение с вырезом вокруг нужного
+ * элемента (вырез плавно переезжает с шага на шаг), карточка с заголовком, тремя строками «Что
+ * это», «Как читать», «Что делать», счётчиком «Шаг 6 из 27» и кнопками «Назад», «Дальше»,
+ * «Пропустить»; на последнем шаге «Готово».
+ *
+ * Числа в строках берутся из расчётного сервиса (тот же вход, что у дашборда), на момент шага.
+ * Шагам, которым нужен пример, тур готовит его сам: открывает окно расчёта, задаёт агенту вопрос
+ * с прогнозом, находит или создаёт документ. Уходя с шага, он закрывает то, что открыл сам.
  *
  * Закрывается Escape, кнопкой «Пропустить», нажатием на затемнение и жестом (смахнуть карточку
  * вниз). Управляется с клавиатуры: Tab и Shift+Tab ходят по кнопкам карточки, стрелки влево и
@@ -33,22 +45,62 @@ const SWIPE_PX = 56;
 /** Что делает страница под обучением недоступной: шапка, содержимое, панель вкладок. */
 const BACKGROUND = ['header.top', '.app-body', 'nav.tabs'];
 
+/** Своя разметка inert: страницу под обучением закрываем мы, в поиске цели она не считается. */
+const OWN_INERT = 'data-tour-inert';
+
+/** Вопрос, на котором тур показывает ответ агента: прогноз с допущениями, карточка «Понял так», уточнения. */
+const EXAMPLE_QUESTION = 'Какую ставку выбрать на 2027 год';
+
+/** Шаблон примера документа: договор с пропусками, когда у человека ещё нет ни одного документа. */
+const EXAMPLE_TEMPLATE = 'contract_rent_no_crew';
+
+/**
+ * Элемент можно показать: он на экране, не в скрытой или закрытой панели (свёрнутый блок,
+ * свёрнутые подсказки) и имеет размер.
+ */
+function usable(el: HTMLElement): boolean {
+  if (el.getClientRects().length === 0) return false;
+  if (el.closest('[hidden]')) return false;
+  if (el.closest(`[inert]:not([${OWN_INERT}])`)) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
 function findTarget(step: TourStep): HTMLElement | null {
   for (const selector of step.targets) {
-    for (const el of document.querySelectorAll<HTMLElement>(selector)) {
-      if (el.getClientRects().length > 0 && !el.closest('[hidden]')) return el;
-    }
+    const found = [...document.querySelectorAll<HTMLElement>(selector)].filter(usable);
+    if (found.length > 0) return step.pick === 'last' ? found[found.length - 1]! : found[0]!;
+  }
+  return null;
+}
+
+/** Ближайший прокручиваемый предок, кроме страницы: список сообщений чата, область окна. */
+function scrollBox(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === 'auto' || o === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
   }
   return null;
 }
 
 /**
- * Показывает элемент в окне. Закреплённые элементы (шапка, панель вкладок) не двигаются. Высокий
- * элемент встаёт верхом под шапку; обычный, если он не виден целиком, встаёт выше центра окна:
- * ниже остаётся место для карточки.
+ * Показывает элемент в окне. Закреплённые элементы (шапка, панель вкладок) не двигаются. Элемент
+ * в прокручиваемой области (список чата) ставится к её середине. Высокий элемент встаёт верхом
+ * под шапку; обычный, если он не виден целиком, встаёт выше центра окна: ниже остаётся место для
+ * карточки.
  */
 function reveal(el: HTMLElement): void {
   if (el.closest('nav.tabs, header.top')) return;
+  const box = scrollBox(el);
+  if (box) {
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.top < b.top + MARGIN || r.bottom > b.bottom - MARGIN) {
+      const tallInBox = r.height > b.height * 0.7;
+      box.scrollTop += tallInBox ? r.top - b.top - MARGIN : r.top - b.top - (b.height - r.height) / 2;
+    }
+    return;
+  }
   const header = document.querySelector('header.top')?.getBoundingClientRect().bottom ?? 0;
   const r = el.getBoundingClientRect();
   const vh = window.innerHeight;
@@ -99,11 +151,108 @@ function placeCard(
   return { top: roomBelow >= target.top ? vh - h - MARGIN : top0, left: clampX(cx - w / 2) };
 }
 
-export function Tour({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return open ? <TourRun onClose={onClose} /> : null;
+/** Ждёт, пока функция вернёт значение; null, если время вышло или шаг сменился. */
+function until<T>(fn: () => T | null | undefined | false, alive: () => boolean, ms = 12_000, every = 100): Promise<T | null> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const tick = () => {
+      if (!alive()) return resolve(null);
+      const v = fn();
+      if (v) return resolve(v);
+      if (Date.now() - started > ms) return resolve(null);
+      window.setTimeout(tick, every);
+    };
+    tick();
+  });
 }
 
-function TourRun({ onClose }: { onClose: () => void }) {
+/** Первый подходящий элемент по селектору (не в закрытой панели). */
+const visibleBy = (selector: string): HTMLElement | null =>
+  [...document.querySelectorAll<HTMLElement>(selector)].find(usable) ?? null;
+
+/**
+ * Шаг «Выбор налога»: переключатель есть только в окне расчёта. Тур раскрывает баннер налога на
+ * прибыль и нажимает у него «Показать расчёт» (там две вкладки: «Налог на прибыль» и «Налог по
+ * УСН»). Возвращает функцию, которая закрывает окно и баннер.
+ */
+async function openProfitCalc(alive: () => boolean): Promise<() => void> {
+  const card = await until(() => document.querySelector<HTMLElement>('.sum-card[data-tour="banner-profit"]'), alive);
+  if (!card) return () => undefined;
+  let opened = false;
+  if (card.getAttribute('aria-expanded') !== 'true') {
+    card.click();
+    opened = true;
+  }
+  const button = await until(() => visibleBy('.sum-detail[data-card="profit"] [data-tour="act-calc"]'), alive);
+  if (button) button.click();
+  return () => {
+    document.querySelector<HTMLElement>('[data-testid="overlay-drawer"] .ov-close')?.click();
+    if (opened) {
+      const again = document.querySelector<HTMLElement>('.sum-card[data-tour="banner-profit"]');
+      if (again?.getAttribute('aria-expanded') === 'true') again.click();
+    }
+  };
+}
+
+/**
+ * Шагам про ответ агента нужен ответ с карточкой «Понял так». Если такого в истории нет, тур
+ * задаёт вопрос с прогнозом сам, тем же путём, что кнопка «Отправить», и дальше ждёт ответ.
+ * Возвращает true, если вопрос задан.
+ */
+async function askExample(alive: () => boolean): Promise<boolean> {
+  const ready = await until(() => document.querySelector('.chat-root[data-ready="true"]'), alive);
+  if (!ready || document.querySelector('[data-tour="understood"]')) return false;
+  askAgent(EXAMPLE_QUESTION);
+  return true;
+}
+
+/**
+ * Документ для шагов про страницу документа: ближайший черновик с пропусками, иначе любой
+ * документ, а если документов нет совсем, пример из шаблона (договор с пропусками).
+ */
+async function exampleDocument(): Promise<string | null> {
+  try {
+    const list = await api<{ documents: DocumentSummary[] }>('/api/documents');
+    const pick =
+      list.documents.find((d) => d.status === 'draft' && d.missing > 0) ??
+      list.documents.find((d) => d.missing > 0) ??
+      list.documents[0];
+    if (pick) return pick.id;
+    const catalog = await api<Catalog>('/api/documents/templates');
+    const entity = catalog.entities[0];
+    if (!entity) return null;
+    const made = await api<{ id: string }>('/api/documents', {
+      body: { templateKey: EXAMPLE_TEMPLATE, entityId: entity.id, period: null },
+    });
+    return made.id;
+  } catch {
+    return null;
+  }
+}
+
+/** Модель дашборда для чисел обучения: вход считается один раз, живые значения на момент шага. */
+interface Model {
+  input: DashboardInput;
+  stat: StaticModel;
+  tz: string;
+  offset: number;
+  year: number;
+}
+
+export function Tour({
+  open,
+  onClose,
+  onMenu,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Открыть или закрыть меню из трёх точек: на шагах главы «Меню» оно открыто */
+  onMenu?: (open: boolean) => void;
+}) {
+  return open ? <TourRun onClose={onClose} onMenu={onMenu} /> : null;
+}
+
+function TourRun({ onClose, onMenu }: { onClose: () => void; onMenu?: (open: boolean) => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const titleId = useId();
@@ -118,10 +267,48 @@ function TourRun({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [placed, setPlaced] = useState(false);
+  const [model, setModel] = useState<Model | null>(null);
+  const [asked, setAsked] = useState(false);
+  const askedRef = useRef(false);
 
   const step = TOUR_STEPS[index]!;
+  const stepRef = useRef(step);
+  stepRef.current = step;
   const last = index === TOUR_STEPS.length - 1;
   const cardWidth = view.w < 760 ? view.w - MARGIN * 2 : 360;
+
+  // числа из расчётного сервиса: вход один раз, живые значения пересчитываются на каждом шаге
+  useEffect(() => {
+    let alive = true;
+    api<DashboardResponse>('/api/dashboard')
+      .then((payload) => {
+        if (!alive) return;
+        const input = fromPayload(payload);
+        const at = momentFromEpoch(payload.serverNow, payload.tz);
+        setModel({
+          input,
+          stat: computeStatic(input, at),
+          tz: payload.tz,
+          offset: payload.serverNow - Date.now(),
+          year: payload.provenance.year,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const numbers = useMemo(() => {
+    if (!model) return null;
+    const at = momentFromEpoch(Date.now() + model.offset, model.tz);
+    return tourNumbers(model.input, model.stat, computeLive(model.input, at, model.stat), model.year);
+    // пересчёт на каждом шаге: живая выручка к этому моменту выросла
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, index]);
+
+  const lines = stepLines(step, numbers, { asked });
+  const title = stepTitle(step, numbers);
 
   // закрытие возвращает на страницу, с которой обучение началось
   const finish = useCallback(() => {
@@ -137,10 +324,58 @@ function TourRun({ onClose }: { onClose: () => void }) {
   const latest = useRef({ finish, next, back });
   latest.current = { finish, next, back };
 
-  // страница шага: переход, если шаг показан на другой странице
+  // страница шага: переход, если шаг показан на другой странице; документ находим или создаём
+  const docPending = useRef(false);
   useEffect(() => {
-    if (step.path && pathname !== step.path) router.push(step.path);
+    if (!step.path) return;
+    if (step.path === 'document') {
+      if (/^\/documents\/[^/]+$/.test(pathname) || docPending.current) return;
+      docPending.current = true;
+      void exampleDocument().then((id) => {
+        docPending.current = false;
+        // пока искали, человек мог уйти на другой шаг
+        if (id && stepRef.current.path === 'document' && !/^\/documents\/[^/]+$/.test(pathNow.current)) {
+          router.push(`/documents/${id}`, { scroll: false });
+        }
+      });
+      return;
+    }
+    if (pathname !== step.path) router.push(step.path);
   }, [step.path, pathname, router]);
+
+  // пример для шага: окно расчёта, ответ агента. Уходя с шага, закрываем то, что открыли
+  useEffect(() => {
+    const kind = step.prepare;
+    if (!kind) return;
+    if (step.path && step.path !== 'document' && pathname !== step.path) return;
+    let alive = true;
+    let undo: (() => void) | null = null;
+    void (async () => {
+      if (kind === 'calc-profit') {
+        const u = await openProfitCalc(() => alive);
+        if (alive) undo = u;
+        else u();
+      } else if (!askedRef.current) {
+        const did = await askExample(() => alive);
+        if (did) {
+          askedRef.current = true;
+          setAsked(true);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+      undo?.();
+    };
+  }, [step, pathname]);
+
+  // меню из трёх точек: на шагах главы «Меню» оно открыто, при уходе и закрытии тура закрывается
+  const onMenuRef = useRef(onMenu);
+  onMenuRef.current = onMenu;
+  useEffect(() => {
+    onMenuRef.current?.(Boolean(step.menu));
+  }, [step.menu]);
+  useEffect(() => () => onMenuRef.current?.(false), []);
 
   // размер окна
   useEffect(() => {
@@ -156,9 +391,18 @@ function TourRun({ onClose }: { onClose: () => void }) {
     let el: HTMLElement | null = null;
     const tick = () => {
       if (!alive) return;
-      if (!el || !el.isConnected || el.getClientRects().length === 0) {
-        el = findTarget(step);
-        if (el) reveal(el);
+      // шаг показан только на своей странице: пока идёт переход, подсвечивать нечего
+      const onPage =
+        step.path === null ||
+        step.path === pathNow.current ||
+        (step.path === 'document' && /^\/documents\/[^/]+$/.test(pathNow.current));
+      if (!onPage) el = null;
+      else if (!el || !el.isConnected || !usable(el)) {
+        const found = findTarget(step);
+        if (found !== el) {
+          el = found;
+          if (el) reveal(el);
+        }
       }
       if (el) {
         const r = el.getBoundingClientRect();
@@ -182,7 +426,7 @@ function TourRun({ onClose }: { onClose: () => void }) {
     if (!card) return;
     const header = document.querySelector('header.top')?.getBoundingClientRect().bottom ?? 0;
     setPos(placeCard(rect, card.offsetWidth, card.offsetHeight, view.w, view.h, Math.max(MARGIN, header + MARGIN / 2)));
-  }, [rect, index, view]);
+  }, [rect, index, view, numbers, asked]);
   useEffect(() => {
     if (pos) setPlaced(true);
   }, [pos]);
@@ -203,12 +447,16 @@ function TourRun({ onClose }: { onClose: () => void }) {
       for (const el of document.querySelectorAll<HTMLElement>(sel)) {
         if (!el.hasAttribute('inert')) {
           el.setAttribute('inert', '');
+          el.setAttribute(OWN_INERT, '');
           marked.push(el);
         }
       }
     }
     return () => {
-      for (const el of marked) el.removeAttribute('inert');
+      for (const el of marked) {
+        el.removeAttribute('inert');
+        el.removeAttribute(OWN_INERT);
+      }
       if (opener && opener !== document.body && opener.isConnected) opener.focus({ preventScroll: true });
     };
   }, []);
@@ -308,7 +556,7 @@ function TourRun({ onClose }: { onClose: () => void }) {
   const hole = rect ?? { top: view.h / 2, left: view.w / 2, width: 0, height: 0 };
 
   return (
-    <div className="tour" data-testid="tour" data-step={step.id} data-index={index}>
+    <div className="tour" data-testid="tour" data-step={step.id} data-chapter={step.chapter} data-index={index}>
       <div className="tour-block" aria-hidden="true" data-testid="tour-backdrop" onClick={onBlockClick} />
       <div
         className={`tour-hole${rect ? '' : ' empty'}`}
@@ -335,16 +583,23 @@ function TourRun({ onClose }: { onClose: () => void }) {
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
       >
-        <p className="tour-count" data-testid="tour-count">
-          {index + 1} из {TOUR_STEPS.length}
+        <p className="tour-count">
+          <span data-testid="tour-count">
+            Шаг {index + 1} из {TOUR_STEPS.length}
+          </span>
+          <span className="tour-chapter" data-testid="tour-chapter">
+            {CHAPTER_TITLE[step.chapter]}
+          </span>
         </p>
         <div aria-live="polite">
-          <h2 id={titleId} className="tour-title">
-            {step.title}
+          <h2 id={titleId} className="tour-title" data-testid="tour-title">
+            {title}
           </h2>
           <div id={bodyId} className="tour-body">
-            {step.lines.map((line) => (
-              <p key={line}>{line}</p>
+            {lines.map((l) => (
+              <p key={l.key} data-line={l.key}>
+                <b>{l.label}:</b> {l.text}
+              </p>
             ))}
           </div>
         </div>

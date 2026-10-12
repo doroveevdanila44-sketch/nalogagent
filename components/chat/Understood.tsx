@@ -37,7 +37,7 @@ export function Understood({
   };
 
   return (
-    <div className="understood">
+    <div className="understood" data-tour="understood">
       <div className="u-main">
         <p className="u-text">
           <span className="u-label">Понял так:</span> <b>{card.entity}</b>, <b>{card.tax}</b>,{' '}
@@ -47,6 +47,7 @@ export function Understood({
           <button
             type="button"
             className="u-edit"
+            data-tour="understood-edit"
             aria-expanded={open}
             aria-controls={panel}
             onPointerDown={hold}

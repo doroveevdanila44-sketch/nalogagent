@@ -62,49 +62,52 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt }:
   const showIncomeLine = sourceLineText(lines.income) !== (showVatLine ? vatText : metricsText);
 
   return (
-    <article className="ent">
-      <div className="ent-h">
-        <div>
-          <h3>
-            <i style={{ background: entityColor(e) }} />
-            {e.name}
-          </h3>
-          <p className="ent-d">
-            {e.description} · {e.ownerLabel}
-          </p>
-        </div>
-        <div className="chips">
-          <span className="chip">{e.form}</span>
-          <span className={`chip ${payer ? 'pay' : 'ex'}`}>{payer ? 'Плательщик НДС' : 'Освобождён'}</span>
-          <span className="chip regime">
-            {REGIME_LABEL[e.taxRegime]}, {tax.ratePct.toString()}%
-          </span>
-        </div>
-      </div>
-
-      <div className="ent-m">
-        <div>
-          <span className="eyebrow">Выручка с начала года</span>
-          <b>{rub(live.ytd)}</b>
-        </div>
-        <div>
-          <span className="eyebrow">Прогноз года</span>
-          <b>{mln(e.annualRevenue, 1)}</b>
-        </div>
-      </div>
-      <SourceLine data={lines.metrics} />
-
-      {osno ? null : (
-        <>
-          <div className="bar" role="img" aria-label={`Использование порога: ${usagePct}`}>
-            <i style={{ width: `${used.toFixed(2)}%` }} />
+    <article className="ent" data-tour="entity">
+      {/* Для обучения: статус юрлица и полоса порога подсвечиваются одним блоком */}
+      <div data-tour={payer || osno ? undefined : 'entity-threshold'}>
+        <div className="ent-h">
+          <div>
+            <h3>
+              <i style={{ background: entityColor(e) }} />
+              {e.name}
+            </h3>
+            <p className="ent-d">
+              {e.description} · {e.ownerLabel}
+            </p>
           </div>
-          <div className="bar-l">
-            <span>{usageLabel}</span>
-            <span>{usagePct}</span>
+          <div className="chips">
+            <span className="chip">{e.form}</span>
+            <span className={`chip ${payer ? 'pay' : 'ex'}`}>{payer ? 'Плательщик НДС' : 'Освобождён'}</span>
+            <span className="chip regime">
+              {REGIME_LABEL[e.taxRegime]}, {tax.ratePct.toString()}%
+            </span>
           </div>
-        </>
-      )}
+        </div>
+
+        <div className="ent-m">
+          <div>
+            <span className="eyebrow">Выручка с начала года</span>
+            <b>{rub(live.ytd)}</b>
+          </div>
+          <div>
+            <span className="eyebrow">Прогноз года</span>
+            <b>{mln(e.annualRevenue, 1)}</b>
+          </div>
+        </div>
+        <SourceLine data={lines.metrics} />
+
+        {osno ? null : (
+          <>
+            <div className="bar" role="img" aria-label={`Использование порога: ${usagePct}`}>
+              <i style={{ width: `${used.toFixed(2)}%` }} />
+            </div>
+            <div className="bar-l">
+              <span>{usageLabel}</span>
+              <span>{usagePct}</span>
+            </div>
+          </>
+        )}
+      </div>
 
       {payer ? null : (
         <p className="hint">
@@ -128,7 +131,7 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt }:
           </div>
         </div>
       ) : (
-        <div className="rates" role="group" aria-label={`Ставка НДС для ${e.name}`}>
+        <div className="rates" role="group" aria-label={`Ставка НДС для ${e.name}`} data-tour="rates">
           {rules.rates.map((r) => {
             const isSel = stat.selected === r;
             const value = payer ? stat.forecast[r]! : stat.fullYear[r]!;

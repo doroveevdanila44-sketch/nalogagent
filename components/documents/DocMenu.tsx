@@ -67,6 +67,7 @@ export function DocMenu({ items, dot = false }: { items: MenuItem[]; dot?: boole
         type="button"
         className="icon-btn"
         data-action="more"
+        data-tour="doc-menu"
         aria-label="Ещё"
         aria-haspopup="menu"
         aria-expanded={open}

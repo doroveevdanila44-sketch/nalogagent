@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: '/', destination: '/agent', permanent: false }];
   },
+  // Иконки объявлены в метаданных, но браузер изредка просит и /favicon.ico: отдаём ту же иконку,
+  // а не 404 (он попадал в консоль и делал сквозной тест консоли нестабильным)
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/icons/icon-192.png' }];
+  },
 };
 
 export default nextConfig;

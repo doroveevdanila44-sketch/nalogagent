@@ -24,6 +24,14 @@ import { factPlusRest, groupCaption, groupMetrics, type GroupMetric, type GroupM
 
 type CardId = GroupMetricId;
 
+/** Метки для обучения: баннер находится по data-tour, а не по порядку или тексту */
+const TOUR_ID: Record<CardId, string> = {
+  revenue: 'banner-revenue',
+  vat: 'banner-vat',
+  vatForecast: 'banner-vat-forecast',
+  profit: 'banner-profit',
+};
+
 interface Props {
   moment: Moment;
   input: DashboardInput;
@@ -242,6 +250,7 @@ export function GroupSummary({ moment, input, live, stat, lines, breakdown, year
           type="button"
           id={`sum-btn-${id}`}
           data-card={id}
+          data-tour={TOUR_ID[id]}
           className={`sum-card ${isOpen ? 'open' : ''}`}
           aria-expanded={isOpen}
           aria-controls={wide ? 'sum-panel' : `sum-detail-${id}`}

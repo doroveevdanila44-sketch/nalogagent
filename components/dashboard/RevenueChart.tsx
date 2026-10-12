@@ -210,7 +210,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
         <h2 id="h-chart">Выручка группы по месяцам</h2>
         <p>Факт и прогноз с учётом сезонности, млн ₽</p>
       </div>
-      <div className="chart">
+      <div className="chart" data-tour="chart">
         <div className="yax" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t}>{t}</span>

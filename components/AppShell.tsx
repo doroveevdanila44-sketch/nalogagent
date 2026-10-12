@@ -213,6 +213,11 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     void api('/api/prefs', { body: { onboardingSeen: true } }).catch(() => undefined);
   }, []);
 
+  // Обучение открывает и закрывает меню на шагах главы «Меню»; смену PIN и блокировку не трогает
+  const toggleMenuForTour = useCallback((open: boolean) => {
+    setSheet((s) => (open ? (s === 'none' ? 'menu' : s) : s === 'menu' ? 'none' : s));
+  }, []);
+
   const unlock = useCallback(async (pin: string): Promise<PinResult> => {
     try {
       const res = await api<{ csrf: string }>('/api/auth/pin', { body: { pin } });
@@ -274,6 +279,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
               <button
                 type="button"
                 className="icon-btn"
+                data-tour="menu-button"
                 aria-label="Меню"
                 aria-haspopup="dialog"
                 onClick={() => setSheet('menu')}
@@ -329,7 +335,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
         <div id="overlay-root" />
 
         {/* При блокировке на PIN обучение прячется вместе со страницей и возвращается после ввода PIN */}
-        <Tour open={tourOpen} onClose={closeTour} />
+        <Tour open={tourOpen} onClose={closeTour} onMenu={toggleMenuForTour} />
       </div>
 
       {sheet === 'menu' && !locked && (
@@ -342,7 +348,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             ref={menuRef}
             onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" className="row" onClick={lockNow}>
+            <button type="button" className="row" data-tour="menu-lock" onClick={lockNow}>
               Заблокировать
             </button>
             <button
@@ -355,13 +361,14 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             >
               Статусы проверок
             </button>
-            <button type="button" className="row" onClick={() => setSheet('changePin')}>
+            <button type="button" className="row" data-tour="menu-pin" onClick={() => setSheet('changePin')}>
               Сменить PIN
             </button>
             <button
               type="button"
               className="row"
               data-action="tour"
+              data-tour="menu-tour"
               onClick={() => {
                 setSheet('none');
                 setTourOpen(true);

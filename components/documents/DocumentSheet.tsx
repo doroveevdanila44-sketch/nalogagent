@@ -291,7 +291,7 @@ export function DocumentSheet({ id }: { id: string }) {
           <h1 className="sheet-title" data-testid="sheet-title" title={doc.title}>
             {doc.title}
           </h1>
-          <p className="sheet-meta" data-testid="sheet-meta">
+          <p className="sheet-meta" data-testid="sheet-meta" data-tour="doc-meta">
             <span data-testid="doc-version">
               Версия {doc.shownVersion}
               {doc.readOnly ? ` из ${doc.version}` : ''}
@@ -370,7 +370,13 @@ export function DocumentSheet({ id }: { id: string }) {
       ) : null}
 
       <div className="sheet-desk">
-        <article className={`paper${doc.output === 'xlsx' ? ' paper-xlsx' : ''}`} ref={sheetRef} aria-label="Текст документа" data-testid="sheet">
+        <article
+          className={`paper${doc.output === 'xlsx' ? ' paper-xlsx' : ''}`}
+          ref={sheetRef}
+          aria-label="Текст документа"
+          data-testid="sheet"
+          data-tour="doc-sheet"
+        >
           {doc.output === 'xlsx' ? <GridSheet ctx={ctx} /> : <TextSheet ctx={ctx} />}
         </article>
       </div>

@@ -34,13 +34,20 @@ export function ActionBar({
 }) {
   const ids = (Object.keys(LABEL) as ActionId[]).filter((id) => !hide.includes(id));
   return (
-    <div className={`acts${tone === 'dark' ? ' on-dark' : ''}`} role="group" aria-label={label} data-testid="actions">
+    <div
+      className={`acts${tone === 'dark' ? ' on-dark' : ''}`}
+      role="group"
+      aria-label={label}
+      data-testid="actions"
+      data-tour="actions"
+    >
       {ids.map((id) => (
         <button
           key={id}
           type="button"
           className="act"
           data-action={id}
+          data-tour={`act-${id}`}
           disabled={busy === id}
           onClick={() => onAction(id)}
         >

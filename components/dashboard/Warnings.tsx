@@ -25,7 +25,7 @@ export function Warnings({ warnings, counter }: { warnings: Warning[]; counter: 
 
   return (
     <>
-      <div className="sec-h">
+      <div className="sec-h" data-tour="warnings-head">
         <h2 id="h-warn">Предупреждения</h2>
         <p>{counter}</p>
       </div>
@@ -35,7 +35,7 @@ export function Warnings({ warnings, counter }: { warnings: Warning[]; counter: 
           const isOpen = open.has(key);
           const id = `warn-${i}`;
           return (
-            <li className={`warn ${isOpen ? 'open' : ''}`} key={key}>
+            <li className={`warn ${isOpen ? 'open' : ''}`} key={key} data-tour={i === 0 ? 'warning-first' : undefined}>
               <button
                 type="button"
                 id={`${id}-btn`}
