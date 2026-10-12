@@ -74,7 +74,8 @@
   }
 }
 @media (max-width: 759px) {
-  html[data-kb='open'] {
+  html[data-kb='open'],
+  html[data-sheet='open'] {
     --tabs-h: 0px;
   }
 }
@@ -3403,19 +3404,9 @@
     color: var(--color-muted);
   }
 
-  .doc-page {
-    max-width: 720px;
-  }
-  .doc-back {
-    margin-top: 14px;
-    font-size: 14px;
-  }
-  .doc-back a,
   .linkish {
     color: var(--color-accent);
     text-underline-offset: 2px;
-  }
-  .linkish {
     border: 0;
     background: none;
     padding: 0;
@@ -3432,120 +3423,446 @@
     font-size: 14px;
     font-weight: 500;
   }
-  .doc-hint {
-    margin-top: 10px;
-    font-size: 13px;
-    color: var(--color-muted);
-  }
 
-  /* Карточка файла: значок, имя, строка «Версия · статус · обновлён», кнопки «Открыть» и «Отправить» */
-  .file-card {
-    margin-top: 12px;
-    padding: 16px;
-    border: 1px solid var(--color-line);
-    border-radius: 18px;
-    background: var(--color-page);
-  }
-  /* Значок слева, имя и строка версии справа, меню у правого края. На телефоне строка версии
-     уходит под значок на всю ширину карточки: в одну строку она не помещается рядом со значком. */
-  .file-top {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    grid-template-areas:
-      'icon name menu'
-      'icon meta menu';
-    column-gap: 14px;
-    align-items: start;
-  }
-  @media (max-width: 520px) {
-    .file-top {
-      grid-template-areas:
-        'icon name menu'
-        'meta meta meta';
-    }
-    .file-meta {
-      margin-top: 12px;
-    }
-  }
-  .file-ic {
-    grid-area: icon;
-    width: 44px;
-    height: 52px;
-  }
-  .file-ic-page {
-    fill: var(--color-mint);
-    stroke: var(--color-ink);
-    stroke-width: 1.6;
-    stroke-linejoin: round;
-  }
-  .file-ic-fold {
-    fill: none;
-    stroke: var(--color-ink);
-    stroke-width: 1.6;
-    stroke-linejoin: round;
-  }
-  .file-ic-band {
-    fill: var(--color-lake);
-  }
-  .file-ic-xlsx .file-ic-band {
-    fill: var(--color-lemon);
-  }
-  .file-ic-ext {
-    fill: var(--color-ink);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-  }
-  .file-name {
-    grid-area: name;
+  /* ===== Страница документа: лист, как документ в Claude и ChatGPT ===== */
+  .docs-pane,
+  .sheet-page {
     min-width: 0;
-    font-size: 18px;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
   }
-  .file-meta {
-    grid-area: meta;
+  /* Тонкая панель вверху: назад, название, строка «Версия, статус», меню «ещё». Прилипает под шапкой. */
+  .sheet-bar {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 25;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 4px 6px;
-    margin-top: 6px;
+    gap: 6px;
+    min-height: 56px;
+    background: var(--color-page);
+    border-bottom: 1px solid var(--color-line);
+  }
+  .sheet-back {
+    flex: none;
+    margin-left: -10px;
+  }
+  .sheet-head {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .sheet-title {
+    font-size: 16px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sheet-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
     font-size: 12px;
+    line-height: 1.3;
     color: var(--color-muted);
+    white-space: nowrap;
   }
-  /* На самых узких экранах дата уходит на вторую строку целиком, без точки в конце первой */
-  @media (max-width: 379px) {
-    .file-when {
-      flex-basis: 100%;
-    }
-    .file-sep {
-      display: none;
-    }
-  }
-  .file-ver {
+  .sheet-meta [data-testid='doc-version'] {
     font-weight: 600;
     color: var(--color-ink);
   }
+  .bar-wide {
+    display: none;
+    flex: none;
+  }
+  @media (min-width: 1100px) {
+    .bar-wide {
+      display: inline-flex;
+    }
+  }
+  .sheet-bar .doc-more {
+    flex: none;
+    margin: 0 -10px 0 0;
+  }
+  .doc-more .icon-btn {
+    position: relative;
+  }
+  .more-dot {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--color-page);
+    border-radius: 50%;
+    background: var(--color-wine);
+  }
+
+  /* Лист: белая страница до 760 px по центру, поля как у документа. Вокруг на компьютере тонкая подложка. */
+  .sheet-desk {
+    padding: 14px 0 20px;
+  }
+  @media (min-width: 760px) {
+    .sheet-desk {
+      margin-top: 16px;
+      padding: 24px 24px 32px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--color-line) 38%, var(--color-page));
+    }
+  }
+  /* Лист называется paper: класс sheet занят нижним листом меню */
+  .paper {
+    box-sizing: border-box;
+    max-width: 760px;
+    margin-inline: auto;
+    padding: 26px 18px 34px;
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+    background: var(--color-page);
+    box-shadow: 0 6px 22px color-mix(in srgb, var(--color-ink) 8%, transparent);
+    overflow-wrap: anywhere;
+  }
+  @media (min-width: 760px) {
+    .paper {
+      padding: 56px 64px 72px;
+    }
+  }
+  /* Заголовки и пункты как в Word */
+  .sheet-h1 {
+    margin: 0 0 18px;
+    font-size: 19px;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .sheet-h2 {
+    margin: 22px 0 6px;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+  .sheet-p {
+    margin: 8px 0 0;
+    font-size: 15px;
+    line-height: 1.7;
+    white-space: pre-line;
+  }
+  @media (min-width: 640px) {
+    .sheet-p {
+      text-align: justify;
+      hyphens: auto;
+    }
+  }
+  .sheet-ul {
+    margin: 8px 0 0;
+    padding-left: 22px;
+    list-style: disc;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .sheet-table-wrap {
+    margin-top: 12px;
+    overflow-x: auto;
+  }
+  .sheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .sheet-table th,
+  .sheet-table td {
+    padding: 6px 8px 6px 0;
+    border-top: 1px solid var(--color-line);
+    text-align: left;
+    vertical-align: top;
+  }
+  .sheet-table th {
+    overflow-wrap: normal;
+    word-break: keep-all;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .sheet-table .n {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 520px) {
+    .sheet-table {
+      font-size: 12px;
+    }
+    .sheet-table th,
+    .sheet-table td {
+      padding-right: 4px;
+    }
+  }
+
+  /* Поля в тексте. Пропущенное жёлтое [Название]; из реквизитов и расчёта тонкое подчёркивание. */
+  .sf {
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  button.sf {
+    display: inline;
+    cursor: pointer;
+  }
+  .sf-missing {
+    background: var(--color-lemon);
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+  .sf-entity,
+  .sf-calc {
+    border-bottom: 1px solid var(--color-accent);
+    border-radius: 0;
+  }
+  .sf-calc {
+    font-weight: 500;
+  }
+  @media (hover: hover) {
+    .sf-edit:hover {
+      background: color-mix(in srgb, var(--color-lemon) 70%, transparent);
+    }
+  }
+  .sf-flash {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .sheet-tip {
+    position: fixed;
+    z-index: 45;
+    max-width: 280px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
+    font-size: 12px;
+    line-height: 1.4;
+    transform: translateX(-50%);
+    pointer-events: none;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--color-ink) 30%, transparent);
+  }
+
+  /* Декларации и таблицы (.xlsx): сетка, как лист Excel */
+  .paper-xlsx {
+    padding: 0;
+    overflow: hidden;
+  }
+  .grid-mark {
+    margin: 0;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-line);
+    font-weight: 600;
+    color: var(--color-wine);
+  }
+  .grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .grid-table th,
+  .grid-table td {
+    padding: 8px 12px;
+    border: 1px solid var(--color-line);
+    text-align: left;
+    vertical-align: top;
+    font-weight: 400;
+  }
+  .grid-table tr:first-child > * {
+    border-top: 0;
+  }
+  .grid-table tr > :first-child {
+    border-left: 0;
+  }
+  .grid-table tr > :last-child {
+    border-right: 0;
+  }
+  .grid-title th {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .grid-section th {
+    background: color-mix(in srgb, var(--color-line) 55%, var(--color-page));
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .grid-label {
+    width: 40%;
+    font-weight: 500;
+    color: var(--color-muted);
+  }
+  .grid-table .grid-inner {
+    padding: 0;
+    border-bottom: 0;
+  }
+  .grid-inner .sheet-table-wrap {
+    margin: 0;
+    padding: 0 12px 8px;
+  }
+
+  /* Нижняя панель листа: счётчик пропусков со стрелками, «Дозаполнить», «Отправить». Закреплена. */
+  .sheet-actions {
+    position: sticky;
+    bottom: var(--tabs-h);
+    z-index: 25;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 8px 0 calc(8px + var(--safe-bottom));
+    border-top: 1px solid var(--color-line);
+    background: var(--color-page);
+  }
+  @media (min-width: 760px) {
+    .sheet-actions {
+      padding-bottom: 8px;
+    }
+  }
+  .bar-count {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .bar-counter {
+    min-height: 44px;
+    padding: 0 8px 0 0;
+    border: 0;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .bar-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--color-ink);
+  }
+  @media (hover: hover) {
+    .bar-arrow:hover {
+      background: var(--color-mint);
+    }
+  }
+  .bar-arrow svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .bar-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .bar-buttons .act {
+    flex: 0 0 auto;
+    padding-inline: 18px;
+  }
+  @media (max-width: 520px) {
+    .bar-count {
+      flex: 1 1 100%;
+    }
+    .bar-buttons {
+      flex: 1 1 100%;
+    }
+    .bar-buttons .act {
+      flex: 1 1 0;
+    }
+  }
+
+  /* Раздел «Документы»: каталог слева, документ справа от 1100 px; на телефоне и планшете документ на весь экран */
+  .docs-head {
+    margin-top: 24px;
+  }
+  @media (min-width: 760px) {
+    .docs-head {
+      margin-top: 32px;
+    }
+  }
+  .docs-title {
+    font-size: 24px;
+    line-height: 1.2;
+  }
+  h2.docs-title {
+    font-size: 19px;
+  }
+  .docs-shell.has-doc .docs-rail {
+    display: none;
+  }
+  @media (min-width: 1100px) {
+    .docs-shell.has-doc {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    .docs-shell.has-doc .docs-rail {
+      display: block;
+      position: sticky;
+      top: var(--header-h);
+      max-height: calc(100dvh - var(--header-h));
+      margin-inline: -4px;
+      padding: 0 4px 24px;
+      overflow-y: auto;
+    }
+    .docs-shell.has-doc.wide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .docs-shell.has-doc.wide .docs-rail {
+      display: none;
+    }
+    .docs-shell.has-doc .tpl-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .req.on {
+    box-shadow: inset 0 0 0 2px var(--color-wine);
+  }
+  .req .acts {
+    margin-top: 10px;
+  }
+  .req .act {
+    flex: 0 0 auto;
+    padding-inline: 18px;
+  }
+
+  /* Лист: панель действий прижата к низу окна, нижнего отступа у страницы нет. На телефоне лист на
+     весь экран: нижней панели вкладок нет, назад стрелкой в верхней панели. */
+  html[data-sheet='open'] .app-main {
+    padding-bottom: 0;
+  }
+  @media (max-width: 759px) {
+    html[data-sheet='open'] .tabs {
+      display: none;
+    }
+  }
+
   .doc-status.sm {
     padding: 1px 7px;
     border-width: 1px;
     font-size: 12px;
     text-transform: lowercase;
   }
-  .file-acts {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-  }
-  .file-acts .act {
-    flex: 1 1 0;
-  }
-
   /* Меню «ещё»: раскрывается под кнопкой с тремя точками */
   .doc-more {
-    grid-area: menu;
     position: relative;
-    margin: -8px -10px 0 0;
   }
   .doc-menu {
     position: absolute;
@@ -3593,73 +3910,6 @@
     text-align: center;
   }
 
-  /* «Не заполнено: 7 полей» и «Комментарии без решения: 2»: одна строка со стрелкой, без плашек */
-  .unfilled,
-  .line-row {
-    margin-top: 8px;
-  }
-  .unfilled-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 4px 12px;
-  }
-  .unfilled-row .act {
-    flex: none;
-  }
-  .line-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 44px;
-    padding: 0 4px;
-    border: 0;
-    background: none;
-    font-size: 15px;
-    font-weight: 500;
-    text-align: left;
-  }
-  .line-toggle svg {
-    flex: none;
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    transition: transform var(--t);
-  }
-  .line-toggle[aria-expanded='true'] svg {
-    transform: rotate(180deg);
-  }
-  .unfilled-list {
-    list-style: none;
-    margin: 0;
-    padding: 2px 4px 6px;
-    font-size: 14px;
-    line-height: 1.5;
-    columns: 1;
-    animation: unfilled-in 180ms ease-out;
-  }
-  .unfilled-list li {
-    break-inside: avoid;
-    padding: 1px 0;
-    overflow-wrap: anywhere;
-  }
-  @media (min-width: 640px) {
-    .unfilled-list {
-      columns: 2;
-      column-gap: 24px;
-    }
-  }
-  /* только сдвиг, без прозрачности: контраст текста не зависит от момента анимации */
-  @keyframes unfilled-in {
-    from {
-      transform: translateY(-4px);
-    }
-  }
   .hist-h {
     margin: 16px 0 8px;
     font-size: 15px;
@@ -3859,12 +4109,8 @@
   }
 
   /* ===== Компьютер: единый вертикальный ритм ===== */
-  /* Первый блок страницы стоит на 18 px ниже шапки на всех экранах (у страницы документа было 14 px).
-     Блоки внутри каталога документов разделены одинаково, 14 px (было 14, 6, 10 и 10). */
+  /* Блоки внутри каталога документов разделены одинаково, 14 px (было 14, 6, 10 и 10). */
   @media (min-width: 760px) {
-    .doc-back {
-      margin-top: 18px;
-    }
     .seg-tabs,
     .doc-filters,
     .chips-row,

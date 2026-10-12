@@ -18,7 +18,7 @@ export interface MenuItem {
  * ходят по пунктам, Home и End в начало и конец, Escape закрывает и возвращает фокус на кнопку,
  * нажатие вне меню закрывает.
  */
-export function DocMenu({ items }: { items: MenuItem[] }) {
+export function DocMenu({ items, dot = false }: { items: MenuItem[]; dot?: boolean }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -78,6 +78,7 @@ export function DocMenu({ items }: { items: MenuItem[] }) {
           <circle cx="12" cy="12" r="1.2" />
           <circle cx="12" cy="18.5" r="1.2" />
         </svg>
+        {dot ? <span className="more-dot" aria-hidden="true" data-testid="more-dot" /> : null}
       </button>
       {open ? (
         <div id={menuId} className="doc-menu" role="menu" aria-label="Действия с документом">

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { DocumentsView } from '@/components/documents/DocumentsView';
 
 export const metadata: Metadata = { title: 'Документы · Агент по НДС' };
 
+/** Каталог и список рисует общий каркас раздела (layout.tsx): здесь ничего нет. */
 export default function DocumentsPage() {
-  return <DocumentsView />;
+  return null;
 }

@@ -1,4 +1,5 @@
 import type { Period } from '@/lib/calc/period';
+import type { RenderBlock } from './render';
 import type {
   CommentInfo,
   DocStatus,
@@ -10,8 +11,8 @@ import type {
 } from './types';
 
 /**
- * Документ для страницы: версия, недостающие поля, история. Тела договора здесь нет: страница
- * показывает карточку файла, а сам текст лежит в файле (маршрут /api/documents/[id]/file).
+ * Документ для страницы-листа: блоки текста с полями (те же, из которых собираются .docx и .xlsx),
+ * источники значений, недостающие поля, версии, комментарии и история.
  */
 export interface DocumentDetail {
   id: string;
@@ -34,6 +35,8 @@ export interface DocumentDetail {
   updatedAt: string;
   fields: TemplateField[];
   values: FieldValues;
+  /** Текст документа блоками: заголовки, абзацы, пункты, таблицы; в них поля с состоянием и источником */
+  blocks: RenderBlock[];
   /** Откуда взято значение каждого поля: для чек-листа и подсказок */
   sources: Record<string, string>;
   hash: string;

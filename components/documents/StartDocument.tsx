@@ -61,7 +61,8 @@ export function StartDocument({
         },
       });
       onClose();
-      router.push(`/documents/${res.id}`);
+      // прокруткой управляет раздел «Документы» (DocumentsShell): лист открывается с начала
+      router.push(`/documents/${res.id}`, { scroll: false });
     } catch (e) {
       setError(errorText(e, 'Не удалось создать документ. Повторите.'));
       setBusy(false);

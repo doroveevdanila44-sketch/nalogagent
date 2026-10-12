@@ -694,6 +694,7 @@ export async function getDocument(
     updatedAt: (readOnly ? v.createdAt : doc.updatedAt).toISOString(),
     fields,
     values,
+    blocks: renderBlocks(v.body, fields, values, snaps, doc.entityId ? 'entity' : 'group'),
     sources: sourceTexts(fields, values, snaps, entity),
     hash: v.hash,
     missing: missingKeys(fields, values),

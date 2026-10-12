@@ -40,7 +40,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'documents',
     title: 'Документы',
-    lines: ['Заполните шаблон, откройте файл', 'и отправьте его на проверку.'],
+    lines: ['Заполните шаблон, откройте документ', 'и отправьте его на проверку.'],
     path: null,
     targets: ['nav.tabs a[href="/documents"]'],
   },

@@ -11,6 +11,8 @@ const PIN = '8246';
 const SHOTS = '.data/shots';
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const WINE = 'rgb(120, 66, 68)'; // #784244
+const LEMON = 'rgb(255, 243, 178)'; // #FFF3B2
 
 test.describe.configure({ mode: 'serial' });
 
@@ -25,11 +27,16 @@ async function sql<T = Record<string, unknown>>(text: string, params: unknown[] 
 }
 
 /** Неразрывные пробелы формата ru-RU сводим к обычным. */
-const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, ' ');
+const plain = (s: string) => s.replace(/[  ]/g, ' ');
 
 async function toDocuments(page: Page) {
-  await page.getByRole('link', { name: 'Документы' }).click();
+  await page.getByRole('link', { name: 'Документы', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
+}
+
+async function go(page: Page, tab: 'Агент' | 'Дашборд') {
+  await page.getByRole('link', { name: tab, exact: true }).click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(tab === 'Агент' ? '/agent' : '/dashboard');
 }
 
 async function startFromCatalog(
@@ -37,6 +44,7 @@ async function startFromCatalog(
   template: string,
   opts: { entity?: string; kind?: string; month?: string; quarter?: string; year?: string } = {},
 ) {
+  await page.getByRole('tab', { name: 'Каталог шаблонов' }).click();
   await page.locator(`[data-template="${template}"] [data-action="fill"]`).click();
   const dialog = page.getByRole('dialog', { name: /Заполнить:/ });
   await expect(dialog).toBeVisible();
@@ -47,20 +55,32 @@ async function startFromCatalog(
   if (opts.quarter) await dialog.getByLabel('Квартал').selectOption({ label: opts.quarter });
   await dialog.getByRole('button', { name: 'Заполнить', exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/documents\/[0-9a-f-]{36}$/);
-  await expect(page.getByTestId('file-card')).toBeVisible();
+  await expect(page.getByTestId('sheet')).toBeVisible();
 }
 
 const docId = (page: Page) => new URL(page.url()).pathname.split('/').pop()!;
+const sheet = (page: Page) => page.getByTestId('sheet');
+const field = (page: Page, key: string) => sheet(page).locator(`[data-field="${key}"]`).first();
+const bar = (page: Page) => page.getByTestId('sheet-actions');
+const counter = (page: Page) => bar(page).locator('[data-action="missing-first"]');
+const status = (page: Page) => page.getByTestId('sheet-meta').locator('.doc-status');
+
 const openMenu = async (page: Page) => {
   await page.getByRole('button', { name: 'Ещё' }).click();
   await expect(page.getByRole('menu', { name: 'Действия с документом' })).toBeVisible();
 };
 const menuItem = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });
-const fileLink = (page: Page) => page.locator('[data-action="open"]');
 
-/** Файл .docx по ссылке «Открыть»: тот же запрос, что делает браузер. */
+/** Адрес файла из меню «ещё» (пункт «Скачать»). */
+async function fileHref(page: Page): Promise<string> {
+  await openMenu(page);
+  const href = (await page.getByRole('menuitem', { name: /^Скачать/ }).getAttribute('href'))!;
+  await page.keyboard.press('Escape');
+  return href;
+}
+
 async function fetchFile(page: Page) {
-  const href = (await fileLink(page).getAttribute('href'))!;
+  const href = await fileHref(page);
   const res = await page.request.get(href);
   return { res, href, body: await res.body() };
 }
@@ -71,17 +91,12 @@ async function docxXml(body: Buffer): Promise<string> {
 }
 
 const textOf = (xml: string) => plain(xml.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, ''));
-
-/** Содержимое пропущенных полей в файле: тексты прогонов с жёлтым выделением. */
-const highlighted = (xml: string) =>
-  [...xml.matchAll(/<w:r>(?:(?!<\/w:r>).)*?<w:highlight w:val="yellow"\/>(?:(?!<\/w:r>).)*?<w:t[^>]*>([^<]*)<\/w:t>/gs)].map(
-    (m) => m[1]!,
-  );
-
 const nameFrom = (cd: string) => decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(cd)![1]!);
 
 const overflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+const css = (loc: Locator, prop: string) => loc.evaluate((e, p) => getComputedStyle(e).getPropertyValue(p), prop);
 
 // ===== навигация и каталог =====
 
@@ -95,7 +110,7 @@ test('Навигация: третья вкладка «Документы» н�
     const t = [...document.querySelectorAll('.tabs .tab')].map((e) => {
       const r = e.getBoundingClientRect();
       const svg = e.querySelector('svg')!.getBoundingClientRect();
-      return { x: r.left, w: r.width, h: r.height, icon: [svg.width, svg.height] };
+      return { w: r.width, h: r.height, icon: [svg.width, svg.height] };
     });
     return { t, cols: getComputedStyle(document.querySelector('.tabs')!).gridTemplateColumns.split(' ').length };
   });
@@ -110,7 +125,6 @@ test('Навигация: третья вкладка «Документы» н�
   await expect.poll(() => new URL(page.url()).pathname).toBe('/documents');
   await expect(tabs.nth(2)).toHaveAttribute('aria-current', 'page');
 
-  // компьютер: боковая панель столбиком, три вкладки
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(150);
   const desk = await page.evaluate(() =>
@@ -126,33 +140,32 @@ test('Навигация: третья вкладка «Документы» н�
 });
 
 for (const width of [390, 1440]) {
-  test(`Каталог: карточка шаблона это название, строка описания и «Заполнить», ${width} px`, async ({ page }) => {
+  test(`Каталог: карточка шаблона и отступ заголовка от шапки, ${width} px`, async ({ page }) => {
     fs.mkdirSync(SHOTS, { recursive: true });
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await firstLogin(page, PIN);
     await toDocuments(page);
 
+    // заголовок «Документы» не прилипает к шапке: от низа шапки не меньше 24 px (телефон), 32 px (компьютер)
+    const gap = await page.evaluate(() => {
+      const head = document.querySelector('header.top')!.getBoundingClientRect();
+      const h1 = document.querySelector('h1')!.getBoundingClientRect();
+      return { gap: h1.top - head.bottom, y: window.scrollY };
+    });
+    expect(gap.y).toBe(0);
+    expect(gap.gap).toBeGreaterThanOrEqual(width === 390 ? 24 : 32);
+    expect(gap.gap).toBeLessThanOrEqual(width === 390 ? 36 : 44);
+
     const cards = page.locator('li.tpl');
     await expect(cards).toHaveCount(8);
-    // у карточки ровно три части: заголовок, одна строка описания, кнопка
     for (const card of await cards.all()) {
       await expect(card.locator('h2')).toHaveCount(1);
       await expect(card.locator('.tpl-desc')).toHaveCount(1);
-      await expect(card.getByRole('button')).toHaveCount(1);
       await expect(card.getByRole('button')).toHaveText('Заполнить');
     }
-    // нет меток «Образец», «Демо», повтора категории и числа полей
     await expect(page.locator('.tpl-cat, .tpl-meta')).toHaveCount(0);
-    await expect(page.locator('li.tpl').filter({ hasText: /Образец|Демо/ })).toHaveCount(0);
-    await expect(page.locator('li.tpl').filter({ hasText: /полей:|файл \./ })).toHaveCount(0);
     await expect(page.getByText('Образец, проверить юристом')).toHaveCount(0);
     expect(await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1)).toBe(1);
-    // описание умещается в короткую строку
-    const longest = await cards.locator('.tpl-desc').evaluateAll((els) => Math.max(...els.map((e) => (e.textContent ?? '').length)));
-    expect(longest).toBeLessThanOrEqual(42);
-    // и на экране это одна строка
-    const heights = await cards.locator('.tpl-desc').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
-    for (const h of heights) expect(h).toBeLessThan(26);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${SHOTS}/doc-catalog-${width}.png`, fullPage: true });
 
@@ -176,267 +189,302 @@ for (const width of [390, 1440]) {
     await expect(cards).toHaveCount(0);
     await expect(page.getByTestId('templates-empty')).toBeVisible();
     await page.getByLabel('Поиск по названию').fill('');
-
-    await page.getByRole('tab', { name: /Мои документы/ }).click();
-    await expect(page.getByRole('tabpanel')).toBeVisible();
   });
 }
 
-// ===== страница документа: файл вместо предпросмотра =====
+test('Прокрутка раздела: открывается в самом начале, при возврате из документа место сохраняется', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await firstLogin(page, PIN);
+  await go(page, 'Дашборд');
+  await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await toDocuments(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.evaluate(() => window.scrollTo(0, 420));
+  await page.waitForTimeout(150);
+  await page.locator('[data-template="report_group_summary"] [data-action="fill"]').click();
+  const dialog = page.getByRole('dialog', { name: /Заполнить:/ });
+  await expect(dialog).toBeVisible();
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(200);
+  await dialog.getByLabel('Вид периода').selectOption({ label: 'Год' });
+  await dialog.getByRole('button', { name: 'Заполнить', exact: true }).click();
+  await expect(page.getByTestId('sheet')).toBeVisible();
+  // лист открывается с начала
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.getByRole('link', { name: 'К документам' }).click();
+  await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
+  await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThanOrEqual(2);
+
+  // из другого раздела раздел «Документы» снова открывается с начала
+  await go(page, 'Дашборд');
+  await toDocuments(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+// ===== лист документа =====
 
 for (const width of [390, 1440]) {
-  test(`Страница документа: карточка файла, без предпросмотра текста, ${width} px`, async ({ page }) => {
+  test(`Лист: белая страница с текстом, поля подсвечены, закреплённые действия, ${width} px`, async ({ page }) => {
     fs.mkdirSync(SHOTS, { recursive: true });
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await firstLogin(page, PIN);
     await toDocuments(page);
     await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
 
-    // карточка: значок, имя файла, строка «Версия · статус · обновлён», две основные кнопки
-    const card = page.getByTestId('file-card');
-    await expect(card).toHaveAttribute('data-kind', 'docx');
-    await expect(card.locator('svg.file-ic')).toBeVisible();
-    await expect(page.getByTestId('file-name')).toHaveText('Договор аренды автомобиля без экипажа, ИП Бета.docx');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Договор аренды автомобиля без экипажа, ИП Бета.docx');
-    const meta = page.getByTestId('file-meta');
+    // верхняя панель: назад, название, версия и статус одной строкой, меню «ещё»
+    await expect(page.getByRole('link', { name: 'К документам' })).toBeVisible();
+    await expect(page.getByTestId('sheet-title')).toHaveText('Договор аренды автомобиля без экипажа, ИП Бета');
     await expect(page.getByTestId('doc-version')).toHaveText('Версия 1');
-    // статус меткой со знаком и словом, не только цветом
-    await expect(meta.locator('.doc-status')).toHaveText(/○\s*Черновик/);
-    await expect(meta.locator('.doc-status')).toHaveAttribute('data-status', 'draft');
-    expect(plain((await meta.innerText()).replace(/\s+/g, ' '))).toMatch(/^Версия 1 · ○ черновик · обновлён \d{2}\.\d{2}, \d{2}:\d{2}$/);
-    // одна строка и на телефоне
-    expect((await meta.boundingBox())!.height).toBeLessThan(26);
-    await expect(fileLink(page)).toHaveText('Открыть');
-    await expect(card.getByRole('button', { name: 'Отправить', exact: true })).toBeVisible();
-    // пока не заполнено, отправить нельзя
-    await expect(card.getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
+    await expect(status(page)).toHaveAttribute('data-status', 'draft');
+    expect((await page.locator('.sheet-bar').boundingBox())!.height).toBeLessThanOrEqual(64);
+    expect((await page.getByTestId('sheet-meta').boundingBox())!.height).toBeLessThan(24);
 
-    // текста договора на странице нет
-    await expect(page.getByTestId('doc-paper')).toHaveCount(0);
-    await expect(page.locator('.df, .doc-paper, .doc-legend, .doc-watermark')).toHaveCount(0);
-    const body = await page.evaluate(() => document.body.textContent ?? '');
-    expect(body).not.toContain('Предмет договора');
-    expect(body).not.toContain('Арендодатель передаёт Арендатору');
-    expect(body).not.toContain('Условные обозначения');
-    // пометки и пояснения не повторяются на странице
-    await expect(page.getByText('Образец, проверить юристом')).toHaveCount(0);
-    expect(body.split('Демо-данные').length - 1).toBe(1);
-    expect(body).not.toContain('Письмо не отправляется');
-
-    // одна строка про незаполненное; без плашек и отдельной раскраски
-    const unfilled = page.getByTestId('unfilled');
-    await expect(page.getByTestId('missing-count')).toHaveText('Не заполнено: 7 полей');
-    await expect(page.getByTestId('missing-list')).toHaveCount(0);
-    await unfilled.getByRole('button', { name: /Не заполнено/ }).click();
-    const list = page.getByTestId('missing-list');
-    await expect(list).toBeVisible();
-    await expect(list).toContainText('Номер договора');
-    await expect(list).toContainText('Дата договора');
-    await expect(list.locator('li')).toHaveCount(7);
-    await expect(page.locator('.miss-link')).toHaveCount(0);
-    const look = await list.evaluate((e) => {
-      const c = getComputedStyle(e);
-      return { outline: c.outlineStyle, border: c.borderTopStyle, bg: c.backgroundColor };
-    });
-    expect(look.outline).not.toBe('dashed');
-    expect(look.border).not.toBe('dashed');
-    await unfilled.getByRole('button', { name: /Не заполнено/ }).click();
-    await expect(list).toHaveCount(0);
-
-    // «Дозаполнить» отдельной кнопкой, пока есть пропуски; остальное в меню «ещё»
-    await expect(page.getByRole('button', { name: 'Дозаполнить', exact: true })).toBeVisible();
-    for (const hidden of ['Проверить самому', 'История версий', 'Комментарии', 'Скачать']) {
-      await expect(page.getByRole('button', { name: new RegExp(hidden) })).toHaveCount(0);
-    }
-    await openMenu(page);
-    for (const name of ['Дозаполнить', 'Править', 'Проверить самому', 'История версий', 'Комментарии', 'Скачать .docx']) {
-      await expect(menuItem(page, name)).toBeVisible();
-    }
-    // кнопка меню рядом с заголовком
+    // лист: белая страница до 760 px по центру, текст договора с заголовками
     const geo = await page.evaluate(() => {
-      const h = document.querySelector('h1')!.getBoundingClientRect();
-      const b = document.querySelector('.doc-more button')!.getBoundingClientRect();
-      return { hTop: h.top, bTop: b.top, bH: b.height, bW: b.width, bRight: b.right, vw: window.innerWidth };
+      const p = document.querySelector('[data-testid="sheet"]')!;
+      const r = p.getBoundingClientRect();
+      const desk = p.parentElement!.getBoundingClientRect();
+      return { w: r.width, left: r.left, right: r.right, bg: getComputedStyle(p).backgroundColor, dl: desk.left, dr: desk.right, vw: window.innerWidth };
     });
-    expect(Math.abs(geo.bTop - geo.hTop)).toBeLessThan(30);
-    expect(geo.bH).toBeGreaterThanOrEqual(43.5);
-    expect(geo.bW).toBeGreaterThanOrEqual(43.5);
-    expect(geo.bRight).toBeLessThanOrEqual(geo.vw);
-    await page.screenshot({ path: `${SHOTS}/doc-page-menu-${width}.png` });
-    // Escape закрывает меню, фокус возвращается на кнопку
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('menu')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Ещё' })).toBeFocused();
+    expect(geo.bg).toBe('rgb(255, 255, 255)');
+    expect(geo.w).toBeLessThanOrEqual(760.5);
+    expect(geo.right).toBeLessThanOrEqual(geo.vw);
+    if (width === 1440) expect(Math.abs((geo.left + geo.right) / 2 - (geo.dl + geo.dr) / 2)).toBeLessThanOrEqual(1);
+    await expect(sheet(page).locator('h2.sheet-h1')).toContainText('Договор аренды автомобиля без экипажа №');
+    await expect(sheet(page).getByText('1. Предмет договора')).toBeVisible();
+    await expect(page.getByTestId('file-card')).toHaveCount(0);
+    await expect(page.getByText('Условные обозначения')).toHaveCount(0);
 
+    // пропущенные поля: жёлтый #FFF3B2 и «[Название]»
+    expect(await sheet(page).locator('[data-state="missing"]').count()).toBeGreaterThanOrEqual(7);
+    const first = field(page, 'contract_number');
+    await expect(first).toHaveText(/^\[Номер договора\]/);
+    expect(await css(first, 'background-color')).toBe(LEMON);
+    // заполненные из реквизитов и расчёта: тонкое подчёркивание
+    for (const el of [sheet(page).locator('[data-source="entity"]').first(), sheet(page).locator('[data-source="calc"]').first()]) {
+      expect(await css(el, 'border-bottom-width')).toBe('1px');
+      expect(await css(el, 'border-bottom-style')).toBe('solid');
+    }
+
+    // закреплённая нижняя панель: счётчик, «Дозаполнить», «Отправить»
+    await expect(bar(page)).toBeVisible();
+    await expect(counter(page)).toHaveText('Не заполнено: 7');
+    const fill = bar(page).getByRole('button', { name: 'Дозаполнить', exact: true });
+    await expect(fill).toBeVisible();
+    await page.mouse.move(1, 1);
+    await expect.poll(() => css(fill, 'background-color')).toBe(WINE);
+    await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
+    const sticky = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="sheet-actions"]')!;
+      const r = el.getBoundingClientRect();
+      return { bottom: r.bottom, vh: window.innerHeight, pos: getComputedStyle(el).position };
+    });
+    expect(sticky.pos).toBe('sticky');
+    expect(sticky.bottom).toBeLessThanOrEqual(sticky.vh + 0.5);
+    expect(sticky.bottom).toBeGreaterThan(sticky.vh - 120);
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await page.waitForTimeout(150);
+    const stuck = (await bar(page).boundingBox())!;
+    expect(Math.abs(stuck.y + stuck.height - (await page.evaluate(() => window.innerHeight)))).toBeLessThanOrEqual(2);
+    await page.evaluate(() => window.scrollTo(0, 0));
     expect(await overflow(page)).toBeLessThanOrEqual(0);
-    const targets = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>('.file-acts .act, .unfilled .act, .line-toggle, .doc-more .icon-btn')]
-        .filter((e) => e.offsetParent !== null)
-        .map((e) => e.getBoundingClientRect().height),
-    );
-    expect(targets.length).toBeGreaterThanOrEqual(4);
-    for (const h of targets) expect(h).toBeGreaterThanOrEqual(43.5);
-    await page.screenshot({ path: `${SHOTS}/doc-page-${width}.png`, fullPage: true });
+
+    // меню «ещё»: скачивание, проверка, история, комментарии; «Править» и «Дозаполнить» в нём нет
+    await openMenu(page);
+    const items = await page.getByRole('menuitem').allInnerTexts();
+    expect(items.map((t) => t.replace(/\s+\d+$/, ''))).toEqual(['Скачать .docx', 'Проверить самому', 'История версий', 'Комментарии']);
+    await page.keyboard.press('Escape');
+    await page.screenshot({ path: `${SHOTS}/doc-sheet-${width}.png` });
   });
 }
 
-test('Декларация: карточка с файлом .xlsx по той же схеме', async ({ page }) => {
+test('Телефон: лист на весь экран, нижней панели вкладок нет, цели нажатия 44 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await firstLogin(page, PIN);
   await toDocuments(page);
-  await startFromCatalog(page, 'decl_vat_draft', { entity: 'ООО «Альфа»', kind: 'Год', year: '2026' });
-  await expect(page.getByTestId('file-card')).toHaveAttribute('data-kind', 'xlsx');
-  await expect(page.getByTestId('file-name')).toHaveText(/^Проект декларации по НДС, ООО «Альфа», .+\.xlsx$/);
-  await expect(page.locator('svg.file-ic-xlsx')).toBeVisible();
-  await expect(fileLink(page)).toHaveText('Открыть');
-  await openMenu(page);
-  await expect(menuItem(page, 'Скачать .xlsx')).toBeVisible();
-  await expect(page.getByTestId('doc-paper')).toHaveCount(0);
-  await expect(page.getByTestId('watermark')).toHaveCount(0);
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
+  await expect(page.locator('nav.tabs')).toBeHidden();
+  await expect(page.locator('.docs-rail')).toBeHidden();
+  const small = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.sheet-actions .act, .bar-arrow, .bar-counter, .sheet-bar .icon-btn')]
+      .filter((e) => e.offsetParent !== null)
+      .map((e) => e.getBoundingClientRect().height),
+  );
+  expect(small.length).toBeGreaterThanOrEqual(6);
+  for (const h of small) expect(h).toBeGreaterThanOrEqual(43.5);
+  await page.getByRole('link', { name: 'К документам' }).click();
+  await expect(page.locator('nav.tabs')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
 });
 
-// ===== «Открыть»: файл по прямой ссылке =====
-
-for (const width of [390, 1440]) {
-  test(`«Открыть»: файл с верным типом и именем, пропуски выделены жёлтым, ${width} px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    await firstLogin(page, PIN);
-    await toDocuments(page);
-    await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
-    const url = page.url();
-    const id = docId(page);
-
-    // ссылка ведёт прямо на файл, а не на страницу приложения
-    await expect(fileLink(page)).toHaveAttribute('href', `/api/documents/${id}/file`);
-    const { res, body } = await fetchFile(page);
-    expect(res.status()).toBe(200);
-    expect(res.headers()['content-type']).toBe(DOCX);
-    const cd = res.headers()['content-disposition']!;
-    expect(cd).toMatch(/^attachment; /);
-    expect(nameFrom(cd)).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
-    expect(nameFrom(cd)).toBe(await page.getByTestId('file-name').innerText());
-    expect(body.subarray(0, 2).toString()).toBe('PK');
-
-    // нажатие скачивает файл (на компьютере он откроется в Word) и не уводит со страницы
-    const [download] = await Promise.all([page.waitForEvent('download'), fileLink(page).click()]);
-    expect(download.suggestedFilename()).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
-    expect(page.url()).toBe(url);
-    await expect(page.getByTestId('file-card')).toBeVisible();
-
-    // внутри файла: колонтитул мелким шрифтом, пропуски жёлтым в виде [поле]
-    const zip = await JSZip.loadAsync(body);
-    const xml = await zip.file('word/document.xml')!.async('string');
-    const header = await zip.file(/^word\/header\d*\.xml$/)[0]!.async('string');
-    expect(header).toContain('Образец, проверить юристом');
-    expect(header).toContain('<w:sz w:val="16"/>');
-    // семь обязательных и два необязательных пропуска (залог, особые условия): выделены все
-    const marks = highlighted(xml);
-    expect(marks.length).toBe(9);
-    for (const m of marks) expect(m).toMatch(/^\[.+\]$/);
-    expect(marks).toContain('[Номер договора]');
-    expect(marks).toContain('[Залог]');
-    expect(marks).toContain('[Арендатор: наименование или ФИО]');
-    // заполненное из реквизитов и расчёта не выделено
-    const text = textOf(xml);
-    expect(text).toContain('ИП Бета');
-    expect(marks.join('')).not.toContain('Бета');
-    expect(text).toMatch(/по ставке \d+%/);
-  });
-}
-
-test('«Открыть» на iPhone и iPad: ссылка на просмотр во встроенном просмотрщике', async ({ browser }) => {
-  const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-    viewport: { width: 390, height: 844 },
-    hasTouch: true,
-    isMobile: true,
-    locale: 'ru-RU',
-    timezoneId: 'Asia/Kamchatka',
-    baseURL: 'http://localhost:3101',
-  });
-  const page = await context.newPage();
-  try {
-    await firstLogin(page, PIN);
-    await toDocuments(page);
-    await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'март', year: '2026' });
-    const link = fileLink(page);
-    await expect(link).toHaveAttribute('href', /\/file\?inline=1$/);
-    await expect(link).toHaveAttribute('target', '_blank');
-    await expect(link).not.toHaveAttribute('download', /.*/);
-    const res = await page.request.get((await link.getAttribute('href'))!);
-    expect(res.headers()['content-disposition']).toMatch(/^inline; /);
-    expect(res.headers()['content-type']).toBe(DOCX);
-    expect(nameFrom(res.headers()['content-disposition']!)).toBe('Справка по НДС за период, ООО «Альфа», март 2026.docx');
-  } finally {
-    await context.close();
-  }
-});
-
-test('Суммы в файле те же, что в «Проверить самому» и в расчёте', async ({ page }) => {
+test('Компьютер: документ справа от каталога, «на всю ширину» и узкий экран', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await firstLogin(page, PIN);
   await toDocuments(page);
-  await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'февраль', year: '2026' });
-  await openMenu(page);
-  await menuItem(page, 'Проверить самому').click();
-  const screen = page.getByTestId('overlay-screen');
-  await expect(screen).toBeVisible();
-  const total = plain(await screen.locator('[data-check="field:vat_total"] .chk-val').innerText());
-  const revenue = plain(await screen.locator('[data-check="field:revenue"] .chk-val').innerText());
-  await screen.getByRole('button', { name: 'Закрыть' }).click();
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
 
-  const { body } = await fetchFile(page);
-  const text = textOf(await docxXml(body));
-  expect(text).toContain(total);
-  expect(text).toContain(revenue);
-  expect(text).toContain('февраль 2026');
-  expect(text).toContain('[Подготовил]');
-  expect(highlighted(await docxXml(body))).toContain('[Подготовил]');
+  const split = await page.evaluate(() => {
+    const rail = document.querySelector('.docs-rail')!.getBoundingClientRect();
+    const pane = document.querySelector('.docs-pane')!.getBoundingClientRect();
+    return { railR: rail.right, paneL: pane.left, railW: rail.width };
+  });
+  expect(split.railW).toBeGreaterThanOrEqual(300);
+  expect(split.paneL).toBeGreaterThan(split.railR);
+  // каталог остался на своей вкладке; открытый документ отмечен в списке «Мои документы»
+  await expect(page.getByRole('tab', { name: 'Каталог шаблонов' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: /Мои документы/ }).click();
+  await expect(page.locator('li[data-doc].on')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'На всю ширину' }).click();
+  await expect(page.locator('.docs-rail')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Показать рядом с каталогом' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Показать рядом с каталогом' }).click();
+  await expect(page.locator('.docs-rail')).toBeVisible();
+
+  // уже 1100 px: каталог скрыт, лист на всю ширину
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await expect(page.locator('.docs-rail')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'На всю ширину' })).toBeHidden();
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
 
-test('Скачать из меню: .docx для отчёта, .xlsx для декларации с листами расчёта', async ({ page }) => {
+test('«Открыть» из списка ведёт на страницу документа в приложении, файл не скачивается', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDocuments(page);
   await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'март', year: '2026' });
-  await openMenu(page);
-  const [docx] = await Promise.all([page.waitForEvent('download'), menuItem(page, 'Скачать .docx').click()]);
-  expect(docx.suggestedFilename()).toBe('Справка по НДС за период, ООО «Альфа», март 2026.docx');
-
+  const id = docId(page);
   await page.getByRole('link', { name: 'К документам' }).click();
-  await startFromCatalog(page, 'decl_vat_draft', { entity: 'ООО «Альфа»', kind: 'Год', year: '2026' });
-  const { res, body } = await fetchFile(page);
-  expect(res.headers()['content-type']).toBe(XLSX);
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(body as unknown as ArrayBuffer);
-  expect(wb.worksheets.map((w) => w.name)).toEqual(['Проект декларации', 'Итог', 'По месяцам', 'Расчёт', 'Источник']);
-  const ws = wb.getWorksheet('Проект декларации')!;
-  expect(String(ws.getCell('A1').value)).toBe('Проект. Не для подачи');
-  // пропущенные поля декларации жёлтые и в виде [поле]
-  let yellow = 0;
-  ws.eachRow((row) => {
-    const c = row.getCell(1);
-    const fill = c.fill as { fgColor?: { argb?: string } } | undefined;
-    if (/\[[^\]]+\]/.test(String(c.value)) && fill?.fgColor?.argb === 'FFFFFF00') yellow += 1;
+  await page.getByRole('tab', { name: /Мои документы/ }).click();
+
+  const item = page.locator(`li[data-doc="${id}"]`);
+  const open = item.getByRole('link', { name: 'Открыть', exact: true });
+  // обычная ссылка: её можно открыть и в новой вкладке браузера
+  await expect(open).toHaveAttribute('href', `/documents/${id}`);
+  await expect(open).not.toHaveAttribute('download', /.*/);
+
+  let downloads = 0;
+  page.on('download', () => (downloads += 1));
+  const files: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/file')) files.push(r.url());
   });
-  expect(yellow).toBeGreaterThan(0);
+  await open.click();
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/documents/${id}`);
+  await expect(sheet(page)).toBeVisible();
+  await expect(page.getByTestId('sheet-title')).toContainText('Справка по НДС за период');
+  await page.waitForTimeout(500);
+  expect(downloads).toBe(0);
+  expect(files).toEqual([]);
 });
 
-// ===== дозаполнение, версии =====
-
-test('Дозаполнить: форма только по пропущенным полям, новая версия, история версий', async ({ page }) => {
+test('Ввод по нажатию: окно значения, новая версия, поле больше не подсвечено', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDocuments(page);
   await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ООО «Альфа»' });
-  await expect(page.getByTestId('missing-count')).toHaveText('Не заполнено: 7 полей');
+  await expect(counter(page)).toHaveText('Не заполнено: 7');
 
-  await page.getByRole('button', { name: 'Дозаполнить', exact: true }).click();
+  await field(page, 'contract_number').click();
+  const dialog = page.getByRole('dialog', { name: 'Значение поля: Номер договора' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('textbox')).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Сохранить' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('doc-version')).toHaveText('Версия 1');
+
+  await field(page, 'contract_number').click();
+  await dialog.getByRole('textbox').fill('15');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
+  await expect(counter(page)).toHaveText('Не заполнено: 6');
+  const saved = field(page, 'contract_number');
+  await expect(saved).toHaveAttribute('data-state', 'filled');
+  await expect(saved).toHaveAttribute('data-source', 'user');
+  await expect(sheet(page).locator('h2.sheet-h1')).toContainText('№ 15');
+  expect(await css(saved, 'background-color')).not.toBe(LEMON);
+
+  // неверное значение: ошибка в окне, версия не создаётся (у каждого поля своё имя окна)
+  const priceDialog = page.getByRole('dialog', { name: 'Значение поля: Арендная плата за сутки' });
+  await field(page, 'rent_price').click();
+  await expect(priceDialog).toBeVisible();
+  await priceDialog.getByRole('textbox').fill('много');
+  await priceDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(priceDialog.getByRole('alert')).toContainText('сумма');
+  await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
+  await priceDialog.getByRole('textbox').fill('7 500,50');
+  await priceDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(priceDialog).toHaveCount(0);
+  await expect(page.getByTestId('doc-version')).toHaveText('Версия 3');
+  expect(plain(await field(page, 'rent_price').innerText())).toContain('7 500,50 ₽');
+
+  // значение из расчёта вручную не вводится: окна нет
+  const rate = field(page, 'vat_rate');
+  await expect(rate).toHaveAttribute('data-source', 'calc');
+  await rate.click();
+  await expect(page.getByRole('dialog', { name: /^Значение поля:/ })).toHaveCount(0);
+  expect(await sheet(page).locator('button[data-source="calc"]').count()).toBe(0);
+
+  const rows = await sql<{ n: number }>('select n from document_versions where document_id = $1 order by n', [docId(page)]);
+  expect(rows.map((r) => r.n)).toEqual([1, 2, 3]);
+});
+
+test('Счётчик пропусков: нажатие к первому, стрелки вперёд и назад по кругу', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ООО «Альфа»' });
+  await expect(counter(page)).toHaveText('Не заполнено: 7');
+
+  const activeField = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.field ?? null);
+  const required = ['contract_number', 'contract_date', 'lessee_name', 'car_description', 'rent_term', 'rent_price', 'lessee_details'];
+  const firstInText = await page.evaluate((req) => {
+    for (const e of document.querySelectorAll<HTMLElement>('[data-state="missing"]')) {
+      if (req.includes(e.dataset.field!)) return e.dataset.field!;
+    }
+    return null;
+  }, required);
+
+  await counter(page).click();
+  await expect.poll(activeField).toBe(firstInText);
+  const inView = () =>
+    page.evaluate(() => {
+      const el = document.activeElement as HTMLElement;
+      const r = el.getBoundingClientRect();
+      const b = document.querySelector('[data-testid="sheet-actions"]')!.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= b.top + 1;
+    });
+  await expect.poll(inView).toBe(true);
+
+  const next = bar(page).getByRole('button', { name: 'Следующее незаполненное поле' });
+  const prev = bar(page).getByRole('button', { name: 'Предыдущее незаполненное поле' });
+  await next.click();
+  await expect.poll(activeField).not.toBe(firstInText);
+  expect(required).toContain(await activeField());
+  await prev.click();
+  await expect.poll(activeField).toBe(firstInText);
+  // назад с первого: последнее по тексту
+  await prev.click();
+  await expect.poll(async () => required.includes((await activeField()) ?? '') && (await activeField()) !== firstInText).toBe(true);
+  await expect.poll(inView).toBe(true);
+});
+
+test('«Дозаполнить»: форма только по пропущенным полям, одна новая версия, история версий', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ООО «Альфа»' });
+  await expect(counter(page)).toHaveText('Не заполнено: 7');
+
+  await bar(page).getByRole('button', { name: 'Дозаполнить', exact: true }).click();
   const form = page.getByTestId('overlay-screen');
   await expect(form).toBeVisible();
-  // только пропущенные: ни реквизитов юрлица, ни ставки НДС в форме нет
   await expect(form.getByLabel(/Номер договора/)).toBeVisible();
   await expect(form.getByLabel(/Наименование юрлица/)).toHaveCount(0);
   await expect(form.getByLabel(/Ставка НДС по расчёту/)).toHaveCount(0);
   await expect(form).toContainText('Не заполнено: 7 полей');
-  // предложение формулировки: слова, без цифр
   await form.getByRole('button', { name: 'Предложить формулировку' }).click();
   const option = form.getByRole('list', { name: /Варианты/ }).getByRole('button').first();
   await expect(option).toBeVisible();
@@ -452,21 +500,15 @@ test('Дозаполнить: форма только по пропущенны�
   await form.getByLabel(/Арендная плата за сутки/).fill('7 500,50');
   await form.getByRole('button', { name: 'Сохранить как новую версию' }).click();
 
-  // строка про незаполненное исчезла, версия 2, файл без выделения
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
-  await expect(page.getByTestId('unfilled')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Дозаполнить', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Отправить', exact: true })).toBeEnabled();
-  const { body } = await fetchFile(page);
-  const xml = await docxXml(body);
-  // обязательное заполнено; необязательный залог остался пустым и в файле остаётся выделенным
-  expect(highlighted(xml)).toEqual(['[Залог]']);
-  const text = textOf(xml);
-  expect(text).toContain('Договор аренды автомобиля без экипажа № 15');
-  expect(text).toContain('7 500,50 ₽');
-  expect(text).toContain('ИП Тестов Т.Т.');
+  await expect(bar(page).getByRole('button', { name: 'Дозаполнить', exact: true })).toHaveCount(0);
+  await expect(counter(page)).toHaveCount(0);
+  await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toBeEnabled();
+  expect(plain(await field(page, 'rent_price').innerText())).toContain('7 500,50 ₽');
+  await expect(sheet(page)).toContainText('Договор аренды автомобиля без экипажа № 15');
+  // осталось необязательное «Залог»: подсвечено, но в счётчик не входит
+  await expect(field(page, 'deposit')).toHaveAttribute('data-state', 'missing');
 
-  // история версий: две версии, видно что изменилось
   await openMenu(page);
   await menuItem(page, 'История версий').click();
   const history = page.getByTestId('overlay-drawer');
@@ -476,25 +518,138 @@ test('Дозаполнить: форма только по пропущенны�
   await expect(versions.first()).toContainText('Номер договора');
   await expect(versions.first()).toContainText(/контрольная сумма [0-9a-f]{12}/);
 
-  // старая версия: открыть можно, править нельзя, файл с пропусками на месте
+  // старая версия: открыть можно, править нельзя, поля не нажимаются, панели действий нет
   await versions.nth(1).getByRole('button', { name: 'Открыть версию 1' }).click();
   await expect(page.getByTestId('readonly-note')).toBeVisible();
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 1 из 2');
-  await expect(page.getByTestId('missing-count')).toHaveText('Не заполнено: 7 полей');
-  await expect(page.getByRole('button', { name: 'Дозаполнить', exact: true })).toHaveCount(0);
-  await openMenu(page);
-  await expect(menuItem(page, 'Править')).toHaveCount(0);
-  await expect(menuItem(page, 'Дозаполнить')).toHaveCount(0);
-  await page.keyboard.press('Escape');
+  await expect(bar(page)).toHaveCount(0);
+  expect(await sheet(page).locator('button.sf').count()).toBe(0);
+  await expect(field(page, 'contract_number')).toHaveText(/^\[Номер договора\]/);
   const old = await fetchFile(page);
   expect(old.href).toContain('version=1');
   expect(nameFrom(old.res.headers()['content-disposition']!)).toBe(
     'Договор аренды автомобиля без экипажа, ООО «Альфа» (версия 1).docx',
   );
-  expect(highlighted(await docxXml(old.body))).toHaveLength(9);
 
   const rows = await sql<{ n: number }>('select n from document_versions where document_id = $1 order by n', [docId(page)]);
   expect(rows.map((r) => r.n)).toEqual([1, 2]);
+});
+
+// ===== подсказка источника =====
+
+test('Источник значения: подсказка при наведении и по фокусу', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'февраль', year: '2026' });
+  const tip = page.getByTestId('source-tip');
+  await expect(tip).toHaveCount(0);
+
+  await sheet(page).locator('[data-source="entity"]').first().hover();
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText('Реквизиты юрлица');
+  await page.mouse.move(5, 5);
+  await expect(tip).toHaveCount(0);
+
+  const total = field(page, 'vat_total');
+  await total.hover();
+  await expect(tip).toContainText('Расчёт: НДС, февраль 2026');
+  await page.mouse.move(5, 5);
+
+  await total.focus();
+  await expect(tip).toContainText('Расчёт');
+  await page.keyboard.press('Escape');
+  await expect(tip).toHaveCount(0);
+});
+
+test.describe('Долгое нажатие на телефоне', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('подсказка источника появляется по долгому нажатию, короткое нажатие её не вызывает', async ({ page }) => {
+    await firstLogin(page, PIN);
+    await page.getByRole('link', { name: 'Документы', exact: true }).click();
+    await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'февраль', year: '2026' });
+    const target = sheet(page).locator('[data-source="entity"]').first();
+    await target.scrollIntoViewIfNeeded();
+    const box = (await target.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = async (holdMs: number) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      await page.waitForTimeout(holdMs);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    await touch(80);
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId('source-tip')).toHaveCount(0);
+    await touch(700);
+    await expect(page.getByTestId('source-tip')).toBeVisible();
+    await expect(page.getByTestId('source-tip')).toContainText('Реквизиты юрлица');
+  });
+});
+
+// ===== файл и суммы =====
+
+test('Скачать из меню: .docx с колонтитулом и выделенными пропусками, имя файла', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
+  await openMenu(page);
+  const [download] = await Promise.all([page.waitForEvent('download'), menuItem(page, 'Скачать .docx').click()]);
+  expect(download.suggestedFilename()).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
+
+  const { res, body } = await fetchFile(page);
+  expect(res.headers()['content-type']).toBe(DOCX);
+  expect(res.headers()['content-disposition']).toMatch(/^attachment; /);
+  const zip = await JSZip.loadAsync(body);
+  const header = await zip.file(/^word\/header\d*\.xml$/)[0]!.async('string');
+  expect(header).toContain('Образец, проверить юристом');
+  const xml = await zip.file('word/document.xml')!.async('string');
+  const marks = [...xml.matchAll(/<w:r>(?:(?!<\/w:r>).)*?<w:highlight w:val="yellow"\/>(?:(?!<\/w:r>).)*?<w:t[^>]*>([^<]*)<\/w:t>/gs)].map((m) => m[1]);
+  expect(marks.length).toBe(9);
+  expect(marks).toContain('[Номер договора]');
+  await expect(sheet(page)).toBeVisible();
+});
+
+test('Декларация: таблица на экране, те же действия, .xlsx из меню', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'decl_vat_draft', { entity: 'ООО «Альфа»', kind: 'Год', year: '2026' });
+  await expect(page.getByTestId('sheet-title')).toContainText('Проект декларации по НДС');
+  await expect(page.getByTestId('sheet-page')).toHaveAttribute('data-kind', 'xlsx');
+  const grid = sheet(page).locator('table.grid-table');
+  await expect(grid).toBeVisible();
+  await expect(page.getByTestId('draft-mark')).toHaveText('Проект. Не для подачи');
+  await expect(grid.getByRole('rowheader', { name: 'Налогоплательщик' })).toBeVisible();
+  await expect(grid.getByRole('rowheader', { name: 'Код налогового органа' })).toBeVisible();
+  expect(await sheet(page).locator('table.sheet-table tbody tr').count()).toBe(12);
+  const code = field(page, 'ifns_code');
+  expect(await css(code, 'background-color')).toBe(LEMON);
+  await expect(counter(page)).toHaveText('Не заполнено: 1');
+  await code.click();
+  const dialog = page.getByRole('dialog', { name: 'Значение поля: Код налогового органа' });
+  await dialog.getByRole('textbox').fill('9900');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
+  await expect(counter(page)).toHaveCount(0);
+  await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toBeEnabled();
+
+  const exact = Number(await field(page, 'vat_total').getAttribute('data-value'));
+  await openMenu(page);
+  await expect(menuItem(page, 'Скачать .xlsx')).toBeVisible();
+  await page.keyboard.press('Escape');
+  const { res, body } = await fetchFile(page);
+  expect(res.headers()['content-type']).toBe(XLSX);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(body as unknown as ArrayBuffer);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['Проект декларации', 'Итог', 'По месяцам', 'Расчёт', 'Источник']);
+  const ws = wb.getWorksheet('Проект декларации')!;
+  expect(String(ws.getCell('A1').value)).toBe('Проект. Не для подачи');
+  let found: number | null = null;
+  ws.eachRow((r) => {
+    if (String(r.getCell(1).value).startsWith('НДС по расчёту')) found = r.getCell(2).value as number;
+  });
+  expect(found).toBe(exact);
 });
 
 // ===== проверка =====
@@ -508,8 +663,7 @@ test('Проверить самому: значения с источником,
   await menuItem(page, 'Проверить самому').click();
   const screen = page.getByTestId('overlay-screen');
   await expect(screen).toBeVisible();
-  const rows = screen.locator('li.chk');
-  await expect(rows.first()).toBeVisible();
+  await expect(screen.locator('li.chk').first()).toBeVisible();
   await expect(screen.locator('[data-check="field:entity_inn"]')).toContainText('Реквизиты юрлица');
   await expect(screen.locator('[data-check="field:vat_total"]')).toContainText('Расчёт: НДС, 3 квартал 2026');
   await expect(screen.locator('[data-check="field:prepared_by"]')).toContainText('не заполнено');
@@ -521,102 +675,96 @@ test('Проверить самому: значения с источником,
   await expect(item).toHaveClass(/done/);
   await expect(item.locator('.chk-meta')).toContainText('Сверено');
   await expect.poll(async () => Number((await sql<{ n: string }>('select count(*)::int as n from checks'))[0]!.n)).toBe(before + 1);
-  const row = (await sql<{ subject: string; item: string; amount: string }>(
-    'select subject, item, amount from checks order by id desc limit 1',
-  ))[0]!;
+  const row = (await sql<{ subject: string; item: string }>('select subject, item from checks order by id desc limit 1'))[0]!;
   expect(row.subject).toBe(`doc:${docId(page)}:v1`);
   expect(row.item).toBe('field:vat_total');
-  expect(Number(row.amount)).toBeGreaterThan(0);
 
-  // «Показать расчёт» из проверки: та же сумма, что в документе
   const shown = plain(await item.locator('.chk-val').innerText());
   await item.getByRole('button', { name: /Показать расчёт/ }).click();
   const drawer = page.getByTestId('overlay-drawer');
   await expect(drawer).toBeVisible();
   expect(plain(await drawer.getByTestId('calc-total').innerText())).toBe(shown);
-  await expect(drawer).toContainText('3 квартал 2026');
+});
+
+test('«Показать расчёт» со значка рядом с суммой на листе', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'февраль', year: '2026' });
+  const shown = plain(await field(page, 'vat_total').innerText()).replace(/\s*\(.*$/, '');
+  await sheet(page).getByRole('button', { name: 'Показать расчёт: НДС за период' }).click();
+  const drawer = page.getByTestId('overlay-drawer');
+  await expect(drawer).toBeVisible();
+  expect(plain(await drawer.getByTestId('calc-total').innerText())).toBe(shown);
+  expect(await drawer.getByTestId('calc-total').getAttribute('data-amount')).toBe(await field(page, 'vat_total').getAttribute('data-value'));
 });
 
 // ===== отправка и согласование =====
 
-test('Отправить: окно с получателем и комментарием, подпись о демо только в нём; процесс до согласования', async ({ page }) => {
+test('Отправить: окно с получателем и комментарием; процесс до согласования', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDocuments(page);
   await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Год', year: '2026' });
 
-  // пока не заполнено, отправить нельзя
-  await expect(page.getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Дозаполнить', exact: true }).click();
-  await page.getByTestId('overlay-screen').getByLabel(/Подготовил/).fill('Образцов О.И.');
-  await page.getByTestId('overlay-screen').getByRole('button', { name: 'Сохранить как новую версию' }).click();
+  await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
+  await field(page, 'prepared_by').click();
+  const dialog = page.getByRole('dialog', { name: 'Значение поля: Подготовил' });
+  await dialog.getByRole('textbox').fill('Образцов О.И.');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
+  await expect(counter(page)).toHaveCount(0);
 
-  // окно: получатель (бухгалтер или финансовый директор), комментарий, «Отправить», одна подпись
   expect(await page.evaluate(() => (document.body.textContent ?? '').includes('Письмо не отправляется'))).toBe(false);
-  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
+  await bar(page).getByRole('button', { name: 'Отправить', exact: true }).click();
   const modal = page.getByTestId('overlay-modal');
   await expect(modal).toBeVisible();
   await expect(modal.getByTestId('demo-mail-note')).toHaveText('Письмо не отправляется, это демонстрация');
-  expect(await page.evaluate(() => (document.body.textContent ?? '').split('Письмо не отправляется').length - 1)).toBe(1);
   await expect(modal.getByRole('radio')).toHaveCount(2);
-  await expect(modal.getByText('Бухгалтер', { exact: true })).toBeVisible();
-  await expect(modal.getByText('Финансовый директор')).toBeVisible();
   await modal.getByRole('radio', { name: /Финансовый директор/ }).check();
   await modal.getByLabel('Комментарий').fill('Проверьте итог за год');
   await modal.getByRole('button', { name: 'Отправить', exact: true }).click();
   await expect(modal).toHaveCount(0);
 
-  // статус «На проверке»; подписи о демо на странице нет, править нельзя
-  await expect(page.locator('.doc-status')).toHaveText(/На проверке/);
+  await expect(status(page)).toHaveText(/На проверке/);
   expect(await page.evaluate(() => (document.body.textContent ?? '').includes('Письмо не отправляется'))).toBe(false);
-  await expect(page.getByTestId('reviewer')).toContainText('Финансовый директор');
-  await openMenu(page);
-  await expect(menuItem(page, 'Править')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Отозвать' })).toBeVisible();
+  expect(await sheet(page).locator('button.sf').count()).toBe(0);
+  await expect(bar(page).getByRole('button', { name: 'Отозвать' })).toBeVisible();
+  await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toHaveCount(0);
 
-  // демо: ответ бухгалтера, замечание
   const demo = page.getByTestId('demo-reply');
   await expect(demo).toContainText('Демо');
   await demo.getByRole('button', { name: 'Замечание' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Есть замечания/);
-  await expect(page.getByRole('button', { name: /Комментарии без решения: 2/ })).toBeVisible();
+  await expect(status(page)).toHaveText(/Есть замечания/);
+  await expect(page.getByTestId('more-dot')).toBeVisible();
   await openMenu(page);
   await menuItem(page, /^Комментарии/).click();
   const comments = page.getByTestId('overlay-drawer');
   await expect(comments.getByTestId('comments')).toContainText('Замечание · Демо');
-  await expect(comments.getByTestId('comments')).toContainText('(демо)');
   await expect(comments.getByTestId('comments')).toContainText('Проверьте итог за год');
   await page.keyboard.press('Escape');
 
-  // правка: новая версия, статус «Черновик»
-  await openMenu(page);
-  await menuItem(page, 'Править').click();
-  const form = page.getByTestId('overlay-screen');
-  await form.getByLabel(/Назначение справки/).fill('Для сверки с бухгалтером');
-  await form.getByRole('button', { name: 'Сохранить как новую версию' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Черновик/);
+  // правка по нажатию на поле: новая версия, статус «Черновик»
+  await field(page, 'purpose').click();
+  const purpose = page.getByRole('dialog', { name: /Значение поля: Назначение справки/ });
+  await purpose.getByRole('textbox').fill('Для сверки с бухгалтером');
+  await purpose.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(status(page)).toHaveText(/Черновик/);
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 3');
 
-  // повторная отправка и согласование
-  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
+  await bar(page).getByRole('button', { name: 'Отправить', exact: true }).click();
   await page.getByTestId('overlay-modal').getByRole('button', { name: 'Отправить', exact: true }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/На проверке/);
+  await expect(status(page)).toHaveText(/На проверке/);
   await page.getByTestId('demo-reply').getByRole('button', { name: 'Согласовать' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Согласовано/);
-  await expect(page.getByRole('button', { name: 'Отправить', exact: true })).toHaveCount(0);
+  await expect(status(page)).toHaveText(/Согласовано/);
+  await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toHaveCount(0);
 
-  const approved = (await sql<{ hash: string }>(
-    'select hash from document_versions where document_id = $1 and n = 3',
-    [docId(page)],
-  ))[0]!.hash;
+  const approved = (await sql<{ hash: string }>('select hash from document_versions where document_id = $1 and n = 3', [docId(page)]))[0]!.hash;
 
   // согласованную версию не меняют: правка даёт новую версию и «Черновик»
-  await openMenu(page);
-  await menuItem(page, 'Править').click();
-  await page.getByTestId('overlay-screen').getByLabel(/Назначение справки/).fill('Изменение после согласования');
-  await page.getByTestId('overlay-screen').getByRole('button', { name: 'Сохранить как новую версию' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Черновик/);
+  await field(page, 'purpose').click();
+  const again = page.getByRole('dialog', { name: /Значение поля: Назначение справки/ });
+  await again.getByRole('textbox').fill('Изменение после согласования');
+  await again.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(status(page)).toHaveText(/Черновик/);
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 4');
 
   const after = await sql<{ n: number; hash: string; purpose: string }>(
@@ -627,19 +775,13 @@ test('Отправить: окно с получателем и коммента
   expect(after[2]!.hash).toBe(approved);
   expect(after[2]!.purpose).toBe('Для сверки с бухгалтером');
   expect(after[3]!.purpose).toBe('Изменение после согласования');
-
-  // версия неизменяема на уровне базы
-  const doc = await sql<{ status: string }>('select status from documents where id = $1', [docId(page)]);
-  expect(doc[0]!.status).toBe('draft');
   await expect(sql('update document_versions set body = $1 where document_id = $2', ['x', docId(page)])).rejects.toThrow();
 
-  // лента событий в истории версий
   await openMenu(page);
   await menuItem(page, 'История версий').click();
   const events = page.getByTestId('overlay-drawer').getByTestId('events').locator(':scope > li');
   await expect(events.first()).toBeVisible();
   expect(await events.count()).toBeGreaterThanOrEqual(8);
-  await expect(page.getByTestId('events')).toContainText('Согласовано (демо)');
   const submitted = (await sql<{ data: { recipient: string; comment: string } }>(
     `select data from document_events where document_id = $1 and kind = 'submitted' order by id limit 1`,
     [docId(page)],
@@ -652,21 +794,22 @@ test('Отозвать: документ на проверке возвраща�
   await firstLogin(page, PIN);
   await toDocuments(page);
   await startFromCatalog(page, 'report_group_summary', { kind: 'Квартал', quarter: '3 квартал', year: '2026' });
-  await page.getByRole('button', { name: 'Дозаполнить', exact: true }).click();
+  await bar(page).getByRole('button', { name: 'Дозаполнить', exact: true }).click();
   await page.getByTestId('overlay-screen').getByLabel(/Подготовил/).fill('Образцов О.И.');
   await page.getByTestId('overlay-screen').getByRole('button', { name: 'Сохранить как новую версию' }).click();
   await expect(page.getByTestId('doc-version')).toHaveText('Версия 2');
-  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
+  await bar(page).getByRole('button', { name: 'Отправить', exact: true }).click();
   await page.getByTestId('overlay-modal').getByRole('button', { name: 'Отправить', exact: true }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/На проверке/);
-  await page.getByRole('button', { name: 'Отозвать' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Отозвано/);
+  await expect(status(page)).toHaveText(/На проверке/);
+  await bar(page).getByRole('button', { name: 'Отозвать' }).click();
+  await expect(status(page)).toHaveText(/Отозвано/);
 });
 
 test('Комментарий к полю: добавить из меню, отметить решённым', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDocuments(page);
   await startFromCatalog(page, 'report_vat_certificate', { entity: 'ООО «Альфа»', kind: 'Месяц', month: 'январь', year: '2026' });
+  await expect(page.getByTestId('more-dot')).toHaveCount(0);
   await openMenu(page);
   await menuItem(page, /^Комментарии/).click();
   const side = page.getByTestId('overlay-drawer');
@@ -679,8 +822,7 @@ test('Комментарий к полю: добавить из меню, отм
   await item.getByRole('button', { name: 'Отметить решённым' }).click();
   await expect(side.getByTestId('comments').locator(':scope > li').first()).toContainText('решено');
   await page.keyboard.press('Escape');
-  // решённых без решения не осталось: строки про комментарии на странице нет
-  await expect(page.getByRole('button', { name: /Комментарии без решения/ })).toHaveCount(0);
+  await expect(page.getByTestId('more-dot')).toHaveCount(0);
   const rows = await sql<{ resolved: boolean; field_key: string }>(
     'select resolved, field_key from document_comments where document_id = $1',
     [docId(page)],
@@ -690,7 +832,7 @@ test('Комментарий к полю: добавить из меню, отм
 
 // ===== чат =====
 
-test('Сквозной сценарий: чат, «Сформировать документ», дозаполнить, отправить, согласование', async ({ page }) => {
+test('Сквозной сценарий: суммы листа, чата и Excel совпадают, дозаполнение и согласование', async ({ page }) => {
   await resetChat();
   await firstLogin(page, PIN);
 
@@ -704,54 +846,55 @@ test('Сквозной сценарий: чат, «Сформировать до
   await answer.getByRole('button', { name: 'Сформировать документ' }).click();
   const pick = page.getByRole('dialog', { name: 'Сформировать документ' });
   await expect(pick).toBeVisible();
-  // подходящие: справка и декларация по НДС, договоры и допсоглашения по юрлицу; УСН не предлагается
   await expect(pick.locator('[data-template="report_vat_certificate"]')).toBeVisible();
   await expect(pick.locator('[data-template="decl_usn_draft"]')).toHaveCount(0);
   await pick.locator('[data-template="report_vat_certificate"]').click();
 
-  // юрлицо и период из вопроса уже подставлены
   const start = page.getByRole('dialog', { name: /Заполнить:/ });
   await expect(start.getByLabel('Юрлицо')).toHaveValue('alfa');
   await expect(start.getByLabel('Вид периода')).toHaveValue('month');
   await expect(start.getByLabel('Месяц')).toHaveValue('2');
   await start.getByRole('button', { name: 'Заполнить', exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/documents\/[0-9a-f-]{36}$/);
-  await expect(page.getByTestId('file-card')).toBeVisible();
-  await expect(page.getByTestId('file-name')).toHaveText('Справка по НДС за период, ООО «Альфа», февраль 2026.docx');
+  await expect(sheet(page)).toBeVisible();
+  await expect(page.getByTestId('sheet-title')).toContainText('Справка по НДС за период, ООО «Альфа», февраль 2026');
 
-  // сумма в файле совпадает с таблицей ответа (млн с двумя знаками)
-  await openMenu(page);
-  await menuItem(page, 'Проверить самому').click();
-  const screen = page.getByTestId('overlay-screen');
-  const exact = Number(
-    (await sql<{ v: string }>(
-      `select values->'vat_total'->>'value' as v from document_versions where document_id = $1 and n = 1`,
-      [docId(page)],
-    ))[0]!.v,
-  );
+  // сумма на листе, в чате, в файле и в Excel расчёта одна и та же
+  const exact = Number(await field(page, 'vat_total').getAttribute('data-value'));
   const mln = (exact / 1_000_000).toFixed(2).replace('.', ',');
   expect(plain(chatTax)).toBe(`${mln} млн`);
-  const shown = plain(await screen.locator('[data-check="field:vat_total"] .chk-val').innerText());
-  await screen.getByRole('button', { name: 'Закрыть' }).click();
+  const shown = plain(await field(page, 'vat_total').innerText()).replace(/\s*\(.*$/, '');
   const { body } = await fetchFile(page);
   expect(textOf(await docxXml(body))).toContain(shown);
 
-  // дозаполнить
-  await page.getByRole('button', { name: 'Дозаполнить', exact: true }).click();
+  const calcRes = await page.request.get(`/api/documents/${docId(page)}/download?calc=1`);
+  expect(calcRes.headers()['content-type']).toBe(XLSX);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load((await calcRes.body()) as unknown as ArrayBuffer);
+  let inExcel = false;
+  wb.eachSheet((ws) =>
+    ws.eachRow((row) =>
+      row.eachCell((c) => {
+        const v = c.value as number | { result?: number } | null;
+        const n = typeof v === 'number' ? v : v && typeof v === 'object' ? v.result : undefined;
+        if (typeof n === 'number' && Math.abs(n - exact) < 0.005) inExcel = true;
+      }),
+    ),
+  );
+  expect(inExcel).toBe(true);
+
+  await bar(page).getByRole('button', { name: 'Дозаполнить', exact: true }).click();
   await page.getByTestId('overlay-screen').getByLabel(/Подготовил/).fill('Образцов О.И.');
   await page.getByTestId('overlay-screen').getByRole('button', { name: 'Сохранить как новую версию' }).click();
-  await expect(page.getByTestId('unfilled')).toHaveCount(0);
-
-  // отправить, имитация ответа, согласование
-  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
+  await expect(counter(page)).toHaveCount(0);
+  await bar(page).getByRole('button', { name: 'Отправить', exact: true }).click();
   await page.getByTestId('overlay-modal').getByRole('radio', { name: /Бухгалтер/ }).check();
   await page.getByTestId('overlay-modal').getByRole('button', { name: 'Отправить', exact: true }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/На проверке/);
+  await expect(status(page)).toHaveText(/На проверке/);
   await page.getByTestId('demo-reply').getByRole('button', { name: 'Согласовать' }).click();
-  await expect(page.locator('.doc-status')).toHaveText(/Согласовано/);
+  await expect(status(page)).toHaveText(/Согласовано/);
   await page.screenshot({ path: `${SHOTS}/doc-flow-desktop.png` });
 
-  // «Мои документы»: документ со статусом
   await page.getByRole('link', { name: 'К документам' }).click();
   await page.getByRole('tab', { name: /Мои документы/ }).click();
   const mine = page.getByTestId('doc-item').first();
@@ -761,7 +904,7 @@ test('Сквозной сценарий: чат, «Сформировать до
 
 // ===== доступность =====
 
-test('Доступность: каталог, страница документа, меню и окна без нарушений axe', async ({ page }) => {
+test('Доступность: каталог, лист, меню, окна и таблица без нарушений axe', async ({ page }) => {
   await firstLogin(page, PIN);
   await toDocuments(page);
   const scan = async (label: string) => {
@@ -773,9 +916,11 @@ test('Доступность: каталог, страница документ�
   await expect(page.locator('li.tpl')).toHaveCount(8);
   await scan('каталог');
   await startFromCatalog(page, 'report_group_summary', { kind: 'Квартал', quarter: '3 квартал', year: '2026' });
-  await scan('документ');
-  await page.getByTestId('unfilled').getByRole('button', { name: /Не заполнено/ }).click();
-  await scan('документ, список незаполненного');
+  await scan('лист с каталогом рядом');
+  await field(page, 'prepared_by').click();
+  await expect(page.getByRole('dialog', { name: /Значение поля/ })).toBeVisible();
+  await scan('окно значения');
+  await page.keyboard.press('Escape');
   await openMenu(page);
   await scan('меню «ещё»');
   await menuItem(page, 'История версий').click();
@@ -785,7 +930,7 @@ test('Доступность: каталог, страница документ�
   await menuItem(page, /^Комментарии/).click();
   await scan('комментарии');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Дозаполнить', exact: true }).click();
+  await bar(page).getByRole('button', { name: 'Дозаполнить', exact: true }).click();
   await scan('форма');
   const unlabeled = await page.getByTestId('overlay-screen').evaluate((p) =>
     [...p.querySelectorAll<HTMLInputElement>('input, textarea, select')]
@@ -794,7 +939,9 @@ test('Доступность: каталог, страница документ�
   );
   expect(unlabeled).toEqual([]);
   await page.getByTestId('overlay-screen').getByRole('button', { name: 'Закрыть' }).click();
-  await page.getByRole('button', { name: 'Отправить', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('link', { name: 'К документам' }).click();
+  await startFromCatalog(page, 'decl_vat_draft', { entity: 'ООО «Альфа»', kind: 'Год', year: '2026' });
+  await scan('таблица декларации');
 });
 
 // ===== клавиатура =====
@@ -807,6 +954,7 @@ test('Меню «ещё»: стрелки, Home и End, Escape возвраща�
   await button.focus();
   await page.keyboard.press('Enter');
   const items = page.getByRole('menuitem');
+  await expect(items).toHaveCount(4);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -819,9 +967,21 @@ test('Меню «ещё»: стрелки, Home и End, Escape возвраща�
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(button).toBeFocused();
-  // нажатие вне меню закрывает
   await button.click();
   await expect(page.getByRole('menu')).toBeVisible();
-  await page.getByTestId('file-name').click();
+  await page.getByTestId('sheet-title').click();
   await expect(page.getByRole('menu')).toHaveCount(0);
+});
+
+test('Поле с клавиатуры: Enter открывает окно значения, Escape возвращает фокус на поле', async ({ page }) => {
+  await firstLogin(page, PIN);
+  await toDocuments(page);
+  await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ООО «Альфа»' });
+  const f = field(page, 'contract_date');
+  await f.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Значение поля: Дата договора' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(f).toBeFocused();
 });

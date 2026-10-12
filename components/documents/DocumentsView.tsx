@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { errorText } from '@/components/provenance/client';
@@ -20,7 +20,15 @@ type Tab = 'catalog' | 'mine';
  * приложения) и без повторов: категория выбрана фильтром над списком, число полей и тип файла
  * видны уже в самом документе.
  */
-export function DocumentsView() {
+export function DocumentsView({
+  activeId = null,
+  compact = false,
+}: {
+  /** Открытый сейчас документ: подсвечен в списке */
+  activeId?: string | null;
+  /** Рядом открыт документ: узкая колонка, заголовок второго уровня */
+  compact?: boolean;
+}) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +63,19 @@ export function DocumentsView() {
     return () => window.removeEventListener(UNLOCKED_EVENT, on);
   }, [load]);
 
+  // Открыли или закрыли документ: список обновляется (новая версия, статус). Вкладка не меняется:
+  // человек возвращается в то же место, откуда ушёл.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    void api<{ documents: DocumentSummary[] }>('/api/documents')
+      .then((d) => setDocs(d.documents))
+      .catch(() => undefined);
+  }, [activeId]);
+
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (catalog?.templates ?? []).filter(
@@ -77,8 +98,17 @@ export function DocumentsView() {
 
   return (
     <div className="docs">
-      <div className="sec-h" style={{ marginTop: 18 }}>
-        <h1 id="h-docs">Документы</h1>
+      {/* Отступ сверху 24 px на телефоне и 32 px на компьютере: заголовок не прилипает к шапке */}
+      <div className="sec-h docs-head">
+        {compact ? (
+          <h2 id="h-docs" className="docs-title">
+            Документы
+          </h2>
+        ) : (
+          <h1 id="h-docs" className="docs-title">
+            Документы
+          </h1>
+        )}
       </div>
 
       <div className="seg-tabs" role="tablist" aria-label="Раздел документов">
@@ -183,11 +213,15 @@ export function DocumentsView() {
           ) : (
             <ul className="req-list" aria-label="Мои документы">
               {docs.map((d) => (
-                <li key={d.id} className="req" data-testid="doc-item" data-doc={d.id}>
+                <li
+                  key={d.id}
+                  className={`req${d.id === activeId ? ' on' : ''}`}
+                  data-testid="doc-item"
+                  data-doc={d.id}
+                  aria-current={d.id === activeId ? 'true' : undefined}
+                >
                   <div className="req-head">
-                    <h2>
-                      <Link href={`/documents/${d.id}`}>{d.title}</Link>
-                    </h2>
+                    <h2>{d.title}</h2>
                     <StatusChip status={d.status} />
                   </div>
                   <p className="req-meta">
@@ -197,6 +231,12 @@ export function DocumentsView() {
                   <p className="req-meta">
                     {d.missing > 0 ? `Не заполнено полей: ${d.missing}` : 'Обязательные поля заполнены'}
                   </p>
+                  {/* Открывает лист документа в приложении, файл не скачивается */}
+                  <div className="acts">
+                    <Link className="act" data-action="open" href={`/documents/${d.id}`} prefetch={false} scroll={false}>
+                      Открыть
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

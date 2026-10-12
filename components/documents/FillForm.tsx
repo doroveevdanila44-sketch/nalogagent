@@ -7,6 +7,7 @@ import { unfilledText } from '@/lib/documents/fill';
 import type { TemplateField } from '@/lib/documents/types';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
+import { FieldControl, isFieldEditable } from './FieldControl';
 
 /**
  * «Дозаполнить» (только пропущенные поля) и «Править» (все поля, которые вводятся вручную).
@@ -25,12 +26,7 @@ export function FillForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const editable = (f: TemplateField) => {
-    const v = doc.values[f.key];
-    if (f.source === 'calc') return false;
-    if (f.source === 'entity') return !v?.value || v.source === 'user';
-    return true;
-  };
+  const editable = (f: TemplateField) => isFieldEditable(f, doc.values[f.key]);
   const isMissing = (f: TemplateField) => !doc.values[f.key]?.value;
 
   const list = useMemo(
@@ -85,22 +81,6 @@ export function FillForm({
     }
   };
 
-  const control = (f: TemplateField) => {
-    const id = `ff-${f.key}`;
-    const common = {
-      id,
-      value: input[f.key] ?? '',
-      'aria-required': f.required,
-      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-        setInput((s) => ({ ...s, [f.key]: e.target.value })),
-    };
-    if (f.type === 'longtext') return <textarea {...common} rows={4} maxLength={2000} />;
-    if (f.type === 'date') return <input {...common} type="date" />;
-    if (f.type === 'money') return <input {...common} type="text" inputMode="decimal" placeholder="5000,00" />;
-    if (f.type === 'number') return <input {...common} type="text" inputMode="numeric" />;
-    return <input {...common} type="text" maxLength={300} />;
-  };
-
   return (
     <Overlay kind="screen" label={mode === 'missing' ? 'Дозаполнить' : 'Править документ'} onClose={onClose}>
       <OverlayHead
@@ -127,7 +107,12 @@ export function FillForm({
                   {f.required ? <abbr title="обязательное поле"> *</abbr> : <small> (необязательно)</small>}
                 </span>
               </label>
-              {control(f)}
+              <FieldControl
+                field={f}
+                id={`ff-${f.key}`}
+                value={input[f.key] ?? ''}
+                onChange={(v) => setInput((s) => ({ ...s, [f.key]: v }))}
+              />
               {f.hint ? <small className="fld-hint">{f.hint}</small> : null}
               {f.source === 'entity' ? (
                 <small className="fld-hint">Нет в реквизитах юрлица: введите вручную, поле станет «введено вручную».</small>

@@ -156,6 +156,45 @@ export function renderBlocks(
   return blocks;
 }
 
+/**
+ * Строки таблицы для деклараций и таблиц (.xlsx) на экране. Тот же текст, что в файле, но в виде
+ * сетки: заголовок, раздел, пара «название: значение», примечание и таблица расчёта. Строка вида
+ * «Налогоплательщик: {{entity_name}}» делится по первому двоеточию в начале строки: слева название,
+ * справа значение (с полями). Строка без двоеточия до первого поля остаётся примечанием на всю ширину.
+ */
+export type GridRow =
+  | { kind: 'title'; id: string; segs: Seg[] }
+  | { kind: 'section'; id: string; segs: Seg[] }
+  | { kind: 'pair'; id: string; label: string; segs: Seg[] }
+  | { kind: 'note'; id: string; segs: Seg[] }
+  | { kind: 'table'; id: string; table: 'months' | 'entities'; head: string[]; rows: TableCell[][]; calcIndex: number | null };
+
+export function gridRows(blocks: RenderBlock[]): GridRow[] {
+  const out: GridRow[] = [];
+  for (const b of blocks) {
+    if (b.kind === 'table') {
+      out.push({ kind: 'table', id: b.id, table: b.table, head: b.head, rows: b.rows, calcIndex: b.calcIndex });
+    } else if (b.kind === 'h1') {
+      out.push({ kind: 'title', id: b.id, segs: b.segs });
+    } else if (b.kind === 'h2') {
+      out.push({ kind: 'section', id: b.id, segs: b.segs });
+    } else {
+      const first = b.segs[0];
+      const colon = first && first.t === 'text' ? first.text.indexOf(':') : -1;
+      if (first && first.t === 'text' && colon > 0) {
+        const rest: Seg[] = [];
+        const tail = first.text.slice(colon + 1).trimStart();
+        if (tail !== '') rest.push({ t: 'text', text: tail });
+        rest.push(...b.segs.slice(1));
+        out.push({ kind: 'pair', id: b.id, label: first.text.slice(0, colon).trim(), segs: rest });
+      } else {
+        out.push({ kind: 'note', id: b.id, segs: b.segs });
+      }
+    }
+  }
+  return out;
+}
+
 /** Текст блока без разметки (для файлов и проверки). Пропущенное поле в скобках. */
 export function segsText(segs: Seg[]): string {
   return segs.map((s) => (s.t === 'text' ? s.text : s.text)).join('');

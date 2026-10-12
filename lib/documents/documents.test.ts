@@ -56,7 +56,7 @@ import {
 import { FieldError, fillFields, missingKeys, normalizeInput, templateQueries, unfilledText } from './fill';
 import { DOCX_MIME, XLSX_MIME, contentDisposition, documentFileName } from './file-name';
 import { buildDocx } from './files';
-import { renderBlocks, type RenderBlock } from './render';
+import { gridRows, renderBlocks, type RenderBlock } from './render';
 import { MONTH_WORDS, sanitizeSuggestions } from './suggest';
 import { TEMPLATES } from './templates';
 import { CATEGORIES, SAMPLE_NOTE, STATUS_LABEL, type FieldValues, type TemplateField } from './types';
@@ -584,6 +584,36 @@ describe('файлы: .docx и .xlsx', () => {
     // файл расчёта документа: те же снимки
     const calcFile = await downloadGet(new NextRequest(`http://localhost/api/documents/${id}/download?calc=1`), ctx(id));
     expect(calcFile.status).toBe(200);
+  });
+});
+
+describe('лист на экране: блоки и сетка деклараций', () => {
+  it('деклараций: титульные строки это пары «название и значение», таблица расчёта сохраняется', async () => {
+    const id = await create('decl_vat_draft', { entityId: 'alfa', period: { kind: 'year', year: 2026 } });
+    const d = await getDocument(db, { userId, id, tz: TZ });
+    expect(d.blocks.length).toBeGreaterThan(8);
+    const rows = gridRows(d.blocks);
+    expect(rows[0]).toMatchObject({ kind: 'title' });
+    const pairs = rows.filter((r) => r.kind === 'pair');
+    const labels = pairs.map((r) => (r.kind === 'pair' ? r.label : ''));
+    expect(labels).toEqual(expect.arrayContaining(['Налогоплательщик', 'ИНН', 'Код налогового органа', 'НДС по расчёту']));
+    // значение пары это поля: сумма из расчёта и пропущенный код налогового органа
+    const vat = pairs.find((r) => r.kind === 'pair' && r.label === 'НДС по расчёту');
+    expect(vat && vat.kind === 'pair' && vat.segs.some((s) => s.t === 'field' && s.key === 'vat_total' && s.state === 'filled')).toBe(true);
+    const code = pairs.find((r) => r.kind === 'pair' && r.label === 'Код налогового органа');
+    expect(code && code.kind === 'pair' && code.segs.some((s) => s.t === 'field' && s.state === 'missing')).toBe(true);
+    expect(rows.some((r) => r.kind === 'table' && r.table === 'months')).toBe(true);
+    expect(rows.some((r) => r.kind === 'section')).toBe(true);
+  });
+
+  it('текст договора: у каждого поля состояние и источник, суммы строкой из расчёта', async () => {
+    const id = await makeCertificate();
+    const d = await getDocument(db, { userId, id, tz: TZ });
+    const fields = d.blocks.flatMap((b) => (b.kind === 'table' ? [] : b.segs)).filter((s) => s.t === 'field');
+    const total = fields.find((s) => s.t === 'field' && s.key === 'vat_total');
+    expect(total).toMatchObject({ state: 'filled', source: 'calc', value: d.values.vat_total!.value });
+    expect(total && total.t === 'field' && total.text).toBe(d.values.vat_total!.display);
+    expect(d.sources.vat_total).toContain('Расчёт');
   });
 });
 
