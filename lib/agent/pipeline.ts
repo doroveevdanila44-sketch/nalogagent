@@ -33,6 +33,7 @@ import {
   THANKS,
   greetingFor,
 } from './templates';
+import { buildForecastAnswer } from './forecast-2027';
 import { buildTaxAnswer, paymentLines } from './tax-answer';
 import { checkNumbers, normalize } from './text';
 import { canDoLine, explainUnsupported, type ExplainContext } from './unsupported';
@@ -232,6 +233,9 @@ export async function runPipeline(p: PipelineInput): Promise<AgentReply> {
     });
   }
 
+  // следующий год: прогноз НДС по трём ставкам, сценарий calcTax
+  if (interp.forecast) return forecastReply(p, interp, ectx);
+
   const kind = answerKind(interp);
   if (kind === 'amount') return amountReply(p, interp, ectx);
   if (kind === 'payment') return paymentReply(p, interp, ectx);
@@ -296,6 +300,37 @@ async function finish(
   };
 }
 
+/**
+ * Прогноз следующего года. Над ответом карточка «Понял так» с допущениями одной строкой; кнопки
+ * пересчитывают тот же сценарий с другим ростом выручки или сужают до юрлица.
+ */
+async function forecastReply(p: PipelineInput, interp: Interpretation, ectx: ExplainContext): Promise<AgentReply> {
+  let answer;
+  try {
+    answer = buildForecastAnswer(
+      { data: p.data, input: p.input, now: p.now, tz: p.tz ?? 'Asia/Kamchatka', canDo: canDoLine(ectx) },
+      interp,
+      p.entities,
+    );
+  } catch {
+    return text('A', FAILURE_FALLBACK, { failure: 'calc' });
+  }
+  const card = understandingOf({ ...interp, rate: null }, 'forecast', p.entities, {
+    period: formatPeriod(interp.period!),
+  });
+  // допущения одной строкой; «налог не назван» не повторяется: прогноз всегда по НДС и он в карточке
+  card.notes = [answer.note];
+
+  return finish(p, answer.result, {
+    understood: card,
+    quick: answer.quick,
+    change: changeOptions(p.entities, p.now),
+    interp,
+    intent: 'amount',
+    calcs: answer.calcs,
+  });
+}
+
 async function amountReply(p: PipelineInput, interp: Interpretation, ectx: ExplainContext): Promise<AgentReply> {
   const names = new Map(p.entities.map((e) => [e.id, e.name]));
   let answer;
@@ -309,17 +344,10 @@ async function amountReply(p: PipelineInput, interp: Interpretation, ectx: Expla
     return text('A', FAILURE_FALLBACK, { failure: 'calc' });
   }
 
-  // «по группе» сказано пользователем: примечание не нужно, кнопки сужения остаются
+  // «по группе» видно в карточке «Понял так», кнопки сужения под ответом: отдельного примечания нет
   const group = interp.entityMode !== 'named';
-  const narrowNote =
-    interp.entityMode === 'none'
-      ? 'Юрлицо не названо, посчитал по всей группе. Чтобы сузить, нажмите на юрлицо ниже.'
-      : null;
-  const result: CalcResult = narrowNote
-    ? { ...answer.result, paragraphs: [...answer.result.paragraphs, narrowNote] }
-    : answer.result;
 
-  return finish(p, result, {
+  return finish(p, answer.result, {
     understood: understandingOf(interp, answer.kind, p.entities),
     quick: group ? narrowChoices(p.entities) : [],
     change: changeOptions(p.entities, p.now),
@@ -340,9 +368,6 @@ async function paymentReply(p: PipelineInput, interp: Interpretation, ectx: Expl
   );
   const paragraphs = [line ?? 'Ближайших платежей по этому налогу в справочнике сроков нет.'];
   const group = interp.entityMode !== 'named';
-  if (interp.entityMode === 'none') {
-    paragraphs.push('Юрлицо не названо, посчитал по всей группе. Чтобы сузить, нажмите на юрлицо ниже.');
-  }
   const result: CalcResult = {
     intent: 'amount',
     paragraphs,

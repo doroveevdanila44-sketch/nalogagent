@@ -32,6 +32,39 @@ export async function firstLogin(page: Page, pin: string): Promise<void> {
   await expect.poll(() => new URL(page.url()).pathname).toBe('/agent');
 }
 
+/**
+ * Нажимает подсказку над полем чата. На телефоне (до 760 px) блок свёрнут и раскрывается только
+ * нажатием на ручку «Подсказки», поэтому сначала раскрывается он; после выбора блок сворачивается сам.
+ */
+export async function pickSuggestion(page: Page, name: string): Promise<void> {
+  const handle = page.locator('.sug-handle');
+  if ((await handle.count()) > 0 && (await handle.getAttribute('aria-expanded')) !== 'true') {
+    await handle.click();
+    await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  }
+  await page.getByRole('button', { name, exact: true }).first().click();
+}
+
+/** Год «сегодня» в часовом поясе приложения: по нему выбирается ставка в rate_choices. */
+function appYear(): number {
+  return Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kamchatka', year: 'numeric' }).format(new Date()));
+}
+
+/**
+ * Выбранная ставка берётся из rate_choices, в интерфейсе её не сменить (нажатие на карточку ставки
+ * ничего не делает). Тесты, которым нужна не пятипроцентная ставка, задают её прямо в базе.
+ */
+export async function setRateChoice(entityId: string, rate: 5 | 7 | 22): Promise<void> {
+  const client = new Client({ connectionString: E2E_DB_URL });
+  await client.connect();
+  await client.query('insert into rate_choices (entity_id, year, rate) values ($1, $2, $3)', [
+    entityId,
+    appYear(),
+    rate,
+  ]);
+  await client.end();
+}
+
 /** Чистая история чата и счётчики по кругу: тесты разных файлов делят одну базу. */
 export async function resetChat(): Promise<void> {
   const client = new Client({ connectionString: E2E_DB_URL });

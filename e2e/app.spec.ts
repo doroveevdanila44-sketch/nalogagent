@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { firstLogin, resetChat, typePin } from './helpers';
+import { firstLogin, pickSuggestion, resetChat, setRateChoice, typePin } from './helpers';
 
 const PIN = '8246';
 
@@ -10,7 +10,7 @@ async function toDashboard(page: Page) {
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
 }
 
-test('Дашборд: четыре юрлица, три ставки, живые цифры тикают, выбор сохраняется между устройствами', async ({
+test('Дашборд: четыре юрлица, три ставки, живые цифры тикают, выбранная ставка берётся из базы', async ({
   page,
   browser,
 }) => {
@@ -54,20 +54,51 @@ test('Дашборд: четыре юрлица, три ставки, живые
   expect(selBg).toBe('rgb(227, 243, 234)'); // #E3F3EA
   expect(altBg).toBe('rgb(252, 234, 231)'); // #FCEAE7
 
-  // выбор 22% для Альфы и сохранение
+  // карточки ставок не кнопки: нажатие на красную ничего не меняет, запросов на сервер нет
   const alfa = cards.filter({ hasText: 'ООО «Альфа»' });
-  await alfa.locator('.rate', { hasText: '22%' }).first().click();
-  await expect(alfa.locator('.rate.sel')).toContainText('22%');
-  await expect(page.locator('.warn', { hasText: 'ООО «Альфа»: ставка 22% выгоднее' })).toHaveCount(0);
+  await expect(alfa.locator('button.rate, .rate[role], .rate[tabindex], .rate[aria-pressed]')).toHaveCount(0);
+  const selected = alfa.locator('.rate.sel');
+  const red = alfa.locator('.rate.alt').first();
+  // живая сумма в карточке тикает: сравниваются ставка и метка, а не вся карточка
+  const before = await selected.locator('.rate-n, .tag').allInnerTexts();
+  const look = (e: Element) => {
+    const c = getComputedStyle(e);
+    return { cursor: c.cursor, border: c.borderTopColor, shadow: c.boxShadow, transform: c.transform };
+  };
+  const redBefore = await red.evaluate(look);
+  expect(redBefore.cursor).not.toBe('pointer');
+  const rateRequests: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/api/rates')) rateRequests.push(r.url());
+  });
+  await red.hover();
+  await page.waitForTimeout(300);
+  expect(await red.evaluate(look)).toEqual(redBefore);
+  await red.click();
+  await page.waitForTimeout(400);
+  expect(rateRequests).toEqual([]);
+  expect(await selected.locator('.rate-n, .tag').allInnerTexts()).toEqual(before);
+  await expect(selected).toContainText('Выбрана');
+  // в зелёной карточке строки «К выбранной» нет, в красных она есть
+  await expect(selected).not.toContainText('К выбранной');
+  await expect(red).toContainText('К выбранной');
+  // маршрута смены ставки нет вообще
+  const st = await (await page.request.get('/api/auth/state')).json();
+  const gone = await page.request.post('/api/rates', {
+    headers: { 'x-csrf-token': st.csrf, origin: 'http://localhost:3101' },
+    data: { entityId: 'alfa', rate: 22 },
+  });
+  expect(gone.status()).toBe(404);
 
-  // перезагрузка (нужен PIN) сохраняет выбор
+  // выбранная ставка берётся из rate_choices: после записи в базу и перезагрузки зелёной стала 22%
+  await setRateChoice('alfa', 22);
   await page.reload();
   await typePin(page, PIN);
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
   await expect(page.locator('article.ent', { hasText: 'ООО «Альфа»' }).locator('.rate.sel')).toContainText('22%');
 
-  // другое устройство видит тот же выбор
+  // другое устройство видит ту же ставку
   const other = await browser.newContext({ locale: 'ru-RU', timezoneId: 'Asia/Kamchatka' });
   const p2 = await other.newPage();
   await firstLogin(p2, '2580');
@@ -75,10 +106,11 @@ test('Дашборд: четыре юрлица, три ставки, живые
   await expect(p2.locator('article.ent', { hasText: 'ООО «Альфа»' }).locator('.rate.sel')).toContainText('22%');
   await other.close();
 
-  // возвращаем 5% красной карточкой
-  const again = page.locator('article.ent', { hasText: 'ООО «Альфа»' });
-  await again.locator('.rate', { hasText: '5%' }).first().click();
-  await expect(again.locator('.rate.sel')).toContainText('5%');
+  // возвращаем 5%: тоже записью в базу
+  await setRateChoice('alfa', 5);
+  await page.reload();
+  await typePin(page, PIN);
+  await expect(page.locator('article.ent', { hasText: 'ООО «Альфа»' }).locator('.rate.sel')).toContainText('5%');
 });
 
 test('График: сегменты юрлиц это кнопки, выделяется только сегмент, подпись с суммой', async ({ page }) => {
@@ -155,7 +187,7 @@ test('Агент: подсказки, ответ по расчёту, отказ
     await expect(page.locator('.typing')).toHaveCount(0);
   };
 
-  await page.getByRole('button', { name: 'Какая ставка выгоднее?' }).first().click();
+  await pickSuggestion(page, 'Какая ставка выгоднее?');
   await expect(page.locator('.typing')).toHaveCount(0);
   const answer = page.locator('.msg:not(.me)').last();
   await expect(answer.getByText('Налог за год по трём ставкам')).toBeVisible();
@@ -188,8 +220,12 @@ test('Агент: подсказки, ответ по расчёту, отказ
   await expect(scenario).toContainText('ООО «Альфа» покупает 3 машины по 7 млн');
   await expect(scenario.locator('table')).toBeVisible();
 
-  // налог на прибыль: подсказка отвечает таблицей по юрлицам; на телефоне без горизонтальной прокрутки
+  // налог на прибыль: подсказка отвечает таблицей по юрлицам; на телефоне без горизонтальной прокрутки.
+  // На телефоне подсказки свёрнуты и раскрываются только нажатием на ручку
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.sug-handle')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('.sug-handle').click();
+  await expect(page.locator('.sug-handle')).toHaveAttribute('aria-expanded', 'true');
   await page.getByRole('button', { name: 'Налог на прибыль за год?' }).first().click();
   await expect(page.locator('.typing')).toHaveCount(0);
   const profit = page.locator('.msg:not(.me)').last();

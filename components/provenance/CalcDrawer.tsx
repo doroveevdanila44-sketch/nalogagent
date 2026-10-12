@@ -4,12 +4,11 @@ import { useState } from 'react';
 import { dec } from '@/lib/calc/decimal';
 import { dateRuYear, rub2 } from '@/lib/calc/format';
 import { formatLoadedAt } from '@/lib/calc/provenance';
-import { KIND_LABEL, lineFromSnapshots, preciseDateTime } from '@/lib/provenance/line';
+import { KIND_LABEL, preciseDateTime, snapshotTitle } from '@/lib/provenance/line';
 import { normLink, RULE_TITLE } from '@/lib/provenance/norms';
 import type { CalcSnapshot } from '@/lib/provenance/snapshot';
 import type { TargetBody } from './client';
 import { Overlay, OverlayHead } from './Overlay';
-import { SourceLine } from './SourceLine';
 import { useSnapshots } from './useSnapshots';
 
 const money = (v: string | null) => (v === null ? 'нет данных' : rub2(dec(v)));
@@ -28,10 +27,10 @@ function ruleValue(r: CalcSnapshot['rules'][number]): string {
 }
 
 function Result({ s, focus }: { s: CalcSnapshot; focus: 'tax' | 'revenue' }) {
-  const line = lineFromSnapshots([s]);
   const multi = s.entities.filter((e) => e.applicable);
   const skipped = s.entities.filter((e) => !e.applicable);
   const shownWarnings = s.warnings.filter((w) => w.kind !== 'not_applicable' && w.kind !== 'rate_fixed');
+  const assumptions = s.assumptions ?? [];
   // что именно показано на экране под кнопкой: выручка или налог
   const headline = focus === 'revenue' ? s.revenue : s.total;
   const second = focus === 'revenue' ? s.total : s.revenue;
@@ -39,7 +38,7 @@ function Result({ s, focus }: { s: CalcSnapshot; focus: 'tax' | 'revenue' }) {
   return (
     <div className="calc-body">
       <p className="calc-kicker">
-        {focus === 'revenue' ? 'Выручка с НДС' : s.taxName}, {s.periodLabel}
+        {focus === 'revenue' ? `Выручка с НДС, ${s.periodLabel}` : snapshotTitle(s)}
       </p>
       <p className="calc-total" data-testid="calc-total" data-amount={headline ?? ''}>
         {headline === null ? 'Не рассчитано' : rub2(dec(headline))}
@@ -48,10 +47,20 @@ function Result({ s, focus }: { s: CalcSnapshot; focus: 'tax' | 'revenue' }) {
         {focus === 'revenue' ? `${s.taxName} за период` : 'Выручка с НДС за период'}:{' '}
         <b>{second === null ? 'нет данных' : rub2(dec(second))}</b>
       </p>
-      <SourceLine data={line} />
+      {/* источник и основа названы ниже в разделе «Источник»: отдельная строка наверху их повторяла бы */}
       <p className="calc-at">
         Расчёт на {preciseDateTime(s.at, s.tz)}. Цифры те же, что на экране в этот момент.
       </p>
+      {assumptions.length > 0 ? (
+        <section className="calc-sec" aria-labelledby={`c-asm-${s.tax}`} data-testid="calc-assumptions">
+          <h3 id={`c-asm-${s.tax}`}>Допущения</h3>
+          <ul className="calc-warns">
+            {assumptions.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {shownWarnings.length > 0 ? (
         <ul className="calc-warns">
           {shownWarnings.map((w, i) => (
@@ -167,7 +176,6 @@ function Result({ s, focus }: { s: CalcSnapshot; focus: 'tax' | 'revenue' }) {
           {s.source ? (
             <>
               {s.source.title}, загружена {formatLoadedAt(s.source.loadedAt, s.tz)}
-              {s.source.isDemo ? '. Демо-данные: цифры выдуманы.' : ''}
             </>
           ) : (
             'Источник не указан.'
@@ -235,7 +243,7 @@ export function CalcDrawer({
 
   return (
     <Overlay kind="drawer" label="Расчёт" onClose={onClose}>
-      <OverlayHead title="Расчёт" sub="Демо-данные" onClose={onClose} />
+      <OverlayHead title="Расчёт" onClose={onClose} />
       <div className="ov-scroll">
         {state.status === 'loading' ? (
           <div aria-busy="true" aria-label="Загрузка расчёта">
@@ -263,7 +271,7 @@ export function CalcDrawer({
                 className={`calc-tab${i === tab ? ' on' : ''}`}
                 onClick={() => setTab(i)}
               >
-                {s.taxName}, {s.periodLabel}
+                {snapshotTitle(s)}
               </button>
             ))}
           </div>

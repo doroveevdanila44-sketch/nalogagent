@@ -233,11 +233,16 @@ export async function handleChat(
       ? {
           line: lineFromSnapshots(results),
           count: results.length,
-          doc: {
-            entityIds: reply.interp?.entityMode === 'named' ? reply.interp.entities : [],
-            period: reply.interp?.period ?? null,
-            tax: reply.interp?.tax ?? null,
-          },
+          // документы строятся по данным: у прогноза следующего года их нет, кнопки «Сформировать» не будет
+          ...(reply.interp?.forecast
+            ? {}
+            : {
+                doc: {
+                  entityIds: reply.interp?.entityMode === 'named' ? reply.interp.entities : [],
+                  period: reply.interp?.period ?? null,
+                  tax: reply.interp?.tax ?? null,
+                },
+              }),
         }
       : null;
 

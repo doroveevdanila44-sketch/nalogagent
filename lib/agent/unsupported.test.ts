@@ -34,19 +34,30 @@ describe('пояснения вместо отказа', () => {
     expect(t).toBe('Данные в демо с января 2025 по декабрь 2026, за 2024 год посчитать не могу.');
   });
 
-  it('2027 год: лимиты не утверждены, жду дефлятор', () => {
-    const t = text({ kind: 'next_year', year: 2027, period: { kind: 'year', year: 2027 } });
+  const next = (reason: 'limits' | 'tax' | 'mixed' | 'other'): Unsupported => ({
+    kind: 'next_year',
+    year: 2027,
+    period: { kind: 'year', year: 2027 },
+    reason,
+  });
+
+  it('2027 год, нужны лимиты: не утверждены, жду дефлятор, прогноз НДС предлагается', () => {
+    const t = text(next('limits'));
     expect(t).toContain('Лимиты 2027 пока не утверждены, жду дефлятор.');
-    expect(t).toContain('Данные в демо с января 2025 по декабрь 2026');
+    expect(t).toContain('Прогноз НДС на 2027 год при лимитах как в 2026 посчитать могу.');
+    expect(t).not.toContain('расчёт на 2027 год не даю');
   });
 
   it('2027 год при известном дефляторе говорит про справочник', () => {
-    const t = text(
-      { kind: 'next_year', year: 2027, period: { kind: 'year', year: 2027 } },
-      { ...ctx, nextYear: { year: 2027, deflatorKnown: true } },
-    );
+    const t = text(next('limits'), { ...ctx, nextYear: { year: 2027, deflatorKnown: true } });
     expect(t).toContain('Правил на 2027 год в справочнике пока нет.');
     expect(t).not.toContain('жду дефлятор');
+  });
+
+  it('2027 год: прогноз только по НДС, период двух годов, другой вопрос', () => {
+    expect(text(next('tax'))).toContain('прогноз только по НДС');
+    expect(text(next('mixed'))).toContain('Период захватывает 2026 и 2027 годы.');
+    expect(text(next('other'))).toContain('считаю только прогноз НДС по трём ставкам');
   });
 
   it('налог не из списка: что агент считает', () => {

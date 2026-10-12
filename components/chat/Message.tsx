@@ -69,7 +69,8 @@ export function Message({
       {turn.tables.map((t, i) => (
         <TableView key={i} table={t} />
       ))}
-      {turn.fromCalc ? <span className="src">Цифры из калькулятора</span> : null}
+      {/* подпись «Цифры из калькулятора» только там, где строки происхождения нет: иначе она повторяет её */}
+      {turn.fromCalc && !turn.provenance ? <span className="src">Цифры из калькулятора</span> : null}
       {turn.provenance ? <SourceLine data={turn.provenance.line} /> : null}
       {turn.how.length > 0 ? (
         <details>

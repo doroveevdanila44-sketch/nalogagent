@@ -1,5 +1,5 @@
 import type { Period } from '@/lib/calc/period';
-import type { TaxKind } from '@/lib/calc/service';
+import type { ForecastScenario, TaxKind } from '@/lib/calc/service';
 import type { Rate } from '@/lib/calc/types';
 import { periodPhrase, scopeLabel } from './line';
 import type { CalcSnapshot } from './snapshot';
@@ -14,6 +14,8 @@ export interface CalcQuery {
   entityIds: string[] | 'all';
   /** Ставка НДС вместо выбранной; на ОСНО не действует */
   rate?: Rate;
+  /** Прогноз следующего года: выручка текущего года с ростом, правила как в текущем году */
+  scenario?: ForecastScenario;
 }
 
 // ===== Ключ расчёта для отметок «сверил» =====
@@ -44,7 +46,9 @@ export function subjectOf(snaps: CalcSnapshot[]): string {
       const scope = s.scope === 'all' ? 'all' : [...s.scope].sort().join('+');
       // ставки юрлиц в расчёте: смена выбранной ставки это уже другой расчёт, отметки к нему не переходят
       const rates = s.entities.filter((e) => e.applicable && e.rate !== null).map((e) => e.rate);
-      return `${s.tax}:${periodKey(s)}:${scope}:${rates.join(',')}`;
+      // прогноз с другим ростом выручки это другой расчёт
+      const growth = s.scenario ? `:g${s.scenario.growth}` : '';
+      return `${s.tax}:${periodKey(s)}:${scope}:${rates.join(',')}${growth}`;
     })
     .join('|');
 }

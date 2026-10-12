@@ -16,7 +16,7 @@ import {
 } from '@/lib/calc';
 import { CalcActions } from '@/components/provenance/CalcActions';
 import { SourceLine } from '@/components/provenance/SourceLine';
-import type { SourceLineData } from '@/lib/provenance/line';
+import { sourceLineText, type SourceLineData } from '@/lib/provenance/line';
 import { bannerQueries } from '@/lib/provenance/dashboard';
 import { groupCaption, groupMetrics, type GroupMetricId } from './group-metrics';
 
@@ -80,6 +80,9 @@ function SumPanel({ openId, render }: { openId: CardId | null; render: (id: Card
  * Четыре отдельные карточки группы на всех ширинах: на телефоне колонкой, на планшете два на два,
  * от 1024 px в один ряд. Над ними строка «Группа на <дата>» и «5 юрлиц · режимы» без фона.
  *
+ * Строка происхождения: когда у всех четырёх карточек она одинаковая, она стоит один раз под
+ * заголовком группы; если строки различаются (основа данных разная), у каждой карточки своя.
+ *
  * Раскрытие: на телефоне и планшете расшифровка по юрлицам раскрывается по месту, прямо под нажатой
  * карточкой (остальные съезжают вниз); на компьютере одной широкой панелью под рядом карточек.
  * Раскрыта одна, повторное нажатие закрывает, при нажатии на другую открывается она. Из расшифровки
@@ -100,6 +103,10 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
   }, []);
 
   const payerNames = entities.filter((e) => e.status === 'payer');
+
+  const metrics = groupMetrics(live, stat, entities);
+  const texts = metrics.map((m) => sourceLineText(lines[m.id]));
+  const sharedLine = texts.every((t) => t === texts[0]);
 
   type Row = { id: string; name: string; color: string; tag: string; value: string };
   const detail: Record<CardId, { title: string; rows: Row[] }> = {
@@ -162,7 +169,7 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
       .slice(0, 3)
       .map((x) => `${x.e.name.replace(/ООО |«|»/g, '')} ${dateRu(x.n!.due)}, ${rub(x.n!.amount)}`)
       .join('; ') +
-    '. Суммы ориентировочные, проверьте с бухгалтером.';
+    '.';
 
   /** Содержимое расшифровки: общее для панели под рядом и для раскрытия по месту */
   const renderDetail = (id: CardId, inCell: boolean) => {
@@ -213,8 +220,8 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
         >
           <span className="sum-label">{label}</span>
           <strong className="sum-value">{value}</strong>
-          <span className="sum-sub">{sub}</span>
-          <SourceLine data={lines[id]} tone="dark" inline />
+          {sub ? <span className="sum-sub">{sub}</span> : null}
+          {sharedLine ? null : <SourceLine data={lines[id]} tone="dark" inline />}
           <svg className="sum-chev" viewBox="0 0 24 24" aria-hidden="true">
             <path d="m7 10 5 5 5-5" />
           </svg>
@@ -243,7 +250,9 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
         <p>{groupCaption(entities)}</p>
       </div>
 
-      <div className="sum-cards">{groupMetrics(live, stat, entities).map((m) => item(m))}</div>
+      {sharedLine ? <SourceLine data={lines[metrics[0]!.id]} /> : null}
+
+      <div className="sum-cards">{metrics.map((m) => item(m))}</div>
 
       {wide ? <SumPanel openId={open} render={(id) => renderDetail(id, false)} /> : null}
     </section>

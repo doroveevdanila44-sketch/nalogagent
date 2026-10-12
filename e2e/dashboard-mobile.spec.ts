@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { firstLogin, resetChat } from './helpers';
+import { firstLogin, pickSuggestion, resetChat } from './helpers';
 
 const PIN = '8246';
 const WINE = 'rgb(120, 66, 68)'; // #784244
@@ -122,7 +122,7 @@ test('Шапка прилипает к верху без отрыва: свой 
 
   // агент: несколько ответов, чтобы страница прокручивалась
   for (const q of ['Что с порогами?', 'Какая ставка выгоднее?']) {
-    await page.getByRole('button', { name: q }).first().click();
+    await pickSuggestion(page, q);
     await expect(page.locator('.typing')).toHaveCount(0);
     await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
   }
@@ -545,7 +545,7 @@ test.describe('Компьютер', () => {
         radii: cards.map((e) => getComputedStyle(e).borderTopLeftRadius),
         labels: cards.map((e) => e.querySelector('.sum-label')!.textContent),
         values: cards.map((e) => e.querySelector('.sum-value')!.textContent),
-        subs: cards.map((e) => e.querySelector('.sum-sub')!.textContent),
+        subs: cards.map((e) => e.querySelector('.sum-sub')?.textContent ?? ''),
         headBg: hcs.backgroundColor,
         headAbove: hb.bottom <= list.top,
         listLeft: Math.round(list.left),
@@ -568,7 +568,12 @@ test.describe('Компьютер', () => {
       'Налог на прибыль: прогноз за год',
     ]);
     for (const v of m.values) expect(v && v.length > 0).toBe(true);
-    for (const v of m.subs) expect(v && v.length > 0).toBe(true);
+    // пояснения только там, где они добавляют сказанное: у выручки его нет, у НДС оно есть,
+    // пока можно сэкономить; «по всем юрлицам» и «ставки уже лучшие» не пишутся
+    expect(m.subs[0]).toBe('');
+    expect(m.subs[1]).toMatch(/^(можно сэкономить .* в год)?$/);
+    expect(m.subs[2]).toBe('по выбранным ставкам');
+    expect(m.subs[3]).toMatch(/^УСН по остальным юрлицам: .* в год$/);
     expect(m.headBg).toBe('rgba(0, 0, 0, 0)'); // строка заголовка без фона
     expect(m.headAbove).toBe(true);
     expect(m.clipped).toBe(false);

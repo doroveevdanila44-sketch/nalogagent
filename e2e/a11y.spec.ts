@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { firstLogin } from './helpers';
+import { firstLogin, pickSuggestion } from './helpers';
 
 const PIN = '8246';
 
@@ -41,7 +41,7 @@ test('доступность: вход, PIN, агент, дашборд, мен�
   await page.getByLabel('Вопрос агенту').waitFor();
   await check('agent empty');
 
-  await page.getByRole('button', { name: 'Какая ставка выгоднее?' }).first().click();
+  await pickSuggestion(page, 'Какая ставка выгоднее?');
   await expect(page.getByText('Цифры из калькулятора')).toBeVisible();
   await check('agent answer');
 
@@ -64,6 +64,11 @@ test('консоль без ошибок на основных экранах', 
     if (m.type() === 'error') errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  // в сообщении консоли о 404 адреса нет: ответы с ошибкой записываются отдельно, с адресом
+  const failed: string[] = [];
+  page.on('response', (r) => {
+    if (r.status() >= 400) failed.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
 
   await firstLogin(page, PIN);
   await page.getByRole('link', { name: 'Дашборд' }).click();
@@ -71,5 +76,6 @@ test('консоль без ошибок на основных экранах', 
   await page.waitForTimeout(1500);
   await page.getByRole('link', { name: 'Агент' }).click();
   await page.waitForTimeout(500);
+  expect(failed).toEqual([]);
   expect(errors).toEqual([]);
 });

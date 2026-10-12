@@ -14,6 +14,7 @@ export interface GroupMetric {
   id: GroupMetricId;
   label: string;
   value: string;
+  /** Пояснение под суммой; пусто, если сказать нечего сверх заголовка и цвета */
   sub: string;
 }
 
@@ -26,12 +27,12 @@ const regimeFamily = (r: string) => (r === 'osno' ? 'ОСНО' : 'УСН');
 export function groupMetrics(live: LiveModel, stat: StaticModel, entities: EntityInput[]): GroupMetric[] {
   const hasOsno = entities.some((e) => e.taxRegime === 'osno');
   return [
-    { id: 'revenue', label: 'Выручка с начала года', value: rub(live.ytdGroup), sub: 'по всем юрлицам' },
+    { id: 'revenue', label: 'Выручка с начала года', value: rub(live.ytdGroup), sub: '' },
     {
       id: 'vat',
       label: 'НДС начислен',
       value: rub2(live.taxAccruedGroup),
-      sub: stat.saving.gt(0) ? `можно сэкономить ${mln(stat.saving, 2)} в год` : 'ставки уже лучшие',
+      sub: stat.saving.gt(0) ? `можно сэкономить ${mln(stat.saving, 2)} в год` : '',
     },
     {
       id: 'vatForecast',

@@ -70,10 +70,23 @@ export function explainUnsupported(u: Unsupported, ctx: ExplainContext): string[
       ];
     }
     case 'next_year': {
-      const base = ctx.nextYear?.deflatorKnown
-        ? `Правил на ${u.year} год в справочнике пока нет.`
-        : `Лимиты ${u.year} пока не утверждены, жду дефлятор.`;
-      return [range ? `${base} Данные в демо ${range}, поэтому расчёт на ${u.year} год не даю.` : base];
+      const prev = u.year - 1;
+      switch (u.reason) {
+        case 'tax':
+          return [`На ${u.year} год считаю прогноз только по НДС: налог по УСН и налог на прибыль на ${u.year} год не считаю.`];
+        case 'mixed':
+          return [`Период захватывает ${prev} и ${u.year} годы. Посчитайте отдельно: за ${prev} год и за ${u.year} год.`];
+        case 'other':
+          return [`На ${u.year} год считаю только прогноз НДС по трём ставкам. Остальное на этот год пока не считаю.`];
+        case 'limits':
+          return ctx.nextYear?.deflatorKnown
+            ? [`Правил на ${u.year} год в справочнике пока нет. Прогноз НДС на ${u.year} год посчитать могу.`]
+            : [
+                `Лимиты ${u.year} пока не утверждены, жду дефлятор. ` +
+                  `Прогноз НДС на ${u.year} год при лимитах как в ${prev} посчитать могу.`,
+              ];
+      }
+      return [];
     }
     case 'other_tax': {
       const note = TAX_NOTE[u.name];

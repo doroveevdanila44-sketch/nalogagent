@@ -137,12 +137,15 @@ test('Телефон 390: поле чата растёт до шести стр�
   expect(await page.locator('.msg.me').first().evaluate((e) => (e.textContent ?? '').split('строка').length - 1)).toBe(12);
 });
 
-test('Телефон 390: подсказки переносятся рядами, высота 36, зазор 8, без горизонтальной прокрутки', async ({
+test('Телефон 390: подсказки свёрнуты, раскрываются нажатием на ручку, рядами высотой 36 с зазором 8, без горизонтальной прокрутки', async ({
   page,
 }) => {
   await resetChat();
   await firstLogin(page, PIN);
   await field(page).waitFor();
+
+  const handle = page.locator('.sug-handle');
+  const panel = page.locator('#chat-suggestions');
 
   const measure = async (selector: string) =>
     page.evaluate((sel) => {
@@ -177,29 +180,47 @@ test('Телефон 390: подсказки переносятся рядами
       };
     }, selector);
 
-  // пустая история: подсказки по центру
-  const empty = await measure('.sug');
-  expect(empty.count).toBe(4);
-  expect(empty.flexWrap).toBe('wrap');
-  expect(empty.overflowX).toBe('visible');
-  expect(empty.scrolls).toBe(false);
-  expect(empty.heights).toEqual([36, 36, 36, 36]);
-  expect(empty.clipped).toBe(false);
-  expect(empty.inside).toBe(true);
-  expect(empty.pageScrollX).toBeLessThanOrEqual(0);
-  expect(empty.rows).toBeGreaterThanOrEqual(2);
-  expect(empty.gap).toBe('8px 8px');
-  for (const g of empty.sameRowGaps) expect(g).toBeCloseTo(8, 0);
-  for (const g of empty.rowGaps) expect(g).toBeCloseTo(8, 0);
+  // пустая история: подсказок по центру списка нет, блок свёрнут до узкой ручки
+  await expect(page.locator('.chat-empty')).toHaveCount(0);
+  await expect(handle).toBeVisible();
+  await expect(handle).toHaveText('Подсказки');
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  expect((await handle.boundingBox())!.height).toBe(28);
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeLessThan(1);
+  expect(await panel.locator(':scope > div').evaluate((e) => e.hasAttribute('inert'))).toBe(true);
 
-  // подсказки над полем после первого ответа
-  await page.getByRole('button', { name: 'Что с порогами?' }).first().click();
+  // нажатие на ручку раскрывает: подсказки рядами по 36 px, зазор 8, внутри экрана
+  await handle.tap();
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(70);
+  const first = await measure('#chat-suggestions .sug');
+  expect(first.count).toBe(4);
+  expect(first.flexWrap).toBe('wrap');
+  expect(first.overflowX).toBe('visible');
+  expect(first.scrolls).toBe(false);
+  expect(first.heights).toEqual([36, 36, 36, 36]);
+  expect(first.clipped).toBe(false);
+  expect(first.inside).toBe(true);
+  expect(first.pageScrollX).toBeLessThanOrEqual(0);
+  expect(first.rows).toBeGreaterThanOrEqual(2);
+  expect(first.gap).toBe('8px 8px');
+  for (const g of first.sameRowGaps) expect(g).toBeCloseTo(8, 0);
+  for (const g of first.rowGaps) expect(g).toBeCloseTo(8, 0);
+
+  // выбор подсказки отправляет вопрос и сворачивает блок
+  await page.getByRole('button', { name: 'Что с порогами?' }).first().tap();
   await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
   await expect(page.locator('.typing')).toHaveCount(0);
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeLessThan(1);
+
+  // ответ агента блок не раскрыл; ручка раскрывает его снова, ряды те же
+  await handle.tap();
+  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(70);
   const docked = await measure('.composer-wrap .sug');
   expect(docked.count).toBe(4);
   expect(docked.flexWrap).toBe('wrap');
-  expect(docked.overflowX).toBe('visible');
   expect(docked.scrolls).toBe(false);
   expect(docked.heights).toEqual([36, 36, 36, 36]);
   expect(docked.clipped).toBe(false);
@@ -207,26 +228,36 @@ test('Телефон 390: подсказки переносятся рядами
   expect(docked.pageScrollX).toBeLessThanOrEqual(0);
   expect(docked.rows).toBeGreaterThanOrEqual(2);
   for (const g of docked.rowGaps) expect(g).toBeCloseTo(8, 0);
+  // повторное нажатие на ручку сворачивает
+  await handle.tap();
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('Телефон 390: чат листается при клавиатуре, подсказки сворачиваются и в цвет PIN, поле остаётся в фокусе', async ({
+test('Телефон 390: подсказки не раскрываются ни прокруткой, ни закрытием клавиатуры, ни новым ответом, поле остаётся в фокусе', async ({
   page,
 }) => {
   await resetChat();
   await firstLogin(page, PIN);
   await field(page).waitFor();
 
-  // несколько ответов, чтобы список прокручивался
-  for (const q of ['Что с порогами?', 'Какая ставка выгоднее?', 'Налог на прибыль за год?']) {
-    await page.getByRole('button', { name: q }).first().click();
-    await expect(page.locator('.typing')).toHaveCount(0);
-    await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
-  }
-
   const list = page.locator('.chat-scroll');
   const handle = page.locator('.sug-handle');
   const panel = page.locator('#chat-suggestions');
   const tabs = page.locator('nav.tabs');
+  const panelHeight = async () => (await panel.boundingBox())?.height ?? 0;
+
+  // несколько ответов, чтобы список прокручивался; подсказки выбираются через ручку
+  for (const q of ['Что с порогами?', 'Какая ставка выгоднее?', 'Налог на прибыль за год?']) {
+    await handle.tap();
+    await expect(handle).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('button', { name: q }).first().tap();
+    await expect(page.locator('.typing')).toHaveCount(0);
+    await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
+    // после выбора блок свёрнут, новый ответ его не раскрыл
+    await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  }
+  await expect.poll(panelHeight).toBeLessThan(1);
+
   const scrollState = () =>
     page.evaluate(() => {
       const el = document.querySelector('.chat-scroll') as HTMLElement;
@@ -264,11 +295,13 @@ test('Телефон 390: чат листается при клавиатуре,
   expect(layout.docH).toBeLessThanOrEqual(layout.vh); // страница целиком на экране
   expect(layout.scrollable).toBe(true);
 
-  // клавиатура закрыта: все подсказки развёрнуты, цвета как на экране PIN
-  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  // свёрнуто по умолчанию: ручка 28 px; раскрытые подсказки в цвет экрана PIN
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await expect(handle).toHaveAttribute('aria-controls', 'chat-suggestions');
   await expect(handle).toHaveText('Подсказки');
   expect((await handle.boundingBox())!.height).toBe(28);
+  await handle.tap();
+  await expect.poll(panelHeight).toBeGreaterThan(70);
   const chip = await page.locator('#chat-suggestions .sug button').first().evaluate((e) => {
     const c = getComputedStyle(e);
     return {
@@ -284,17 +317,16 @@ test('Телефон 390: чат листается при клавиатуре,
   expect(chip.border).toBe('rgba(255, 255, 255, 0.2)');
   expect(chip.radius).toBe('999px');
   expect(chip.h).toBe(36);
-  const open = (await panel.boundingBox())!.height;
-  expect(open).toBeGreaterThan(70);
-
-  // фокус в поле: подсказки сворачиваются до ручки, поле остаётся в фокусе
-  await field(page).focus();
+  await handle.tap();
   await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await page.waitForTimeout(400);
-  expect((await panel.boundingBox())?.height ?? 0).toBeLessThan(1);
-  expect((await handle.boundingBox())!.height).toBe(28); // ручка остаётся
+
+  // фокус в поле: клавиатура открылась, блок остался свёрнутым, поле в фокусе
+  await field(page).focus();
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
   expect(await panel.locator(':scope > div').evaluate((e) => e.hasAttribute('inert'))).toBe(true);
+  expect((await handle.boundingBox())!.height).toBe(28); // ручка остаётся
 
   // клавиатура открылась (вьюпорт ниже на 300 px): нижняя панель скрыта, поле над клавиатурой
   await page.setViewportSize({ width: 390, height: 544 });
@@ -312,7 +344,7 @@ test('Телефон 390: чат листается при клавиатуре,
   expect(geo.lastBottom).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
 
-  // список листается жестом, пока клавиатура открыта: страница на месте, поле в фокусе
+  // список листается жестом, пока клавиатура открыта: страница на месте, поле в фокусе, подсказки свёрнуты
   const atBottom = await scrollState();
   expect(atBottom.max).toBeGreaterThan(200);
   expect(atBottom.max - atBottom.top).toBeLessThan(4); // остался внизу
@@ -324,18 +356,18 @@ test('Телефон 390: чат листается при клавиатуре,
   expect(scrolled.winY).toBe(0);
   expect(scrolled.docTop).toBe(0);
   expect(scrolled.active).toBe('TEXTAREA');
-  // при открытой клавиатуре листание вверх подсказки не разворачивает
   await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await page.mouse.wheel(0, 300);
   await page.waitForTimeout(150);
   expect((await scrollState()).active).toBe('TEXTAREA');
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
 
   // нажатие на сообщение и на пустое место не снимает фокус
   await page.locator('.msg').first().dispatchEvent('mousedown');
   await page.mouse.click(box.x + 4, box.y + 4);
   expect((await scrollState()).active).toBe('TEXTAREA');
 
-  // ручка разворачивает блок обратно, фокус и клавиатура остаются
+  // ручка разворачивает блок, фокус и клавиатура остаются; повторное нажатие сворачивает
   await handle.tap();
   await expect(handle).toHaveAttribute('aria-expanded', 'true');
   await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(60);
@@ -343,25 +375,35 @@ test('Телефон 390: чат листается при клавиатуре,
   await handle.tap();
   await expect(handle).toHaveAttribute('aria-expanded', 'false');
 
-  // клавиатура закрылась: подсказки возвращаются, нижняя панель тоже
+  // клавиатура закрылась: подсказки остались свёрнутыми, нижняя панель вернулась
   await page.setViewportSize({ width: 390, height: 844 });
   await field(page).evaluate((e) => (e as HTMLElement).blur());
   await expect(page.locator('html[data-kb="open"]')).toHaveCount(0);
   await expect(tabs).toBeVisible();
-  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(panelHeight).toBeLessThan(1);
 
-  // клавиатура закрыта: листание вниз сворачивает, вверх разворачивает
+  // клавиатура закрыта: листание вниз и вверх подсказки не раскрывает
   const box2 = (await list.boundingBox())!;
   await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
   await page.mouse.wheel(0, -2000);
   await page.waitForTimeout(100);
   await page.mouse.wheel(0, 200);
   await page.mouse.wheel(0, 200);
-  await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await page.waitForTimeout(500);
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await page.mouse.wheel(0, -200);
   await page.mouse.wheel(0, -200);
-  await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  await page.waitForTimeout(500);
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(panelHeight).toBeLessThan(1);
+
+  // новый ответ агента на вопрос из поля: блок по-прежнему свёрнут
+  await field(page).fill('Что с порогами?');
+  await page.getByRole('button', { name: 'Отправить' }).tap();
+  await expect(page.locator('.typing')).toHaveCount(0);
+  await expect(handle).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(panelHeight).toBeLessThan(1);
 });
 
 test.describe('Компьютер', () => {

@@ -9,7 +9,7 @@ import { DEMO_MAIL_NOTE } from '@/components/provenance/SendToSpecialist';
 import type { DocumentDetail } from '@/lib/documents/detail';
 import { missingText } from '@/lib/documents/fill';
 import { shortDateTime } from '@/lib/provenance/line';
-import { CATEGORY_LABEL, SAMPLE_NOTE, STATUS_LABEL, type EventInfo } from '@/lib/documents/types';
+import { CATEGORY_LABEL, STATUS_LABEL, type EventInfo } from '@/lib/documents/types';
 import { DocCheck } from './DocCheck';
 import { DocSend } from './DocSend';
 import { FillForm } from './FillForm';
@@ -22,7 +22,7 @@ const EVENT_TEXT: Record<string, (e: EventInfo) => string> = {
     const n = Number(e.data.changes ?? 0);
     return `Новая версия ${e.versionN}: изменений ${n}`;
   },
-  submitted: (e) => `Отправлен на проверку: ${String(e.data.recipient ?? '')}. Демо: письмо не отправлялось`,
+  submitted: (e) => `Отправлен на проверку: ${String(e.data.recipient ?? '')}`,
   withdrawn: () => 'Документ отозван',
   comment: (e) => `Комментарий: ${String(e.data.text ?? '')}`,
   remark: (e) => `Замечание (демо): ${String(e.data.text ?? '')}`,
@@ -155,13 +155,10 @@ export function DocumentView({ id }: { id: string }) {
             Версия {doc.shownVersion}
             {doc.readOnly ? ` из ${doc.version}` : ''}
           </span>
-          <span className="demo-chip">{SAMPLE_NOTE}</span>
-          <span className="demo-chip">Демо-данные</span>
         </div>
+        {/* юрлицо и период уже в названии документа, здесь только то, чего в названии нет */}
         <p className="doc-sub">
           {CATEGORY_LABEL[doc.category]}
-          {doc.entityName ? ` · ${doc.entityName}` : ' · группа'}
-          {doc.periodLabel ? ` · ${doc.periodLabel}` : ''}
           {doc.reviewer && doc.status !== 'draft' ? ` · проверяет ${doc.reviewer.name}, ${doc.reviewer.role}` : ''}
         </p>
       </header>
@@ -257,9 +254,7 @@ export function DocumentView({ id }: { id: string }) {
 
           {doc.can.simulate ? (
             <section className="demo-reply" aria-labelledby="h-demo" data-testid="demo-reply">
-              <h2 id="h-demo">
-                <span className="demo-chip">Демо</span> Имитировать ответ бухгалтера
-              </h2>
+              <h2 id="h-demo">Имитировать ответ бухгалтера</h2>
               <p className="calc-note">
                 Настоящего ответа не будет: кнопки добавляют ответ с пометкой «Демо», чтобы пройти весь процесс.
               </p>
@@ -321,7 +316,10 @@ export function DocumentView({ id }: { id: string }) {
           <details className="doc-sec" open>
             <summary>Версии ({doc.versions.length})</summary>
             <ol className="ver-list" data-testid="versions">
-              {doc.versions.map((v) => (
+              {doc.versions.map((v) => {
+                // создание документа есть в «Истории» с той же датой: в версии оно не повторяется
+                const changes = v.changes.filter((c) => c.field !== 'created');
+                return (
                 <li key={v.n} className={v.n === doc.shownVersion ? 'on' : ''}>
                   <div className="ver-head">
                     <b>Версия {v.n}</b>
@@ -330,19 +328,21 @@ export function DocumentView({ id }: { id: string }) {
                   <small>
                     {v.authorName}, {shortDateTime(Date.parse(v.createdAt), tz)}
                   </small>
-                  <ul className="ver-changes">
-                    {v.changes.map((c, i) => (
-                      <li key={i}>
-                        {c.field === 'created' || c.field === 'calc' ? (
-                          c.label
-                        ) : (
-                          <>
-                            {c.label}: {c.from ?? 'пусто'} → {c.to ?? 'пусто'}
-                          </>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                  {changes.length > 0 ? (
+                    <ul className="ver-changes">
+                      {changes.map((c, i) => (
+                        <li key={i}>
+                          {c.field === 'calc' ? (
+                            c.label
+                          ) : (
+                            <>
+                              {c.label}: {c.from ?? 'пусто'} → {c.to ?? 'пусто'}
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <small className="ver-hash" title={v.hash}>
                     контрольная сумма {v.hash.slice(0, 12)}
                   </small>
@@ -359,7 +359,8 @@ export function DocumentView({ id }: { id: string }) {
                     </button>
                   ) : null}
                 </li>
-              ))}
+                );
+              })}
             </ol>
           </details>
 
@@ -368,7 +369,6 @@ export function DocumentView({ id }: { id: string }) {
               Комментарии ({doc.comments.length}
               {unresolved > 0 ? `, без решения: ${unresolved}` : ''})
             </summary>
-            {doc.comments.length === 0 ? <p className="calc-note">Комментариев пока нет.</p> : null}
             <ul className="cm-list" data-testid="comments">
               {doc.comments.map((c) => (
                 <li key={c.id} className={`cm cm-${c.kind}${c.resolved ? ' resolved' : ''}`}>

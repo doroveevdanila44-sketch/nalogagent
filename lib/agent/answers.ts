@@ -105,8 +105,6 @@ export function answerRates(c: AnswerCtx, entityId?: string | null): CalcResult 
         );
       }
     }
-  } else {
-    paragraphs.push('Выбранные ставки уже самые дешёвые.');
   }
   paragraphs.push(
     'Что учесть: при 5% и 7% покупатели-юрлица не получают вычет и могут уйти.' +

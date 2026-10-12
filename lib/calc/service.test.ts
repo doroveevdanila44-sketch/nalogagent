@@ -15,6 +15,7 @@ import {
   calcTax,
   CalcInputError,
   dashboardInput,
+  compareRates,
   dataKind,
   verifyCalcResult,
   type CalcData,
@@ -704,5 +705,155 @@ describe('ошибки входа', () => {
         source: null,
       }),
     ).toThrow(/12 месяцев/);
+  });
+});
+
+describe('сценарий прогноза следующего года', () => {
+  const y2027: Period = { kind: 'year', year: 2027 };
+  const forecast = (growth: number, rate?: 5 | 7 | 22, entityIds: CalcTaxArgs['entityIds'] = 'all') =>
+    calc({ tax: 'vat', period: y2027, rate, entityIds, scenario: { kind: 'forecast', year: 2027, growth } });
+
+  it('выручка как в 2026: налог по ставке совпадает с годовым расчётом 2026 года', () => {
+    const plain2026 = (rate: 5 | 7 | 22) => calc({ tax: 'vat', rate, period: { kind: 'year', year: 2026 } });
+    for (const rate of [5, 7, 22] as const) {
+      const f = forecast(0, rate);
+      expect(ent(f, 'alfa').tax!.toString()).toBe(ent(plain2026(rate), 'alfa').tax!.toString());
+      expect(ent(f, 'beta').tax!.toString()).toBe(ent(plain2026(rate), 'beta').tax!.toString());
+    }
+    const f5 = forecast(0, 5);
+    expect(ent(f5, 'alfa').tax!.toString()).toBe(round2(dec(28_400_000).times(5).div(105)).toString());
+    expect(f5.kind).toBe('forecast');
+    expect(f5.scenario).toEqual({ kind: 'forecast', year: 2027, growth: 0, limitsApproved: false });
+    expect(f5.periodLabel).toBe('2027 год');
+    expect(ent(f5, 'alfa').months.every((m) => m.status === 'forecast' && m.basis === 'forecast')).toBe(true);
+  });
+
+  it('контрольные числа CALC.md: налог по трём ставкам при росте 0', () => {
+    const at = (rate: 5 | 7 | 22, id: string) => ent(forecast(0, rate), id).tax!.toFixed(2);
+    expect([5, 7, 22].map((r) => at(r as 5 | 7 | 22, 'alfa'))).toEqual(['1352380.95', '1857943.93', '921836.07']);
+    expect([5, 7, 22].map((r) => at(r as 5 | 7 | 22, 'beta'))).toEqual(['1047619.05', '1439252.34', '2618360.66']);
+    expect(at(5, 'delta')).toBe('995238.10');
+    expect(at(22, 'delta')).toBe('3090459.02');
+    expect([5, 7, 22].map((r) => at(r as 5 | 7 | 22, 'gamma'))).toEqual(['0.00', '0.00', '0.00']);
+    expect(at(5, 'epsilon')).toBe('6004918.03');
+  });
+
+  it('сравнение ставок: лучшая, следующая по выгоде, экономия и итог группы из сервиса', () => {
+    const c = compareRates({ entityIds: 'all', period: y2027, scenario: { kind: 'forecast', year: 2027, growth: 0 } }, data);
+    const row = (id: string) => c.rows.find((r) => r.entityId === id)!;
+    expect([row('alfa').best, row('alfa').against]).toEqual([22, 5]);
+    expect([row('beta').best, row('beta').against]).toEqual([5, 7]);
+    expect([row('delta').best, row('delta').against]).toEqual([5, 7]);
+    expect(row('gamma').exemptAll).toBe(true);
+    expect(row('gamma').best).toBeNull();
+    expect(row('alfa').saving!.toFixed(2)).toBe(
+      ent(forecast(0, 5), 'alfa').tax!.minus(ent(forecast(0, 22), 'alfa').tax!).toFixed(2),
+    );
+    // ОСНО отдельно: ставка одна
+    expect(c.osno.map((o) => o.entityId)).toEqual(['epsilon']);
+    expect(c.osno[0]!.tax.toFixed(2)).toBe('6004918.03');
+    // итог группы: лучшая ставка каждого юрлица плюс ОСНО
+    const best = sum([
+      row('alfa').tax[22],
+      row('beta').tax[5],
+      row('delta').tax[5],
+      ZERO,
+      c.osno[0]!.tax,
+    ]);
+    expect(c.bestTotal.toFixed(2)).toBe(best.toFixed(2));
+    expect(c.savingTotal.toFixed(2)).toBe(
+      sum(c.rows.map((r) => r.saving ?? ZERO)).toFixed(2),
+    );
+    // три прогона на трёх ставках; шаги каждого проходят проверку
+    expect(c.runs.map((r) => r.rate)).toEqual([5, 7, 22]);
+    for (const r of c.runs) expect(verifyCalcResult(r.result)).toEqual([]);
+  });
+
+  it('рост выручки: налог растёт на тот же коэффициент', () => {
+    const base = ent(forecast(0, 5), 'alfa').tax!;
+    const plus10 = ent(forecast(10, 5), 'alfa').tax!;
+    near(plus10, base.times('1.1').toNumber(), 0.05);
+    const plus20 = ent(forecast(20, 7), 'beta').tax!;
+    near(plus20, ent(forecast(0, 7), 'beta').tax!.times('1.2').toNumber(), 0.05);
+  });
+
+  it('помесячно по сезонности, итог за год равен сумме месяцев', () => {
+    const r = forecast(0, 5, ['alfa']);
+    const alfa = ent(r, 'alfa');
+    expect(alfa.months).toHaveLength(12);
+    // июль 2027: вес сезонности .13 от годовой выручки
+    const july = alfa.months.find((m) => m.key === '2027-07')!;
+    expect(july.revenue!.toString()).toBe(dec(28_400_000).times('0.13').toString());
+    near(sum(alfa.months.map((m) => m.tax!)), alfa.tax!.toNumber(), 0.01);
+  });
+
+  it('освобождённое юрлицо, прошедшее порог в 2026 году, в 2027 году платит весь год (Дельта)', () => {
+    const r = forecast(0, 5);
+    const delta = ent(r, 'delta');
+    expect(delta.months.some((m) => m.exempt)).toBe(false);
+    near(delta.tax, ent(calc({ tax: 'vat', rate: 5, period: { kind: 'year', year: 2026 } }, data), 'delta').revenue!.times(5).div(105).toNumber(), 0.01);
+    expect(delta.tax!.gt(0)).toBe(true);
+    expect(r.assumptions.some((a) => a.includes('ИП Дельта') && a.includes('1 января 2027'))).toBe(true);
+    expect(r.warnings.some((w) => w.entityId === 'delta' && /1 января 2027/.test(w.text))).toBe(true);
+  });
+
+  it('освобождённое юрлицо ниже порога остаётся освобождённым (Гамма)', () => {
+    const r = forecast(0, 5);
+    const gamma = ent(r, 'gamma');
+    expect(gamma.tax!.isZero()).toBe(true);
+    expect(gamma.months.every((m) => m.exempt)).toBe(true);
+  });
+
+  it('допущения: выручка, лимиты как в 2026, значения из справочника', () => {
+    const r = forecast(0, 5);
+    expect(r.assumptions[0]).toContain('как в 2026');
+    const limits = r.assumptions.find((a) => a.startsWith('Лимиты 2027'))!;
+    expect(plain(limits)).toContain('272,5 млн');
+    expect(plain(limits)).toContain('490,5 млн');
+    expect(limits).toContain('дефлятор не утверждён');
+    expect(forecast(10, 5).assumptions[0]).toContain('с ростом 10%');
+    // правила следующего года в расчёте: значения 2026, действуют с 1 января 2027
+    const limit5 = r.rules.find((x) => x.key === 'limit_5')!;
+    expect(limit5.validFrom).toBe('2027-01-01');
+    expect(Number(limit5.value)).toBe(272_500_000);
+    expect(limit5.note).toContain('дефлятор');
+  });
+
+  it('шаги формул проходят проверку, расчёт по данным без допущений', () => {
+    for (const rate of [5, 7, 22] as const) expect(verifyCalcResult(forecast(15, rate))).toEqual([]);
+    const plainResult = calc({ tax: 'vat', period: { kind: 'year', year: 2026 } });
+    expect(plainResult.assumptions).toEqual([]);
+    expect(plainResult.scenario).toBeNull();
+  });
+
+  it('неподдерживаемое: не следующий год, не НДС, период не в сценарном году, рост вне границ', () => {
+    const bad = (args: Partial<CalcTaxArgs> & { scenario: NonNullable<CalcTaxArgs['scenario']> }) =>
+      expect(() => calc({ tax: 'vat', period: y2027, ...args })).toThrow(CalcInputError);
+    bad({ scenario: { kind: 'forecast', year: 2028, growth: 0 }, period: { kind: 'year', year: 2028 } });
+    bad({ tax: 'usn', scenario: { kind: 'forecast', year: 2027, growth: 0 } });
+    bad({ period: { kind: 'year', year: 2026 }, scenario: { kind: 'forecast', year: 2027, growth: 0 } });
+    bad({ scenario: { kind: 'forecast', year: 2027, growth: 1000 } });
+  });
+
+  it('без правил на текущий год сценарий не строится', () => {
+    const empty = buildCalcData({
+      today: data.today,
+      entities: data.entities.map(({ monthly: _m, ...e }) => e),
+      weights: data.weights,
+      ruleRows: [],
+      choices: {},
+      revenue: data.revenue,
+      source: data.source,
+    });
+    expect(() =>
+      calc({ tax: 'vat', period: y2027, scenario: { kind: 'forecast', year: 2027, growth: 0 } }, empty),
+    ).toThrow(CalcInputError);
+  });
+
+  it('ОСНО: ставка одна, 22% с вычетом, при любой заданной ставке', () => {
+    const e5 = ent(forecast(0, 5), 'epsilon');
+    const e22 = ent(forecast(0, 22), 'epsilon');
+    expect(e5.rate).toBe(22);
+    expect(e5.tax!.toString()).toBe(e22.tax!.toString());
   });
 });

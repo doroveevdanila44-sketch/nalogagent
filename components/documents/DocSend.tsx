@@ -61,7 +61,7 @@ export function DocSend({
 
   return (
     <Overlay kind="modal" label="Отправить бухгалтеру на проверку" onClose={onClose}>
-      <OverlayHead title="Отправить на проверку" sub={DEMO_MAIL_NOTE} onClose={onClose} />
+      <OverlayHead title="Отправить на проверку" onClose={onClose} />
       <div className="ov-scroll">
         <p className="demo-banner" data-testid="demo-mail-note">
           {DEMO_MAIL_NOTE}. Статус документа изменится на «На проверке», получатель ничего не получит.
@@ -110,7 +110,6 @@ export function DocSend({
             Отмена
           </button>
         </div>
-        <p className="calc-note">{DEMO_MAIL_NOTE}.</p>
       </div>
     </Overlay>
   );

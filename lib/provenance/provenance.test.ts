@@ -35,7 +35,7 @@ import { seedDatabase } from '@/lib/db/seed';
 import { createTestDb } from '@/lib/db/testing';
 import { buildDashboardProvenance, bannerQueries, entityQueries } from './dashboard';
 import { buildChecklist, formulasText } from './checklist';
-import { KIND_LABEL, lineFromSnapshots, shortDateTime, sourceLineText } from './line';
+import { KIND_LABEL, lineFromSnapshots, shortDateTime, shortSource, sourceLineText, stampShort } from './line';
 import { exportFileName, requestTitle, subjectOf, type CalcQuery } from './query';
 import { runQueries } from './schemas';
 import { fromSnapshot, toSnapshot } from './snapshot';
@@ -100,13 +100,26 @@ describe('снимок расчёта', () => {
 });
 
 describe('строка происхождения', () => {
-  it('формат: источник · юрлицо · период · обновлено · факт', async () => {
+  it('формат: источник · обновлено · основа; юрлицо и период только по запросу', async () => {
     const [snap] = runQueries(await data(), [feb], { at: NOW, tz: TZ });
     const line = lineFromSnapshots([snap!]);
-    expect(sourceLineText(line)).toBe(
-      'Выгрузка из 1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10.2026 18:00 · факт',
+    expect(sourceLineText(line)).toBe('1С (демо) · обновлено 10.10, 18:00 · факт');
+    expect(sourceLineText(line, { scope: true, period: true })).toBe(
+      '1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10, 18:00 · факт',
     );
+    // метки «Демо-данные» в строке нет: она один раз в шапке приложения
+    expect(sourceLineText(line)).not.toContain('Демо-данные');
     expect(line.isDemo).toBe(true);
+    // полная отметка времени остаётся в данных строки
+    expect(line.updated).toBe('10.10.2026 18:00');
+  });
+
+  it('год обновления показывается, только если отличается от года расчёта', () => {
+    const at = Date.UTC(2025, 11, 31, 6, 0, 0);
+    expect(stampShort(at, TZ, 2025)).toBe('31.12, 18:00');
+    expect(stampShort(at, TZ, 2026)).toBe('31.12.2025, 18:00');
+    expect(shortSource('Выгрузка из 1С (демо)')).toBe('1С (демо)');
+    expect(shortSource('Ручной ввод')).toBe('Ручной ввод');
   });
 
   it('метка основы: факт, прогноз, факт и прогноз', async () => {
@@ -162,9 +175,10 @@ describe('строка происхождения', () => {
     expect(Object.keys(p.entities).sort()).toEqual(['alfa', 'beta', 'delta', 'epsilon', 'gamma']);
     expect(p.entities.alfa!.metrics.scope).toBe('ООО «Альфа»');
     expect(p.entities.alfa!.metrics.period).toBe('с начала года, прогноз на 2026 год');
-    // освобождённые юрлица: цифры ставок условные
+    // освобождённые юрлица: цифры ставок условные; об этом сказано один раз над карточками ставок,
+    // в строке происхождения пометки нет
     expect(p.entities.delta!.conditional).toBe(true);
-    expect(p.entities.delta!.vat.note).toContain('условный расчёт');
+    expect(p.entities.delta!.vat.note).toBeUndefined();
     expect(p.entities.alfa!.conditional).toBe(false);
     expect(p.entities.alfa!.vat.note).toBeUndefined();
   });
@@ -408,9 +422,7 @@ describe('чат: расчёты ответа сохраняются снимк�
     const out = await handleChat(db, { userId, question: 'НДС по Альфе за февраль', nowMs: NOW });
     expect(out.agent.fromCalc).toBe(true);
     expect(out.agent.provenance).not.toBeNull();
-    expect(sourceLineText(out.agent.provenance!.line)).toBe(
-      'Выгрузка из 1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10.2026 18:00 · факт',
-    );
+    expect(sourceLineText(out.agent.provenance!.line)).toBe('1С (демо) · обновлено 10.10, 18:00 · факт');
     expect(out.agent.provenance!.count).toBe(1);
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, out.agent.id));

@@ -101,20 +101,29 @@ test('Навигация: третья вкладка «Документы» н�
   expect(desk[0]!.x).toBeCloseTo(desk[2]!.x, 0);
 });
 
-test('Каталог: восемь шаблонов, фильтр по категории, поиск, пометка «Образец, проверить юристом»', async ({ page }) => {
+test('Каталог: восемь шаблонов, фильтр по категории, поиск, без повторов в подписях', async ({ page }) => {
   fs.mkdirSync(SHOTS, { recursive: true });
   await firstLogin(page, PIN);
   await toDocuments(page);
 
   const cards = page.locator('li.tpl');
   await expect(cards).toHaveCount(8);
-  // на каждом шаблоне пометка
-  for (let i = 0; i < 8; i++) await expect(cards.nth(i)).toContainText('Образец, проверить юристом');
+  // пометки «Образец, проверить юристом» на карточках нет (она в колонтитуле самого файла), «Демо-данные»
+  // только в шапке один раз, числа шаблонов под заголовком нет, подпись поиска не дублирует подсказку
+  await expect(page.getByText('Образец, проверить юристом')).toHaveCount(0);
+  await expect(page.getByText(/Шаблонов: \d+/)).toHaveCount(0);
+  expect(await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1)).toBe(1);
+  await expect(page.locator('.docs .sec-h p')).toHaveCount(0);
+  await expect(page.locator('.doc-filters label.fld span')).toHaveCount(0);
+  await expect(page.getByLabel('Поиск по названию')).toHaveAttribute('placeholder', 'Поиск по названию');
+  // при фильтре «Все» на карточке подпись категории есть, при выбранной категории её нет
+  await expect(cards.first().locator('.tpl-cat')).toHaveCount(1);
   await page.screenshot({ path: `${SHOTS}/doc-catalog-desktop.png` });
 
   const category = (name: string) => page.getByRole('group', { name: 'Категория' }).getByRole('button', { name, exact: true });
   await category('Договоры').click();
   await expect(cards).toHaveCount(2);
+  await expect(page.locator('li.tpl .tpl-cat')).toHaveCount(0);
   await category('Допсоглашения').click();
   await expect(cards).toHaveCount(2);
   await category('Отчёты').click();
@@ -208,7 +217,10 @@ test('Проект декларации: водяной знак «Проект.
   await page.getByRole('link', { name: 'К документам' }).click();
   await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ООО «Альфа»' });
   await expect(page.getByTestId('watermark')).toHaveCount(0);
-  await expect(page.getByText('Образец, проверить юристом').first()).toBeVisible();
+  // на странице документа пометки «Образец» и второй метки «Демо-данные» нет; название несёт юрлицо
+  await expect(page.getByText('Образец, проверить юристом')).toHaveCount(0);
+  expect(await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1)).toBe(1);
+  await expect(page.locator('.doc-sub')).not.toContainText('ООО «Альфа»');
 });
 
 test('Дозаполнить: форма только по пропущенным полям, новая версия, старая версия только для чтения', async ({ page }) => {

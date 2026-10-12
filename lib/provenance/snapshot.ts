@@ -1,7 +1,7 @@
 import { dec, type Dec } from '@/lib/calc/decimal';
 import type { MonthStatus, Period, PeriodKind } from '@/lib/calc/period';
 import type { FormulaStep, RuleRef, SourceRef } from '@/lib/calc/provenance';
-import type { CalcResult, CalcWarning, TaxKind } from '@/lib/calc/service';
+import type { CalcResult, CalcWarning, ScenarioInfo, TaxKind } from '@/lib/calc/service';
 import type { TaxRegime, VatStatus } from '@/lib/calc/types';
 
 /**
@@ -82,6 +82,10 @@ export interface CalcSnapshot {
   asOf: string;
   kind: PeriodKind;
   warnings: CalcWarning[];
+  /** Допущения расчёта. У снимков, сохранённых до сценариев, поля нет */
+  assumptions?: string[];
+  /** Сценарий прогноза; у расчёта по данным null или поля нет */
+  scenario?: ScenarioInfo | null;
   /** Момент, на который посчитано, мс UTC. На экране в этот момент стояли те же цифры */
   at: number;
   /** Часовой пояс приложения: время загрузки источника и момент расчёта показываются в нём */
@@ -160,6 +164,8 @@ export function toSnapshot(
     asOf: r.asOf,
     kind: r.kind,
     warnings: r.warnings,
+    assumptions: r.assumptions,
+    scenario: r.scenario,
     at: meta.at,
     tz: meta.tz,
     scope: meta.scope,
@@ -234,5 +240,7 @@ export function fromSnapshot(snap: CalcSnapshot): CalcResult {
     asOf: snap.asOf,
     kind: snap.kind,
     warnings: snap.warnings,
+    assumptions: snap.assumptions ?? [],
+    scenario: snap.scenario ?? null,
   };
 }

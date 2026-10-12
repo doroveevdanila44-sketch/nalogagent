@@ -103,6 +103,16 @@ function shapeOf(sig: string, text: string, leafCount: number): Shape {
         title: 'Выручка по прогнозу, месяц не целиком',
         slots: ['Прогноз выручки года, ₽', 'Доля месяца (сезонность)', 'Дней в периоде', 'Дней в месяце'],
       };
+    case 'N*N*N':
+      return {
+        title: 'Выручка прогноза следующего года: выручка текущего года с ростом на долю месяца',
+        slots: ['Выручка текущего года, ₽', 'Коэффициент роста', 'Доля месяца (сезонность)'],
+      };
+    case 'N*N*N*N/N':
+      return {
+        title: 'Выручка прогноза следующего года, месяц не целиком',
+        slots: ['Выручка текущего года, ₽', 'Коэффициент роста', 'Доля месяца (сезонность)', 'Дней в периоде', 'Дней в месяце'],
+      };
     case 'S*N/N':
       return {
         title: 'НДС по месяцам: выручка × ставка / (100 + ставка)',
@@ -244,7 +254,9 @@ function numFmt(v: number): string {
 }
 
 function titleOf(result: CalcResult): string {
-  return `${result.taxName}: ${result.periodLabel}`;
+  // у прогноза следующего года три расчёта одного налога и периода: различаются ставкой
+  const forecast = result.scenario ? (result.rate !== null ? `, прогноз по ставке ${result.rate}%` : ', прогноз') : '';
+  return `${result.taxName}: ${result.periodLabel}${forecast}`;
 }
 
 // ===== Книга =====
@@ -633,6 +645,8 @@ function writeSource(ws: ExcelJS.Worksheet, results: CalcResult[], meta: Workboo
     kv('Период', `${r.periodLabel} (${r.from} .. ${r.to})`);
     kv('Основа данных', KIND_LABEL[r.kind]);
     kv('Юрлица', r.entities.filter((e) => e.applicable).map((e) => e.name).join(', ') || 'нет');
+    // допущения прогноза: что принято, потому что точных данных нет
+    r.assumptions.forEach((a, k) => kv(k === 0 ? 'Допущения' : '', a));
     row += 1;
   });
 

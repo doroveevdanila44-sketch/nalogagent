@@ -1,5 +1,5 @@
 import { baseRev, crossing, monthAmount, selectedRate, taxFor } from './calc';
-import { ZERO, round2, sum, type Dec } from './decimal';
+import { ZERO, dec, round2, sum, type Dec } from './decimal';
 import { dateRu, mln, rub } from './format';
 import { REGIME_LABEL, incomeTax, yearTotal, type IncomeTaxResult } from './income-tax';
 import {
@@ -35,6 +35,7 @@ import {
   type DashboardInput,
   type EntityInput,
   type Rate,
+  type RuleSet,
   type Selections,
   type TaxRegime,
   type VatStatus,
@@ -235,7 +236,35 @@ export interface CalcResult {
   asOf: string;
   kind: PeriodKind;
   warnings: CalcWarning[];
+  /** Допущения расчёта: что принято, потому что точных данных нет. Пусто у расчёта по данным */
+  assumptions: string[];
+  /** Сценарий, по которому посчитано; null у расчёта по данным */
+  scenario: ScenarioInfo | null;
 }
+
+/**
+ * Сценарий прогноза следующего года, которого нет в данных. Выручка каждого юрлица берётся как
+ * годовая выручка текущего года с коэффициентом роста и раскладывается по месяцам по сезонности;
+ * правила следующего года принимаются как правила текущего, пока они не утверждены (лимиты 5% и 7%
+ * зависят от дефлятора). Формулы и пороги те же, что у расчёта по данным.
+ */
+export interface ForecastScenario {
+  kind: 'forecast';
+  /** Год сценария: следующий за годом «сегодня» */
+  year: number;
+  /** Рост выручки к текущему году, проценты: 0 как в текущем году, 10 это +10%, отрицательное это спад */
+  growth: number;
+}
+
+/** Сценарий в результате расчёта: заданный и что из него вышло. */
+export interface ScenarioInfo extends ForecastScenario {
+  /** Лимиты ставок 5% и 7% на год сценария утверждены в справочнике; false: приняты как в текущем году */
+  limitsApproved: boolean;
+}
+
+/** Границы роста в сценарии: защита от опечатки в запросе, не бизнес-правило. */
+export const SCENARIO_GROWTH_MIN = -90;
+export const SCENARIO_GROWTH_MAX = 500;
 
 export interface CalcTaxArgs {
   entityIds: string[] | 'all';
@@ -243,6 +272,8 @@ export interface CalcTaxArgs {
   period: Period;
   /** Ставка НДС для расчёта вместо выбранной; на ОСНО ставка всегда 22% */
   rate?: Rate;
+  /** Прогноз следующего года: выручка текущего года с ростом, правила как в текущем году */
+  scenario?: ForecastScenario;
 }
 
 export class CalcInputError extends Error {
@@ -290,11 +321,28 @@ interface MonthBasis {
   status: MonthStatus;
 }
 
+/** Подготовленный сценарий прогноза: данные базового года, по которым строится следующий. */
+interface ScenarioRun {
+  spec: ForecastScenario;
+  baseYear: number;
+  /** 1 + рост / 100 */
+  factor: Dec;
+  /** Выручка базового года с НДС по юрлицам: факт прошедших месяцев и прогноз остальных */
+  base: Map<string, Dec>;
+  /** Дата пересечения порога освобождения в базовом году (тот же модуль, что на дашборде) */
+  baseCrossing: Map<string, CalendarDay | null>;
+  /** Правила базового года */
+  baseRules: RuleSet;
+  /** Лимиты 5% и 7% следующего года утверждены в справочнике, а не приняты как в базовом году */
+  limitsApproved: boolean;
+}
+
 /** Всё, что нужно, чтобы определить выручку месяца. */
 interface BasisCtx {
   data: CalcData;
   today: Moment;
   rows: Map<string, RevenueRow>;
+  scenario: ScenarioRun | null;
 }
 
 interface Run extends BasisCtx {
@@ -312,6 +360,8 @@ interface ExemptInfo {
   /** Индекс первого облагаемого месяца 0..11; Infinity: в этом году не облагается; null: неизвестно */
   from: number | null;
   crossing: CalendarDay | null;
+  /** Сценарий: порог пройден в базовом году, юрлицо платит НДС весь год сценария */
+  fromPriorYear?: boolean;
 }
 
 function pickEntities(ids: string[] | 'all', data: CalcData): EntityInput[] {
@@ -362,6 +412,12 @@ function warn(run: Run, w: CalcWarning): void {
 /** Выручка полного месяца: факт (если месяц прошёл и в источнике есть факт) или прогноз года на вес месяца. */
 function monthBasis(ctx: BasisCtx, e: EntityInput, rm: ResolvedMonth): MonthBasis {
   const { data, today } = ctx;
+  const sc = ctx.scenario;
+  if (sc && rm.year === sc.spec.year) {
+    // сценарий: выручка базового года с ростом по сезонности, фактов у следующего года нет
+    const full = sc.base.get(e.id)!.times(sc.factor).times(data.weights[rm.month - 1]!);
+    return { rm, full, basis: 'forecast', row: null, missingFact: false, status: 'forecast' };
+  }
   const row = ctx.rows.get(rowKey(e.id, rm.year, rm.month)) ?? null;
   const past = rm.status === 'fact';
   if (rm.year === today.year) {
@@ -405,18 +461,24 @@ function exemptInfo(run: Run, e: EntityInput, year: number): ExemptInfo {
     const c = crossing(e, yr.ctx, run.today);
     info = { from: c ? c.month + 1 : Infinity, crossing: c };
   } else {
-    const limit = yr.ctx.rules.vatExemptLimit;
-    let cum = ZERO;
-    info = { from: Infinity, crossing: null };
-    for (const b of wholeYearBasis(run, e, year)) {
-      if (b.full === null) {
-        info = { from: null, crossing: null };
-        break;
-      }
-      cum = cum.plus(b.full);
-      if (cum.gte(limit)) {
-        info = { from: b.rm.month, crossing: { year, month: b.rm.month - 1, day: b.rm.daysInMonth } };
-        break;
+    // сценарий: порог пройден в базовом году, значит юрлицо стало плательщиком и платит весь год
+    const prior = run.scenario && year === run.scenario.spec.year ? (run.scenario.baseCrossing.get(e.id) ?? null) : null;
+    if (prior) {
+      info = { from: 0, crossing: prior, fromPriorYear: true };
+    } else {
+      const limit = yr.ctx.rules.vatExemptLimit;
+      let cum = ZERO;
+      info = { from: Infinity, crossing: null };
+      for (const b of wholeYearBasis(run, e, year)) {
+        if (b.full === null) {
+          info = { from: null, crossing: null };
+          break;
+        }
+        cum = cum.plus(b.full);
+        if (cum.gte(limit)) {
+          info = { from: b.rm.month, crossing: { year, month: b.rm.month - 1, day: b.rm.daysInMonth } };
+          break;
+        }
       }
     }
   }
@@ -428,7 +490,9 @@ function exemptInfo(run: Run, e: EntityInput, year: number): ExemptInfo {
 function vatRate(run: Run, e: EntityInput, year: number): number {
   if (e.taxRegime === 'osno') return OSNO_RATE;
   if (run.args.rate !== undefined) return run.args.rate;
-  return selectedRate(e, run.data.choices[year] ?? {});
+  // у года сценария выбора нет: берётся ставка, выбранная в базовом году
+  const chosenYear = run.scenario && year === run.scenario.spec.year ? run.scenario.baseYear : year;
+  return selectedRate(e, run.data.choices[chosenYear] ?? {});
 }
 
 /** Шаг выручки месяца: факт или прогноз, с долей месяца, если период захватывает его частично. */
@@ -453,6 +517,21 @@ function revenueStep(run: Run, e: EntityInput, b: MonthBasis): FormulaStep {
     });
   }
   const w = run.data.weights[rm.month - 1]!;
+  const sc = run.scenario;
+  if (sc && rm.year === sc.spec.year) {
+    const base = sc.base.get(e.id)!;
+    const grown = sc.spec.growth === 0 ? '' : ` × ${numText(sc.factor)} (рост ${numText(sc.spec.growth)}%)`;
+    return run.log.add({
+      label,
+      text:
+        `прогноз ${rm.year}: выручка ${sc.baseYear} года ${moneyText(base)}${grown} × доля месяца ${numText(w)}${part}` +
+        ` = ${moneyText(result)}`,
+      expression: `${lit(base)} * ${lit(sc.factor)} * ${lit(w)}${partExpr}`,
+      result,
+      entityId: e.id,
+      month: rm.key,
+    });
+  }
   return run.log.add({
     label,
     text:
@@ -728,6 +807,11 @@ function calcEntity(run: Run, e: EntityInput): EntityResult {
     if (!run.years.get(y)) continue;
     addRule(run, y, RATE_KEY[rateByYear.get(y)!]!);
     if (e.status === 'exempt') addRule(run, y, 'vat_exempt_limit');
+    if (run.scenario && y === run.scenario.spec.year) {
+      // лимиты следующего года приняты как в текущем: они в списке правил расчёта
+      addRule(run, y, 'limit_5');
+      addRule(run, y, 'limit_7');
+    }
     if (args.tax === 'usn') {
       if (e.usnRate === null) {
         addRule(run, y, e.taxRegime === 'usn_income_expense' ? 'usn_rate_income_expense' : 'usn_rate_income');
@@ -764,6 +848,17 @@ function calcEntity(run: Run, e: EntityInput): EntityResult {
       if (!yr) continue;
       const info = exemptInfo(run, e, y);
       const limit = mln(yr.ctx.rules.vatExemptLimit, 0);
+      if (info.fromPriorYear && info.crossing) {
+        warn(run, {
+          kind: 'threshold',
+          level: 'warn',
+          entityId: e.id,
+          text:
+            `${e.name}: выручка ${run.scenario!.baseYear} года проходит порог ${limit} около ${dateRu(info.crossing)}, ` +
+            `поэтому с 1 января ${y} года НДС платится весь год`,
+        });
+        continue;
+      }
       const exemptMonths = drafts.filter((d) => d.basis.rm.year === y && d.exempt);
       if (exemptMonths.length > 0) {
         warn(run, {
@@ -861,6 +956,237 @@ function calcEntity(run: Run, e: EntityInput): EntityResult {
   };
 }
 
+// ===== Сценарий прогноза следующего года =====
+
+/** Ключи справочника, значение которых зависит от дефлятора: их допущение называется отдельно. */
+const DEFLATOR_RULES = new Set(['limit_5', 'limit_7']);
+
+/**
+ * Готовит сценарий: выручка базового года по юрлицам, дата пересечения порога в базовом году
+ * (тот же модуль crossing, что на дашборде) и справочник, в котором правила следующего года
+ * заменены значениями базового. Правило, у которого на следующий год есть утверждённое значение,
+ * остаётся как есть.
+ */
+function prepareScenario(args: CalcTaxArgs, data: CalcData, spec: ForecastScenario): { data: CalcData; scenario: ScenarioRun } {
+  const baseYear = data.today.year;
+  if (args.tax !== 'vat') {
+    throw new CalcInputError('Прогноз следующего года считается только для НДС');
+  }
+  if (spec.kind !== 'forecast' || spec.year !== baseYear + 1) {
+    throw new CalcInputError(`Прогноз считается на ${baseYear + 1} год, запрошен ${String(spec.year)}`);
+  }
+  if (!Number.isFinite(spec.growth) || spec.growth < SCENARIO_GROWTH_MIN || spec.growth > SCENARIO_GROWTH_MAX) {
+    throw new CalcInputError(
+      `Рост выручки должен быть от ${SCENARIO_GROWTH_MIN} до ${SCENARIO_GROWTH_MAX} процентов: ${String(spec.growth)}`,
+    );
+  }
+
+  let baseRules: RuleSet;
+  try {
+    baseRules = buildRuleSet(data.ruleRows, data.today);
+  } catch (e) {
+    if (e instanceof MissingRuleError) {
+      throw new CalcInputError(`Нет правил на ${baseYear} год: прогноз на ${spec.year} год построить не от чего`);
+    }
+    throw e;
+  }
+  const ctx: CalcCtx = { weights: data.weights, rules: baseRules };
+  const base = new Map<string, Dec>();
+  const baseCrossing = new Map<string, CalendarDay | null>();
+  for (const e of data.entities) {
+    base.set(e.id, yearTotal(e, ctx, data.today));
+    baseCrossing.set(e.id, e.status === 'exempt' ? crossing(e, ctx, data.today) : null);
+  }
+
+  const from = `${spec.year}-01-01`;
+  const asOf = toIsoDate(data.today);
+  const dropped = new Set<RuleRow>();
+  const copies: RuleRow[] = [];
+  for (const key of new Set(data.ruleRows.map((r) => r.key))) {
+    const cur = resolveRule(data.ruleRows, key, asOf);
+    if (!cur) continue;
+    const next = resolveRule(data.ruleRows, key, from);
+    // правило действует и в следующем году, либо на него уже есть утверждённое значение
+    if (next && (next.validFrom <= asOf || next.value !== null)) continue;
+    if (next) dropped.add(next);
+    const why = DEFLATOR_RULES.has(key)
+      ? `дефлятор на ${spec.year} год не утверждён`
+      : `правила на ${spec.year} год не утверждены`;
+    copies.push({
+      ...cur,
+      validFrom: from,
+      validTo: null,
+      note: `${cur.note ? `${cur.note}. ` : ''}Принято как в ${baseYear} году: ${why}`,
+    });
+  }
+
+  return {
+    data: { ...data, ruleRows: [...data.ruleRows.filter((r) => !dropped.has(r)), ...copies] },
+    scenario: {
+      spec,
+      baseYear,
+      factor: dec(1).plus(dec(spec.growth).div(100)),
+      base,
+      baseCrossing,
+      baseRules,
+      limitsApproved: [...DEFLATOR_RULES].every((key) => {
+        const next = resolveRule(data.ruleRows, key, from);
+        return next !== null && next.value !== null;
+      }),
+    },
+  };
+}
+
+/** Допущения сценария одним списком: по ним панель расчёта, Excel и карточка «Понял так». */
+function scenarioAssumptions(run: Run, used: EntityResult[]): string[] {
+  const sc = run.scenario!;
+  const { spec, baseYear } = sc;
+  const g = spec.growth;
+  const out: string[] = [
+    g === 0
+      ? `Выручка ${spec.year} года как в ${baseYear}: годовая выручка ${baseYear} года каждого юрлица без роста, по месяцам по сезонности`
+      : `Выручка ${spec.year} года: годовая выручка ${baseYear} года каждого юрлица ${g > 0 ? 'с ростом' : 'со снижением'} ${numText(Math.abs(g))}%, по месяцам по сезонности`,
+  ];
+  const rules = run.years.get(spec.year)?.ctx.rules;
+  if (rules) {
+    const parts: string[] = [];
+    if (rules.limit5) parts.push(`ставка 5% до ${mln(rules.limit5, 1)}`);
+    if (rules.limit7) parts.push(`ставка 7% до ${mln(rules.limit7, 1)}`);
+    parts.push(`порог освобождения от НДС ${mln(rules.vatExemptLimit, 0)}`);
+    out.push(
+      sc.limitsApproved
+        ? `Лимиты ${spec.year} года по справочнику: ${parts.join(', ')}`
+        : `Лимиты ${spec.year} года как в ${baseYear} (дефлятор не утверждён): ${parts.join(', ')}`,
+    );
+  }
+  for (const r of used) {
+    const info = run.exemptFrom.get(`${r.entityId}|${spec.year}`);
+    if (info?.fromPriorYear && info.crossing) {
+      out.push(
+        `${r.name}: выручка ${baseYear} года проходит порог освобождения ${mln(sc.baseRules.vatExemptLimit, 0)} ` +
+          `около ${dateRu(info.crossing)}, поэтому с 1 января ${spec.year} года платит НДС`,
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * Допущения сценария одной строкой, для карточки «Понял так»:
+ * «Выручка как в 2026, лимиты как в 2026 (дефлятор не утверждён)».
+ */
+export function scenarioLine(info: ScenarioInfo): string {
+  const base = info.year - 1;
+  const g = info.growth;
+  const revenue =
+    g === 0 ? `Выручка как в ${base}` : `Выручка ${base} года ${g > 0 ? '+' : '−'}${numText(Math.abs(g))}%`;
+  return info.limitsApproved
+    ? `${revenue}, лимиты ${info.year} года по справочнику`
+    : `${revenue}, лимиты как в ${base} (дефлятор не утверждён)`;
+}
+
+// ===== Сравнение ставок =====
+
+export interface RateRow {
+  entityId: string;
+  name: string;
+  /** Налог за период при ставках 5, 7 и 22 */
+  tax: Record<Rate, Dec>;
+  /** Юрлицо весь период освобождено от НДС: налог 0 при любой ставке, лучшей ставки нет */
+  exemptAll: boolean;
+  /** Ставка с наименьшим налогом, при равенстве меньшая; null, если налога нет ни при какой */
+  best: Rate | null;
+  /** Следующая по выгоде ставка */
+  against: Rate | null;
+  /** На сколько она дороже лучшей */
+  saving: Dec | null;
+}
+
+export interface RateComparison {
+  period: Period;
+  periodLabel: string;
+  scenario: ScenarioInfo | null;
+  /** Юрлица, у которых есть выбор ставки */
+  rows: RateRow[];
+  /** Юрлица на ОСНО: ставка одна, 22% с вычетами, выбора нет */
+  osno: { entityId: string; name: string; tax: Dec }[];
+  /** Итог по столбцу таблицы: налог юрлиц с выбором при одной ставке для всех */
+  totals: Record<Rate, Dec>;
+  /** Налог группы при лучшей ставке каждого юрлица (юрлица на ОСНО по своей единственной) */
+  bestTotal: Dec;
+  /** Сумма экономии против следующей по выгоде ставки по юрлицам */
+  savingTotal: Dec;
+  /** Расчёты calcTax, на которых стоит сравнение: по ним шаги, правила и допущения */
+  runs: { rate: Rate; result: CalcResult; entityIds: string[] | 'all' }[];
+}
+
+/**
+ * Налог по трём ставкам и лучшая ставка для каждого юрлица. Три прогона calcTax (по одному на
+ * ставку), поэтому у каждой цифры есть шаги и правила. Лучшая ставка и экономия считаются здесь, а
+ * не в тексте ответа: ответ только подставляет числа в слова.
+ */
+export function compareRates(
+  args: { entityIds: string[] | 'all'; period: Period; scenario?: ForecastScenario },
+  data: CalcData,
+): RateComparison {
+  const picked = pickEntities(args.entityIds, data);
+  const choice = picked.filter((e) => e.taxRegime !== 'osno');
+  const osno = picked.filter((e) => e.taxRegime === 'osno');
+  const idsOf = (list: EntityInput[]): string[] | 'all' =>
+    list.length === data.entities.length ? 'all' : list.map((e) => e.id);
+  const base = { tax: 'vat' as const, period: args.period, scenario: args.scenario };
+
+  const runs: RateComparison['runs'] = [];
+  if (choice.length > 0) {
+    for (const rate of [5, 7] as const) {
+      runs.push({ rate, entityIds: idsOf(choice), result: calcTax({ ...base, entityIds: choice.map((e) => e.id), rate }, data) });
+    }
+  }
+  // прогон на 22% берёт и юрлица на ОСНО: для них он единственный
+  runs.push({ rate: 22, entityIds: idsOf(picked), result: calcTax({ ...base, entityIds: picked.map((e) => e.id), rate: 22 }, data) });
+
+  const taxOf = (rate: Rate, id: string): Dec => {
+    const e = runs.find((r) => r.rate === rate)!.result.entities.find((x) => x.entityId === id)!;
+    if (e.tax === null) throw new CalcInputError(`Налог ${e.name} по ставке ${rate}% не рассчитан`);
+    return e.tax;
+  };
+
+  const rows: RateRow[] = choice.map((e) => {
+    const tax = { 5: taxOf(5, e.id), 7: taxOf(7, e.id), 22: taxOf(22, e.id) } as Record<Rate, Dec>;
+    const months = runs.find((r) => r.rate === 22)!.result.entities.find((x) => x.entityId === e.id)!.months;
+    const exemptAll = months.length > 0 && months.every((m) => m.exempt);
+    if (exemptAll) {
+      return { entityId: e.id, name: e.name, tax, exemptAll, best: null, against: null, saving: null };
+    }
+    const sorted = [...RATES].sort((a, b) => {
+      const d = tax[a].comparedTo(tax[b]);
+      return d !== 0 ? d : a - b;
+    });
+    const best = sorted[0]!;
+    const against = sorted[1]!;
+    return { entityId: e.id, name: e.name, tax, exemptAll, best, against, saving: tax[against].minus(tax[best]) };
+  });
+  const osnoRows = osno.map((e) => ({ entityId: e.id, name: e.name, tax: taxOf(22, e.id) }));
+
+  const totals = {
+    5: sum(rows.map((r) => r.tax[5])),
+    7: sum(rows.map((r) => r.tax[7])),
+    22: sum(rows.map((r) => r.tax[22])),
+  } as Record<Rate, Dec>;
+  const first = runs[0]!.result;
+  return {
+    period: args.period,
+    periodLabel: first.periodLabel,
+    scenario: first.scenario,
+    rows,
+    osno: osnoRows,
+    totals,
+    bestTotal: sum([...rows.map((r) => (r.best !== null ? r.tax[r.best] : r.tax[22])), ...osnoRows.map((r) => r.tax)]),
+    savingTotal: sum(rows.map((r) => r.saving ?? ZERO)),
+    runs,
+  };
+}
+
 /**
  * Налог за период с происхождением каждой цифры.
  *
@@ -872,7 +1198,8 @@ function calcEntity(run: Run, e: EntityInput): EntityResult {
  * Бросает CalcInputError (неизвестное юрлицо, ставка) и PeriodError (некорректный период).
  * Нет правил на год периода: налог за этот год null, предупреждение no_rules, выручка показана.
  */
-export function calcTax(args: CalcTaxArgs, data: CalcData): CalcResult {
+export function calcTax(args: CalcTaxArgs, inputData: CalcData): CalcResult {
+  let data = inputData;
   const { today } = data;
   if (!['vat', 'usn', 'profit'].includes(args.tax)) {
     throw new CalcInputError(`Неизвестный налог: ${String(args.tax)}`);
@@ -880,8 +1207,17 @@ export function calcTax(args: CalcTaxArgs, data: CalcData): CalcResult {
   if (args.rate !== undefined && !RATES.includes(args.rate)) {
     throw new CalcInputError(`Ставка НДС должна быть 5, 7 или 22: ${String(args.rate)}`);
   }
+  let scenario: ScenarioRun | null = null;
+  if (args.scenario) {
+    const prepared = prepareScenario(args, data, args.scenario);
+    data = prepared.data;
+    scenario = prepared.scenario;
+  }
   const entities = pickEntities(args.entityIds, data);
   const resolved = resolvePeriod(args.period, today);
+  if (scenario && resolved.months.some((m) => m.year !== scenario!.spec.year)) {
+    throw new CalcInputError(`Прогноз на ${scenario.spec.year} год считает только периоды этого года`);
+  }
 
   const years = new Map<number, YearRules | null>();
   for (const y of new Set(resolved.months.map((m) => m.year))) {
@@ -896,6 +1232,7 @@ export function calcTax(args: CalcTaxArgs, data: CalcData): CalcResult {
     log: new StepLog(),
     warnings: [],
     rows: new Map(data.revenue.map((r) => [rowKey(r.entityId, r.year, r.month), r])),
+    scenario,
     years,
     ruleRefs: new Map(),
     exemptFrom: new Map(),
@@ -989,6 +1326,8 @@ export function calcTax(args: CalcTaxArgs, data: CalcData): CalcResult {
     asOf: toIsoDate({ year: today.year, month: today.month, day: today.day }),
     kind: allStatuses.length > 0 ? periodKindOf(allStatuses) : resolved.kind,
     warnings,
+    assumptions: scenario ? scenarioAssumptions(run, used) : [],
+    scenario: scenario ? { ...scenario.spec, limitsApproved: scenario.limitsApproved } : null,
   };
 }
 
@@ -1002,6 +1341,7 @@ export function dataKind(data: CalcData, period: Period): PeriodKind {
     data,
     today: data.today,
     rows: new Map(data.revenue.map((r) => [rowKey(r.entityId, r.year, r.month), r])),
+    scenario: null,
   };
   const statuses: MonthStatus[] = [];
   for (const e of data.entities) {

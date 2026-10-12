@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import type { Period } from '@/lib/calc/period';
 import { api } from '@/lib/client/api';
-import { SAMPLE_NOTE } from '@/lib/documents/types';
 import { MONTH_NAMES } from '@/lib/calc/period';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
@@ -71,7 +70,7 @@ export function StartDocument({
 
   return (
     <Overlay kind="modal" label={`Заполнить: ${template.title}`} onClose={onClose}>
-      <OverlayHead title="Заполнить" sub={SAMPLE_NOTE} onClose={onClose} />
+      <OverlayHead title="Заполнить" onClose={onClose} />
       <div className="ov-scroll">
         <p className="send-title">{template.title}</p>
         <p className="calc-note">

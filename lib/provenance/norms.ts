@@ -25,6 +25,8 @@ export const RULE_TITLE: Record<string, string> = {
   rate_special_7: 'Ставка НДС 7%',
   rate_general: 'Общая ставка НДС с вычетами',
   vat_exempt_limit: 'Порог освобождения от НДС',
+  limit_5: 'Лимит ставки 5%',
+  limit_7: 'Лимит ставки 7%',
   usn_rate_income: 'Ставка УСН «доходы»',
   usn_rate_income_expense: 'Ставка УСН «доходы минус расходы»',
   usn_min_tax_rate: 'Минимальный налог УСН',

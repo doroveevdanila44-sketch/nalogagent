@@ -6,6 +6,7 @@ import type {
   Ambiguity,
   EntityRef,
   Interpretation,
+  NextYearReason,
   RateValue,
   Scenario,
   Slot,
@@ -48,6 +49,10 @@ export interface RawFields {
   rate: RateValue | null;
   /** Просят юридическую оценку схемы */
   legal: boolean;
+  /** Рост выручки в процентах из вопроса: «рост 10%» это 10, «падение на 5%» это -5, «без роста» это 0 */
+  growth: number | null;
+  /** Спрашивают про лимиты и пороги: им нужны утверждённые значения, прогноз их не заменяет */
+  limits: boolean;
   /** Короткая реплика без своего вопроса: только юрлицо, налог или период («а за март?») */
   fragment: boolean;
 }
@@ -211,6 +216,8 @@ const REL_WORDS: Record<string, number> = {
   этот: 0, этом: 0, этого: 0, эту: 0, текущий: 0, текущем: 0, текущего: 0, текущую: 0, нынешний: 0,
   нынешнем: 0, прошлый: -1, прошлом: -1, прошлого: -1, прошлую: -1, предыдущий: -1, предыдущем: -1,
   предыдущего: -1, предыдущую: -1,
+  следующий: 1, следующем: 1, следующего: 1, следующую: 1, будущий: 1, будущем: 1, будущего: 1, будущую: 1,
+  грядущем: 1, грядущий: 1,
 };
 const UNIT_MONTH = new Set(['месяц', 'месяце', 'месяца']);
 const UNIT_QUARTER = new Set(['квартал', 'квартале', 'квартала']);
@@ -373,7 +380,14 @@ export function extractPeriods(text: string, today: Moment): PeriodMention[] {
       mark(i, i + 2);
     } else if (UNIT_QUARTER.has(unit)) {
       const q = Math.floor((curMonth - 1) / 3) + 1 + shift;
-      add(i, q >= 1 ? { kind: 'quarter', year: today.year, quarter: q } : { kind: 'quarter', year: today.year - 1, quarter: 4 });
+      add(
+        i,
+        q > 4
+          ? { kind: 'quarter', year: today.year + 1, quarter: q - 4 }
+          : q >= 1
+            ? { kind: 'quarter', year: today.year, quarter: q }
+            : { kind: 'quarter', year: today.year - 1, quarter: 4 },
+      );
       mark(i, i + 2);
     } else if (UNIT_YEAR.has(unit)) {
       add(i, { kind: 'year', year: today.year + shift });
@@ -510,6 +524,20 @@ const RATE_WORD = cyr('ставк\\w*');
 const FORECAST = cyr('прогноз\\w*|до конца года|на конец года|ожида\\w+');
 const HOW_MUCH = cyr('сколько');
 
+/** Рост выручки: «рост 10%», «рост выручки +20%», «увеличим на 15 процентов». */
+const GROWTH_UP = cyr(
+  '(?:рост\\w*|увелич\\w*|вырастет\\w*|вырастем)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?\\+?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:%|процент\\w*)?',
+);
+/** Спад выручки: «падение на 10%», «снизится на 5 процентов». */
+const GROWTH_DOWN = cyr(
+  '(?:снижени\\w*|падени\\w*|спад\\w*|уменьш\\w*|снизит\\w*|упад\\w*)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?[-−]?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:%|процент\\w*)?',
+);
+/** Число со знаком и процентом без слова: «а если +15%?» */
+const GROWTH_SIGNED = /(?<![0-9a-zа-я])([+−-])\s*(\d+(?:[.,]\d+)?)\s*%/;
+const GROWTH_NONE = cyr('без роста|рост\\w* не буд\\w+|нулев\\w+ рост\\w*');
+/** Вопрос о лимитах и порогах: прогноз на следующий год без утверждённого дефлятора их не называет. */
+const LIMITS = cyr('лимит\\w*|дефлятор\\w*|предел\\w*|верхн\\w+ границ\\w*|границ\\w+ ставк\\w*');
+
 const LEGAL = cyr(
   'законн\\w*|легальн\\w*|незаконн\\w*|правомерн\\w*|можно ли так|накажут|оштрафуют|уголовн\\w*|признает ли (?:налоговая|фнс)|юридическ\\w+ (?:оценк|заключени|консультац)\\w*|оцени\\w* схем\\w*|судебн\\w*|не посадят',
 );
@@ -519,7 +547,7 @@ const FILLER = new Set([
   'из', 'о', 'об', 'мне', 'нам', 'теперь', 'тогда', 'давай', 'давайте', 'пожалуйста', 'еще', 'также',
   'тоже', 'то', 'есть', 'покажи', 'покажите', 'посмотри', 'юрлицу', 'юрлицам', 'юрлицо', 'юрлица',
   'компании', 'компания', 'фирме', 'фирма', 'группе', 'группа', 'группу', 'всем', 'все', 'всех',
-  'только', 'ещё', 'уже', 'этот', 'эту', 'это', 'не', 'что', 'как', 'ок', 'да', 'нет',
+  'только', 'ещё', 'уже', 'этот', 'эту', 'это', 'не', 'что', 'как', 'ок', 'да', 'нет', 'если', 'пусть',
 ]);
 
 /** Ставка из текста: только 5, 7 или 22. «УСН 6%» ставкой НДС не считается. */
@@ -540,7 +568,28 @@ function blank(t: string, re: RegExp): string {
  * выбора (что считать, что спросить) остаётся в buildInterpretation.
  */
 export function extractFields(text: string, ctx: Pick<InterpretContext, 'entities' | 'today'>): RawFields {
-  const t = normalize(text).replace(/[‐-―−]/g, '-');
+  const normalized = normalize(text).replace(/[‐-―−]/g, '-');
+
+  // рост выручки вырезается первым: «рост 5%» не ставка НДС, «+10%» не часть периода
+  let t = normalized;
+  let growth: number | null = null;
+  const num = (s: string) => Number(s.replace(',', '.'));
+  const up = GROWTH_UP.exec(t);
+  const down = GROWTH_DOWN.exec(t);
+  const signed = GROWTH_SIGNED.exec(t);
+  if (GROWTH_NONE.test(t)) {
+    growth = 0;
+    t = blank(t, GROWTH_NONE);
+  } else if (up) {
+    growth = num(up[1]!);
+    t = blank(t, GROWTH_UP);
+  } else if (down) {
+    growth = -num(down[1]!);
+    t = blank(t, GROWTH_DOWN);
+  } else if (signed) {
+    growth = (signed[1] === '+' ? 1 : -1) * num(signed[2]!);
+    t = blank(t, GROWTH_SIGNED);
+  }
 
   // налоги вне списка вырезаются раньше, чтобы «налог на доходы физлиц» не стал УСН
   let rest = t;
@@ -567,6 +616,7 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
   const mentions = mergeMentions(extractPeriods(text, ctx.today));
 
   const legal = LEGAL.test(t);
+  const limits = LIMITS.test(t);
 
   // сценарий: порядок как у прежних разделов агента
   let scenario: Scenario | null = null;
@@ -608,6 +658,8 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
     scenario,
     rate,
     legal,
+    growth,
+    limits,
     fragment,
   };
 }
@@ -633,6 +685,10 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
     }
   }
   const rate = raw.rate === 5 || raw.rate === 7 || raw.rate === 22 ? raw.rate : null;
+  const growth =
+    typeof raw.growth === 'number' && Number.isFinite(raw.growth) && raw.growth >= -90 && raw.growth <= 500
+      ? raw.growth
+      : null;
   return {
     entities: [...new Set((raw.entities ?? []).filter((id) => ids.has(id)))],
     all: Boolean(raw.all),
@@ -643,6 +699,8 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
     scenario: scenarios.includes(raw.scenario as Scenario) ? (raw.scenario as Scenario) : null,
     rate,
     legal: Boolean(raw.legal),
+    growth,
+    limits: Boolean(raw.limits),
     fragment: Boolean(raw.fragment),
   };
 }
@@ -667,7 +725,7 @@ function unsupportedPeriod(p: Period, ctx: InterpretContext): Unsupported | null
     return null;
   }
   if (ctx.nextYear && months.some((m) => m.year === ctx.nextYear!.year)) {
-    return { kind: 'next_year', year: ctx.nextYear.year, period: p };
+    return { kind: 'next_year', year: ctx.nextYear.year, period: p, reason: 'limits' };
   }
   if (ctx.data) {
     const lo = monthIndex(ctx.data.from.year, ctx.data.from.month);
@@ -690,7 +748,12 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
   const raw = rawIn;
   const prev = ctx.previous;
   const hasSlot =
-    raw.all || raw.entities.length > 0 || raw.taxes.length > 0 || raw.periods.length > 0 || raw.rate !== null;
+    raw.all ||
+    raw.entities.length > 0 ||
+    raw.taxes.length > 0 ||
+    raw.periods.length > 0 ||
+    raw.rate !== null ||
+    raw.growth !== null;
   const fillsAwaited =
     (ctx.awaiting.includes('tax') && raw.taxes.length > 0) ||
     (ctx.awaiting.includes('period') && raw.periods.length > 0) ||
@@ -704,6 +767,8 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     if (ctx.refine) merge = hasSlot;
     else if (fillsAwaited && !ownTopic) merge = true;
     else if (raw.fragment && hasSlot && !complete) merge = true;
+    // «а если рост 10%?» после прогноза: тот же вопрос с другим ростом
+    else if (raw.growth !== null && prev.forecast) merge = true;
   }
 
   // слоты из этого сообщения, затем недостающее из прежнего
@@ -775,6 +840,36 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     ambiguities.push({ slot: 'entity', kind: 'assumed', note: 'юрлицо не названо, считаю по всей группе' });
   }
 
+  // прогноз следующего года: период целиком в следующем году, налог НДС или не назван, вопрос не
+  // о лимитах. Считает calcTax по сценарию: выручка как в этом году с ростом, лимиты как в этом году
+  const nextYear = ctx.nextYear?.year ?? null;
+  const monthsOf = (p: Period) => {
+    try {
+      return resolvePeriod(p, ctx.today).months;
+    } catch {
+      return [];
+    }
+  };
+  let forecast: Interpretation['forecast'] = null;
+  if (nextYear !== null && period !== null && periodMentions.length === 1) {
+    const months = monthsOf(period);
+    const whole = months.length > 0 && months.every((m) => m.year === nextYear);
+    const topic = scenario === null || scenario === 'compare_rates' || scenario === 'rate' || scenario === 'forecast';
+    const vatOnly = taxesNamed.length <= 1 && (tax === null || tax === 'vat');
+    if (
+      whole &&
+      topic &&
+      vatOnly &&
+      !raw.limits &&
+      !raw.legal &&
+      raw.otherTaxes.length === 0 &&
+      raw.unknownEntities.length === 0
+    ) {
+      const carried = merge && prev?.forecast ? prev.forecast.growth : 0;
+      forecast = { year: nextYear, growth: raw.growth ?? carried };
+    }
+  }
+
   // неподдерживаемое: оценка схемы, другой налог, чужое юрлицо, период вне данных
   let unsupported: Unsupported | null = null;
   if (raw.legal) unsupported = { kind: 'legal_assessment' };
@@ -782,8 +877,26 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
   else if (raw.unknownEntities.length > 0) unsupported = { kind: 'unknown_entity', name: raw.unknownEntities[0]! };
   else {
     for (const m of periodMentions) {
-      unsupported = unsupportedPeriod(m.period, ctx);
-      if (unsupported) break;
+      if (forecast) break;
+      const found = unsupportedPeriod(m.period, ctx);
+      if (!found) continue;
+      if (found.kind === 'next_year') {
+        // почему следующий год не посчитать: смешанный период, другой налог, нужны лимиты, иной вопрос
+        const whole = monthsOf(m.period).every((x) => x.year === found.year);
+        const amountTopic =
+          scenario === null || scenario === 'compare_rates' || scenario === 'rate' || scenario === 'forecast';
+        const reason: NextYearReason = !whole
+          ? 'mixed'
+          : tax === 'usn' || tax === 'profit' || taxesNamed.length > 1
+            ? 'tax'
+            : raw.limits || scenario === 'threshold' || amountTopic
+              ? 'limits'
+              : 'other';
+        unsupported = { ...found, reason };
+      } else {
+        unsupported = found;
+      }
+      break;
     }
   }
 
@@ -806,6 +919,7 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     confidence: Math.min(1, Math.round(confidence * 100) / 100),
     ambiguities,
     unsupported,
+    forecast,
   };
 }
 

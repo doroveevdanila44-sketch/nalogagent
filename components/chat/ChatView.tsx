@@ -13,6 +13,7 @@ import {
 import type { ChatTurn } from '@/lib/agent/types';
 import { api, ApiError } from '@/lib/client/api';
 import { KEYBOARD_EVENT } from '@/lib/client/keyboard';
+import { useMediaQuery } from '@/lib/client/media';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { Message } from './Message';
 
@@ -30,6 +31,9 @@ const FIELD_MIN = 38;
 
 /** Сколько пикселей подряд в одну сторону считается листанием, после которого меняется блок подсказок */
 const SCROLL_STEP = 24;
+
+/** Телефон: до 760 px, как граница боковой панели в CSS */
+const PHONE_QUERY = '(max-width: 759.98px)';
 
 const isCoarse = () => window.matchMedia('(pointer: coarse)').matches;
 
@@ -54,8 +58,11 @@ const holdFocus = (e: PointerEvent | MouseEvent) => e.preventDefault();
  * переносит строку, отправка только кнопкой. Без родительского form и без других полей ввода на
  * экране: так Safari не рисует над клавиатурой стрелки «вверх, вниз» (см. DECISIONS.md).
  *
- * Подсказки: все, пока клавиатура закрыта; при открытой клавиатуре и при листании вниз блок
- * сворачивается до ручки «Подсказки», листание вверх разворачивает его, если клавиатура закрыта.
+ * Подсказки на компьютере: все, пока клавиатура закрыта; при открытой клавиатуре и при листании вниз
+ * блок сворачивается до ручки «Подсказки», листание вверх разворачивает его, если клавиатура закрыта.
+ * На телефоне (до 760 px) блок свёрнут по умолчанию и раскрывается только нажатием на ручку: ни
+ * прокрутка списка, ни закрытие клавиатуры, ни новый ответ агента его не раскрывают. После выбора
+ * подсказки блок сворачивается.
  */
 export function ChatView() {
   const [turns, setTurns] = useState<ChatTurn[] | null>(null);
@@ -65,6 +72,10 @@ export function ChatView() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [kbOpen, setKbOpen] = useState(false);
   const [chipsOpen, setChipsOpen] = useState(true);
+  // телефон: своё состояние, управляется только ручкой и выбором подсказки
+  const phone = useMediaQuery(PHONE_QUERY);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const suggestionsOpen = phone ? phoneOpen : chipsOpen;
   const listRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const hadFocus = useRef(false);
@@ -256,6 +267,7 @@ export function ChatView() {
   };
   const press = (text: string) => {
     void send(text);
+    if (phone) setPhoneOpen(false);
     if (hadFocus.current) fieldRef.current?.focus();
     hadFocus.current = false;
   };
@@ -344,7 +356,7 @@ export function ChatView() {
           </div>
         ) : null}
 
-        {empty ? (
+        {empty && !phone ? (
           <div className="chat-empty">
             <div className="sug" style={{ justifyContent: 'center' }}>
               {SUGGESTIONS.map((s) => suggestionButton(s))}
@@ -354,24 +366,24 @@ export function ChatView() {
       </div>
 
       <div className="composer-wrap">
-        {turns !== null && !empty ? (
+        {turns !== null && (!empty || phone) ? (
           <>
             <button
               type="button"
               className="sug-handle"
-              aria-expanded={chipsOpen}
+              aria-expanded={suggestionsOpen}
               aria-controls="chat-suggestions"
               onPointerDown={down}
               onMouseDown={down}
-              onClick={() => setChipsOpen((v) => !v)}
+              onClick={() => (phone ? setPhoneOpen((v) => !v) : setChipsOpen((v) => !v))}
             >
               Подсказки
               <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m7 10 5 5 5-5" />
               </svg>
             </button>
-            <div id="chat-suggestions" className="sug-panel" data-open={chipsOpen}>
-              <div inert={!chipsOpen}>
+            <div id="chat-suggestions" className="sug-panel" data-open={suggestionsOpen}>
+              <div inert={!suggestionsOpen}>
                 <div className="sug">{SUGGESTIONS.map((s) => suggestionButton(s, Boolean(sending)))}</div>
               </div>
             </div>

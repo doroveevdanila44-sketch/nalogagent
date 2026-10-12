@@ -65,6 +65,8 @@ const RULE_TITLE: Record<string, string> = {
   rate_special_7: 'Ставка НДС 7%',
   rate_general: 'Общая ставка НДС',
   vat_exempt_limit: 'Порог освобождения от НДС',
+  limit_5: 'Лимит ставки 5%',
+  limit_7: 'Лимит ставки 7%',
   usn_rate_income: 'Ставка УСН «доходы»',
   usn_rate_income_expense: 'Ставка УСН «доходы минус расходы»',
   usn_min_tax_rate: 'Минимальный налог УСН',
@@ -74,23 +76,26 @@ const RULE_TITLE: Record<string, string> = {
 const mln2 = (d: Dec) => mln(d, 2);
 
 /** «Вся группа», если в вопросе названы все юрлица, иначе список. */
-function askedScope(c: TaxAnswerContext, scope: string[]): string[] | 'all' {
+export function askedScope(c: TaxAnswerContext, scope: string[]): string[] | 'all' {
   return scope.length === c.data.entities.length ? 'all' : scope;
 }
 
-function isoToRu(iso: string): string {
+export function isoToRu(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
   return dateRuYear({ year: y, month: m - 1, day: d });
 }
 
-function ruleLine(r: RuleRef): string {
+export function ruleLine(r: RuleRef): string {
   const title = RULE_TITLE[r.key] ?? r.key;
   let value = '';
   if (r.value !== null) {
     const n = Number(r.value);
-    value = r.unit === 'percent' ? `${n}%` : r.unit === 'rub' ? mln(n, 0) : `${n}`;
+    // 272,5 млн без округления до 273; 20 млн без «,0»
+    value = r.unit === 'percent' ? `${n}%` : r.unit === 'rub' ? mln(n, Number.isInteger(n / 1_000_000) ? 0 : 1) : `${n}`;
   }
-  const parts = [title + (value ? ` ${value}` : ''), r.norm, `действует с ${isoToRu(r.validFrom)}`];
+  // «Ставка НДС 5%» уже содержит значение: второй раз оно не пишется
+  const head = value && !title.includes(value) ? `${title} ${value}` : title;
+  const parts = [head, r.norm, `действует с ${isoToRu(r.validFrom)}`];
   return parts.filter(Boolean).join(', ');
 }
 
@@ -119,10 +124,13 @@ function statusesOf(...results: (TaxCalc | null)[]): MonthStatus[] {
   return out;
 }
 
-/** «Факт по сентябрь включительно, октябрь идёт, дальше прогноз.» из месяцев результата. */
+/**
+ * «Факт по сентябрь включительно, октябрь идёт, дальше прогноз.» из месяцев результата. Пустая строка,
+ * когда период целиком факт или целиком прогноз: это уже сказано в карточке «Понял так» и в строке
+ * происхождения под ответом.
+ */
 function kindSentence(months: { month: number; status: MonthStatus }[], kind: PeriodKind): string {
-  if (kind === 'fact') return 'Все месяцы периода по факту.';
-  if (kind === 'forecast') return 'Весь период это прогноз.';
+  if (kind === 'fact' || kind === 'forecast') return '';
   const lastFact = [...months].reverse().find((m) => m.status === 'fact');
   const partial = months.find((m) => m.status === 'partial');
   const hasForecast = months.some((m) => m.status === 'forecast');
@@ -242,7 +250,8 @@ function vatAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], name
     const rateNote = i.rate ? ` по ставке ${i.rate}%` : '';
     paragraphs.push(`НДС ${phrase}${where}${rateNote}: ${mln2(r.total)}.`);
     const monthsOf = (r.entities.find((e) => e.applicable)?.months ?? []).map((m) => ({ month: m.month, status: m.status }));
-    paragraphs.push(kindSentence(monthsOf, kind));
+    const sentence = kindSentence(monthsOf, kind);
+    if (sentence) paragraphs.push(sentence);
     const exempt = exemptEntities(r);
     if (exempt.length > 0) {
       paragraphs.push(`Освобождены от НДС и за этот период не платят: ${exempt.join(', ')}.`);
@@ -340,7 +349,8 @@ function incomeAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], n
     );
     const first = results[0]!.entities.find((e) => e.applicable);
     const monthsOf = (first?.months ?? []).map((m) => ({ month: m.month, status: m.status }));
-    paragraphs.push(kindSentence(monthsOf, kind));
+    const sentence = kindSentence(monthsOf, kind);
+    if (sentence) paragraphs.push(sentence);
     if (i.tax === 'profit' && rU) {
       const list = rU.entities.filter((e) => e.applicable).map((e) => e.name);
       paragraphs.push(`У юрлиц на УСН налога на прибыль нет, для них показан налог по УСН: ${list.join(', ')}.`);
@@ -358,7 +368,7 @@ function incomeAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], n
       evidence.push(`График платежей: ${pay}`);
     }
     paragraphs.push(
-      'Суммы ориентировочные: без страховых взносов и региональных льгот, данные демо. Ставки и сроки взяты из справочника, проверьте с бухгалтером.',
+      'Суммы ориентировочные: без страховых взносов и региональных льгот. Ставки и сроки из справочника, проверьте с бухгалтером.',
     );
   }
 

@@ -32,8 +32,9 @@ test('Понимание: карточка «Понял так», «Измени
   // карточка идёт первой в сообщении
   expect(await answer.evaluate((e) => (e.firstElementChild as HTMLElement).className)).toBe('understood');
 
-  // 2. Группа не названа: сказано прямо и есть кнопки сужения
-  await expect(answer).toContainText('посчитал по всей группе');
+  // 2. Группа не названа: это видно в карточке («Вся группа»), отдельной фразы нет, кнопки сужения есть
+  await expect(answer.locator('.understood')).toContainText('Вся группа');
+  await expect(answer).not.toContainText('посчитал по всей группе');
   await expect(answer.getByRole('button', { name: 'Бета', exact: true })).toBeVisible();
 
   // 3. «Изменить»: варианты юрлица, налога и периода; выбор пересчитывает прежний вопрос
@@ -64,8 +65,8 @@ test('Понимание: карточка «Понял так», «Измени
   await ask(page, 'февраль');
   await expect(last(page).locator('.understood')).toContainText(/НДС, февраль \d{4}/);
 
-  // 6. пояснение вместо общего отказа
-  await ask(page, 'налог за 2027');
+  // 6. пояснение вместо общего отказа: нужен утверждённый лимит 2027, а дефлятора ещё нет
+  await ask(page, 'точный лимит на 2027');
   await expect(last(page)).toContainText('Лимиты 2027 пока не утверждены, жду дефлятор');
   await expect(last(page)).toContainText('Что могу сейчас:');
   await expect(last(page).locator('.understood')).toHaveCount(0);

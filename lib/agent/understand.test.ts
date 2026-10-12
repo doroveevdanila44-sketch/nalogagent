@@ -30,6 +30,7 @@ import { handleChat, loadHistory } from './service';
 import { StubProvider } from './stub';
 import { GUARD_FALLBACK, REFUSALS } from './templates';
 import { checkNumbers } from './text';
+import { exportFileName } from '@/lib/provenance/query';
 import type { CalcResult, ChatTurn } from './types';
 
 /** 2026-10-10 12:00:00 по Камчатке: та же контрольная дата, что в CALC.md */
@@ -206,9 +207,10 @@ describe('уточнения', () => {
     expect(third.text).toContain('с начала года');
   });
 
-  it('если юрлицо не названо: посчитано по группе, сказано об этом, есть кнопки сужения', async () => {
+  it('если юрлицо не названо: посчитано по группе (карточка «Вся группа»), есть кнопки сужения', async () => {
     const r = await ask('НДС за август');
-    expect(r.text).toContain('Юрлицо не названо, посчитал по всей группе.');
+    expect(r.understood!.entity).toBe('Вся группа');
+    expect(r.text).not.toContain('Юрлицо не названо');
     expect(r.quick.map((q) => q.label)).toEqual(['Альфа', 'Бета', 'Дельта', 'Гамма', 'Эпсилон']);
 
     // нажатие «Бета» продолжает тот же вопрос
@@ -270,11 +272,11 @@ describe('уточнения', () => {
 describe('пояснения вместо общего отказа', () => {
   const canDo = 'Что могу сейчас:';
 
-  it('«налог за 2027»: лимиты не утверждены, жду дефлятор', async () => {
-    const r = await ask('налог за 2027');
+  it('вопрос про точный лимит на 2027: лимиты не утверждены, жду дефлятор, прогноз предлагается', async () => {
+    const r = await ask('точный лимит на 2027');
     expect(r.fromCalc).toBe(false);
     expect(r.text).toContain('Лимиты 2027 пока не утверждены, жду дефлятор.');
-    expect(r.text).toContain('Данные в демо с января 2025 по декабрь 2026');
+    expect(r.text).toContain('Прогноз НДС на 2027 год при лимитах как в 2026 посчитать могу.');
     expect(r.text).toContain(canDo);
     expect(r.tables).toEqual([]);
   });
@@ -320,7 +322,7 @@ describe('пояснения вместо общего отказа', () => {
   });
 
   it('в пояснениях нет чисел и длинных тире, кроме нужных годов', async () => {
-    const r = await ask('налог за 2027');
+    const r = await ask('точный лимит на 2027');
     expect(r.text).not.toMatch(/[‒-―−]/);
     const canDoLine = r.text.split('\n\n').at(-1)!;
     expect(canDoLine).not.toMatch(/\d/);
@@ -461,5 +463,152 @@ describe('маршрут /api/chat принимает номер ответа', 
   it('неверный baseId отклоняется', async () => {
     expect((await post({ message: 'УСН', baseId: -1 })).status).toBe(400);
     expect((await post({ message: 'УСН', baseId: 'x' })).status).toBe(400);
+  });
+});
+
+describe('прогноз на 2027 год', () => {
+  const y2027: Period = { kind: 'year', year: 2027 };
+  const NOTE = 'Выручка как в 2026, лимиты как в 2026 (дефлятор не утверждён)';
+  const scen = (growth: number, rate: 5 | 7 | 22, ids: string[] | 'all' = 'all') =>
+    calcTax({ entityIds: ids, tax: 'vat', period: y2027, rate, scenario: { kind: 'forecast', year: 2027, growth } }, data);
+  const taxOf = (growth: number, rate: 5 | 7 | 22, id: string) =>
+    scen(growth, rate, [id]).entities.find((e) => e.entityId === id)!.tax!;
+  const cell = (t: ChatTurn, name: string, col: number) => rowOf(t, name)[col];
+
+  it('«какую ставку выбрать на 2027 год»: не отказ, а расчёт по трём ставкам из calcTax', async () => {
+    const r = await ask('какую ставку выбрать на 2027 год');
+    expect(r.class).toBe('A');
+    expect(r.fromCalc).toBe(true);
+    expect(r.text).not.toContain('жду дефлятор');
+
+    // таблица: по юрлицам налог при 5%, 7% и 22%, числа из calcTax
+    const t = r.tables[0]!;
+    expect(t.head).toEqual(['Юрлицо', '5%', '7%', '22%']);
+    for (const [col, rate] of [[1, 5], [2, 7], [3, 22]] as const) {
+      for (const [name, id] of [['ООО «Альфа»', 'alfa'], ['ИП Бета', 'beta'], ['ИП Дельта', 'delta']] as const) {
+        expect(cell(r, name, col), `${name} ${rate}%`).toBe(mln(taxOf(0, rate, id), 2));
+      }
+    }
+    // лучшая ставка выделена: Альфа 22% (вычет), Бета и Дельта 5%
+    expect(t.best).toEqual([[0, 3], [1, 1], [2, 1]]);
+    // итог по группе: сумма налогов по лучшим ставкам, экономия против следующей по выгоде
+    const best = taxOf(0, 22, 'alfa')
+      .plus(taxOf(0, 5, 'beta'))
+      .plus(taxOf(0, 5, 'delta'))
+      .plus(taxOf(0, 22, 'epsilon'));
+    expect(r.text).toContain(`при лучших ставках: ${mln(best, 2)}`);
+    const saving = taxOf(0, 5, 'alfa').minus(taxOf(0, 22, 'alfa'))
+      .plus(taxOf(0, 7, 'beta').minus(taxOf(0, 5, 'beta')))
+      .plus(taxOf(0, 7, 'delta').minus(taxOf(0, 5, 'delta')));
+    expect(r.text).toContain(`Экономия против следующих по выгоде: ${mln(saving, 2)}`);
+    // вторая таблица: лучшая ставка и экономия против следующей
+    expect(r.tables[1]!.rows[0]).toEqual(['ООО «Альфа»', '22%', `${mln(taxOf(0, 5, 'alfa').minus(taxOf(0, 22, 'alfa')), 2)} против 5%`]);
+    expect(r.tables[1]!.rows[1]).toEqual(['ИП Бета', '5%', `${mln(taxOf(0, 7, 'beta').minus(taxOf(0, 5, 'beta')), 2)} против 7%`]);
+    // Дельта перешла в плательщики, Гамма осталась освобождённой, Эпсилон на ОСНО
+    expect(r.text).toContain('С 1 января 2027 года платят НДС');
+    expect(r.text).toContain('ИП Дельта');
+    expect(r.text).toContain('Освобождены от НДС и в 2027 году не платят: ООО «Гамма».');
+    expect(r.text).toContain(`ООО «Эпсилон» на ОСНО: ставка одна, 22% с вычетами, налог ${mln(taxOf(0, 22, 'epsilon'), 2)}`);
+    // одна строка про окно выбора ставки
+    expect(r.text).toContain('Ставку на 2027 год выбирают в ноябре и декабре 2026 года.');
+  });
+
+  it('карточка «Понял так» с допущениями одной строкой и кнопками быстрых ответов', async () => {
+    const r = await ask('какую ставку выбрать на 2027 год');
+    expect(r.understood).toEqual({
+      entity: 'Вся группа',
+      tax: 'НДС',
+      period: '2027 год',
+      kind: 'forecast',
+      kindLabel: 'прогноз',
+      notes: [NOTE],
+    });
+    expect(r.quick.map((q) => q.label)).toEqual(['Рост +10%', 'Рост +20%', 'Только Альфа']);
+    expect(r.change).not.toBeNull();
+  });
+
+  it('другие формулировки тоже прогноз: «сколько заплатим в 2027», «что будет с налогом в следующем году»', async () => {
+    for (const q of ['сколько заплатим в 2027', 'что будет с налогом в следующем году', 'налог за 2027', 'ставка на 2027 год']) {
+      const r = await ask(q);
+      expect(r.fromCalc, q).toBe(true);
+      expect(r.understood, q).toMatchObject({ period: '2027 год', kindLabel: 'прогноз' });
+      expect(r.tables[0]!.head, q).toEqual(['Юрлицо', '5%', '7%', '22%']);
+      expect(r.text, q).not.toContain('жду дефлятор');
+    }
+  });
+
+  it('«Рост +10%»: тот же расчёт с другим коэффициентом, допущения в карточке меняются', async () => {
+    const first = await ask('какую ставку выбрать на 2027 год');
+    const r = await ask('рост выручки +10%', { baseId: first.id });
+    expect(r.understood).toMatchObject({
+      period: '2027 год',
+      notes: ['Выручка 2026 года +10%, лимиты как в 2026 (дефлятор не утверждён)'],
+    });
+    for (const [col, rate] of [[1, 5], [2, 7], [3, 22]] as const) {
+      expect(cell(r, 'ООО «Альфа»', col), `${rate}%`).toBe(mln(taxOf(10, rate, 'alfa'), 2));
+    }
+    expect(r.quick.map((q) => q.label)).toEqual(['Рост +20%', 'Без роста', 'Только Альфа']);
+    // больше выручка, больше налог: сравнение с расчётом без роста
+    expect(taxOf(10, 5, 'alfa').gt(taxOf(0, 5, 'alfa'))).toBe(true);
+  });
+
+  it('«Только Альфа» сохраняет рост и сужает до одного юрлица', async () => {
+    const first = await ask('какую ставку выбрать на 2027 год');
+    const grown = await ask('рост выручки +20%', { baseId: first.id });
+    const one = await ask('по Альфе', { baseId: grown.id });
+    expect(one.understood).toMatchObject({
+      entity: 'ООО «Альфа»',
+      notes: ['Выручка 2026 года +20%, лимиты как в 2026 (дефлятор не утверждён)'],
+    });
+    expect(one.tables[0]!.rows).toHaveLength(1);
+    expect(one.text).toContain(`лучшая ставка 22%, налог ${mln(taxOf(20, 22, 'alfa'), 2)}`);
+    expect(one.quick.map((q) => q.label)).toEqual(['Рост +10%', 'Без роста']);
+  });
+
+  it('допущения в сохранённом расчёте: три снимка с допущениями, они же в «Показать расчёт»', async () => {
+    const r = await ask('какую ставку выбрать на 2027 год');
+    const [row] = await db.select({ calc: chatMessages.calc }).from(chatMessages).where(eq(chatMessages.id, r.id));
+    const results = (row!.calc as { results: { rate: number | null; assumptions: string[]; scenario: unknown }[] }).results;
+    expect(results).toHaveLength(3);
+    for (const snap of results) {
+      expect(snap.assumptions.length).toBeGreaterThanOrEqual(2);
+      expect(snap.assumptions[0]).toContain('как в 2026');
+      expect(snap.scenario).toMatchObject({ kind: 'forecast', year: 2027, growth: 0, limitsApproved: false });
+    }
+    expect(r.provenance).toMatchObject({ count: 3 });
+    // охват в снимках: вся группа, имя файла Excel «НДС_Группа_2027»
+    expect(exportFileName(results as never)).toBe('НДС_Группа_2027.xlsx');
+    // документ по прогнозу не предлагается: у следующего года нет данных
+    expect(r.provenance!.doc).toBeUndefined();
+  });
+
+  it('вопрос про точный лимит остаётся отказом «жду дефлятор»', async () => {
+    const r = await ask('какой точный лимит ставки 5% на 2027 год');
+    expect(r.fromCalc).toBe(false);
+    expect(r.text).toContain('жду дефлятор');
+  });
+
+  it('предохранитель: чужое число в прогнозе не уходит', async () => {
+    class Lying extends StubProvider {
+      override async explain(result: CalcResult): Promise<string> {
+        return `${result.paragraphs[0]} Вы сэкономите 12 345 678 ₽.`;
+      }
+    }
+    const r = await ask('какую ставку выбрать на 2027 год', { provider: new Lying() });
+    expect(r.text).toBe(GUARD_FALLBACK);
+    expect(r.fromCalc).toBe(false);
+  });
+
+  it('в тексте прогноза нет чисел вне расчёта, вопроса и карточки', async () => {
+    const q = 'какую ставку выбрать на 2027 год';
+    const r = await ask(q);
+    const sources = [
+      ...r.tables.flatMap((t) => [...t.head, ...t.rows.flat()]),
+      ...r.how,
+      q,
+      Object.values(r.understood!).flat().join(' '),
+    ];
+    expect(checkNumbers(r.text, sources).unknown).toEqual([]);
+    expect(r.text).not.toMatch(/[‒-―]/);
   });
 });

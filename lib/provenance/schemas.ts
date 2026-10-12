@@ -18,6 +18,13 @@ export const CalcQuerySchema = z.object({
   period: PeriodSchema,
   entityIds: z.union([z.literal('all'), z.array(z.string().min(1).max(64)).min(1).max(20)]),
   rate: z.union([z.literal(5), z.literal(7), z.literal(22)]).optional(),
+  scenario: z
+    .object({
+      kind: z.literal('forecast'),
+      year: z.number().int(),
+      growth: z.number().min(-90).max(500),
+    })
+    .optional(),
 });
 
 /** Запросы расчёта и момент, на который считать: по ним панель, Excel и запрос на проверку. */
@@ -57,7 +64,7 @@ export function runQueries(
 ): CalcSnapshot[] {
   return queries.map((q) =>
     toSnapshot(
-      calcTax({ entityIds: q.entityIds, tax: q.tax, period: q.period, rate: q.rate }, data),
+      calcTax({ entityIds: q.entityIds, tax: q.tax, period: q.period, rate: q.rate, scenario: q.scenario }, data),
       { at: meta.at, tz: meta.tz, scope: q.entityIds },
     ),
   );

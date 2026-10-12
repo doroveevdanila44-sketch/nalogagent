@@ -1,14 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  DEFAULT_RATE,
-  computeLive,
-  computeStatic,
-  fromPayload,
-  momentFromEpoch,
-  type Selections,
-} from '@/lib/calc';
+import { computeLive, computeStatic, fromPayload, momentFromEpoch } from '@/lib/calc';
 import { api, ApiError } from '@/lib/client/api';
 import { LIVE_HOLD_EVENT, isLiveHeld } from '@/lib/client/live';
 import type { DashboardResponse } from '@/lib/provenance/dashboard';
@@ -27,17 +20,14 @@ import { Warnings } from './Warnings';
 export function DashboardView() {
   const [payload, setPayload] = useState<DashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selections, setSelections] = useState<Selections>({});
   const [clockOffset, setClockOffset] = useState(0);
   const [nowMs, setNowMs] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const data = await api<DashboardResponse>('/api/dashboard');
       setPayload(data);
-      setSelections(data.selections);
       setClockOffset(data.serverNow - Date.now());
     } catch (e) {
       if (e instanceof ApiError && e.code === 'locked') return;
@@ -81,10 +71,8 @@ export function DashboardView() {
   }, [nowMs, clockOffset]);
   const getAt = useCallback(() => atRef.current || Date.now() + clockOffset, [clockOffset]);
 
-  const input = useMemo(() => {
-    if (!payload) return null;
-    return { ...fromPayload(payload), selections };
-  }, [payload, selections]);
+  // Выбранные ставки приходят из rate_choices и в интерфейсе не меняются
+  const input = useMemo(() => (payload ? fromPayload(payload) : null), [payload]);
 
   const moment = useMemo(
     () => (payload && nowMs !== null ? momentFromEpoch(nowMs + clockOffset, payload.tz) : null),
@@ -98,23 +86,6 @@ export function DashboardView() {
     [input, dayKey],
   );
   const live = input && moment && stat ? computeLive(input, moment, stat) : null;
-
-  const choose = useCallback(
-    async (entityId: string, rate: number) => {
-      const current = selections[entityId] ?? DEFAULT_RATE;
-      if (current === rate) return;
-      const previous = selections;
-      setSelections({ ...selections, [entityId]: rate });
-      setNotice(null);
-      try {
-        await api('/api/rates', { body: { entityId, rate } });
-      } catch (e) {
-        setSelections(previous);
-        if (!(e instanceof ApiError && e.code === 'locked')) setNotice('Не удалось сохранить выбор ставки. Повторите.');
-      }
-    },
-    [selections],
-  );
 
   if (error) {
     return (
@@ -140,11 +111,6 @@ export function DashboardView() {
         year={payload.provenance.year}
         getAt={getAt}
       />
-      {notice ? (
-        <p role="status" className="form-error" style={{ marginTop: 12 }}>
-          {notice}
-        </p>
-      ) : null}
 
       <section className="sec" aria-labelledby="h-warn">
         <Warnings warnings={stat.warnings} counter={stat.counter} />
@@ -158,7 +124,7 @@ export function DashboardView() {
       <section className="sec" id="entities" aria-labelledby="h-ents">
         <div className="sec-h">
           <h2 id="h-ents">Юрлица</h2>
-          <p>Налог растёт в реальном времени по темпу выручки текущего месяца</p>
+          <p>Налог растёт по темпу выручки месяца. УСН и налог на прибыль ориентировочные, проверьте с бухгалтером</p>
         </div>
         <div className="ents">
           {input.entities.map((e) => (
@@ -171,7 +137,6 @@ export function DashboardView() {
               lines={payload.provenance.entities[e.id]!}
               year={payload.provenance.year}
               getAt={getAt}
-              onChoose={(rate) => void choose(e.id, rate)}
             />
           ))}
         </div>

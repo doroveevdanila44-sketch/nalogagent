@@ -165,16 +165,16 @@ export function Legend() {
   return (
     <ul className="doc-legend" aria-label="Условные обозначения">
       <li>
-        <span className="df df-entity">Реквизиты</span> реквизиты юрлица
+        <span className="df df-entity">Реквизиты юрлица</span>
       </li>
       <li>
-        <span className="df df-calc">Расчёт</span> сумма и ставка из расчёта
+        <span className="df df-calc">Из расчёта</span>
       </li>
       <li>
-        <span className="df df-user">Вручную</span> введено вручную
+        <span className="df df-user">Введено вручную</span>
       </li>
       <li>
-        <span className="df df-missing">[Пропущено]</span> не заполнено
+        <span className="df df-missing">[Не заполнено]</span>
       </li>
     </ul>
   );

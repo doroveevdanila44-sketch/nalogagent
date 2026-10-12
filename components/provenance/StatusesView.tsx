@@ -6,7 +6,7 @@ import { dec } from '@/lib/calc/decimal';
 import { rub2 } from '@/lib/calc/format';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
-import { DEMO_LABEL, shortDateTime } from '@/lib/provenance/line';
+import { shortDateTime } from '@/lib/provenance/line';
 import type { ReviewItem } from '@/lib/provenance/types';
 import { downloadFile, errorText } from './client';
 import { DEMO_MAIL_NOTE } from './SendToSpecialist';
@@ -60,12 +60,8 @@ export function StatusesView() {
     <div className="statuses">
       <div className="sec-h" style={{ marginTop: 18 }}>
         <h1 id="h-statuses">Статусы</h1>
-        <p>{DEMO_LABEL}. {DEMO_MAIL_NOTE}</p>
+        <p>{DEMO_MAIL_NOTE}</p>
       </div>
-      <p className="calc-note">
-        Здесь история расчётов, переданных специалисту. Передать расчёт можно кнопкой «Передать
-        специалисту» на дашборде и под ответом агента.
-      </p>
 
       {error ? (
         <div className="sec" role="alert">
@@ -119,9 +115,6 @@ export function StatusesView() {
                   </li>
                 ))}
               </ul>
-              <div className="req-foot">
-                <span className="demo-chip">{DEMO_LABEL}</span> <span className="src-text">{DEMO_MAIL_NOTE}</span>
-              </div>
               <div className="acts">
                 <button type="button" className="act" disabled={busy === r.id} onClick={() => void download(r.id)}>
                   {busy === r.id ? 'Готовлю файл…' : `Скачать ${r.excelName}`}

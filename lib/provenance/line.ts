@@ -3,9 +3,10 @@ import { momentFromEpoch } from '@/lib/calc/time';
 import type { CalcSnapshot } from './snapshot';
 
 /**
- * Строка происхождения под итоговой суммой:
- * «Выгрузка из 1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10.2026 18:00 · факт».
- * Все поля берутся из снимков CalcResult; метку «Демо-данные» рисует компонент рядом со строкой.
+ * Строка происхождения под итоговой суммой, коротко и без повторов того, что видно рядом:
+ * «1С (демо) · обновлено 10.10, 18:00 · факт и прогноз». Юрлицо и период в строку не входят:
+ * они стоят в заголовке карточки, баннера или ответа. Все поля берутся из снимков CalcResult.
+ * Метка «Демо-данные» стоит один раз в шапке приложения, в строке её нет.
  */
 
 export const KIND_LABEL: Record<PeriodKind, string> = {
@@ -26,6 +27,8 @@ export interface SourceLineData {
   period: string;
   /** Время обновления данных, уже в часовом поясе приложения: «10.10.2026 18:00» */
   updated: string | null;
+  /** То же без года, если год совпадает с годом расчёта: «10.10, 18:00». У прежних записей поля нет */
+  updatedShort?: string | null;
   kind: PeriodKind;
   /** Пометка в конце строки: «условный расчёт, налог не начисляется» */
   note?: string;
@@ -37,6 +40,20 @@ export function shortDateTime(epochMs: number, tz: string): string {
   const p = (n: number) => String(n).padStart(2, '0');
   const sec = Math.floor(m.secondsOfDay);
   return `${p(m.day)}.${p(m.month + 1)}.${m.year} ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
+}
+
+/** «10.10, 18:00»; год добавляется, только если он отличается от года расчёта. */
+export function stampShort(epochMs: number, tz: string, currentYear: number): string {
+  const m = momentFromEpoch(epochMs, tz);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const sec = Math.floor(m.secondsOfDay);
+  const day = `${p(m.day)}.${p(m.month + 1)}${m.year === currentYear ? '' : `.${m.year}`}`;
+  return `${day}, ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
+}
+
+/** «Выгрузка из 1С (демо)» это «1С (демо)»: слова об источнике-выгрузке в строке не нужны. */
+export function shortSource(title: string): string {
+  return title.replace(/^выгрузка из\s+/i, '');
 }
 
 /** «10.10.2026 18:42:07»: момент расчёта с секундами. */
@@ -127,18 +144,32 @@ export function lineFromSnapshots(snaps: CalcSnapshot[], opts: { note?: string }
     scope: scopeLabel(snaps),
     period: periodPhrase(snaps),
     updated: updated === null ? null : shortDateTime(updated, first.tz),
+    updatedShort: updated === null ? null : stampShort(updated, first.tz, Number(first.asOf.slice(0, 4))),
     kind: combinedKind(snaps),
     ...(opts.note ? { note: opts.note } : {}),
   };
 }
 
-/** Строка одним текстом, без метки «Демо-данные». */
-export function sourceLineText(d: SourceLineData): string {
+/**
+ * Название расчёта: «НДС, февраль 2026». У прогноза следующего года три расчёта одного налога и
+ * периода, поэтому добавляется ставка: «НДС, 2027 год, прогноз по ставке 5%».
+ */
+export function snapshotTitle(s: Pick<CalcSnapshot, 'taxName' | 'periodLabel' | 'scenario' | 'rate'>): string {
+  const forecast = s.scenario && s.rate !== null ? `, прогноз по ставке ${s.rate}%` : s.scenario ? ', прогноз' : '';
+  return `${s.taxName}, ${s.periodLabel}${forecast}`;
+}
+
+/**
+ * Строка одним текстом. По умолчанию без юрлица и периода (они в заголовке рядом): их можно
+ * вернуть там, где заголовка рядом нет.
+ */
+export function sourceLineText(d: SourceLineData, show: { scope?: boolean; period?: boolean } = {}): string {
+  const updated = d.updatedShort ?? d.updated;
   const parts = [
-    d.source ?? 'Источник не указан',
-    d.scope,
-    d.period,
-    d.updated ? `обновлено ${d.updated}` : null,
+    d.source ? shortSource(d.source) : 'Источник не указан',
+    show.scope ? d.scope : null,
+    show.period ? d.period : null,
+    updated ? `обновлено ${updated}` : null,
     KIND_LABEL[d.kind],
     d.note ?? null,
   ].filter((p): p is string => Boolean(p));

@@ -107,7 +107,7 @@ export function buildDashboardProvenance(data: CalcData, tz: string, at: number)
     const conditional = e.status === 'exempt';
     entities[e.id] = {
       metrics: vat,
-      vat: conditional ? { ...vat, note: 'условный расчёт, налог сейчас не начисляется' } : vat,
+      vat,
       income: lineFromSnapshots(own.map((s) => only(s, e.id))),
       conditional,
     };

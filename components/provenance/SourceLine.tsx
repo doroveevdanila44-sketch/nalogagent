@@ -1,10 +1,10 @@
-import { DEMO_LABEL, sourceLineText, type SourceLineData } from '@/lib/provenance/line';
+import { sourceLineText, type SourceLineData } from '@/lib/provenance/line';
 
 /**
- * Строка происхождения под итоговой суммой: метка «Демо-данные» и текст
- * «Выгрузка из 1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10.2026 18:00 · факт».
- * Мелким шрифтом, переносится в одну-две строки на телефоне. Внутри кнопки (баннер) рисуется
- * как span, иначе как абзац.
+ * Строка происхождения под итоговой суммой: «1С (демо) · обновлено 10.10, 18:00 · факт и прогноз».
+ * Мелким шрифтом, переносится в одну-две строки на телефоне. Юрлицо и период в ней не повторяются:
+ * они в заголовке рядом. Метки «Демо-данные» здесь нет, она один раз в шапке. Внутри кнопки (баннер)
+ * рисуется как span, иначе как абзац.
  */
 export function SourceLine({
   data,
@@ -18,11 +18,7 @@ export function SourceLine({
 }) {
   if (!data) return null;
   const cls = `src-line${tone === 'dark' ? ' on-dark' : ''}`;
-  const body = (
-    <>
-      <span className="demo-chip">{DEMO_LABEL}</span> <span className="src-text">{sourceLineText(data)}</span>
-    </>
-  );
+  const body = <span className="src-text">{sourceLineText(data)}</span>;
   return inline ? (
     <span className={cls} data-testid="source-line">
       {body}

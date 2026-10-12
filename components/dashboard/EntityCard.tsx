@@ -13,6 +13,7 @@ import type { LiveModel, StaticModel } from '@/lib/calc';
 import { entityColor } from '@/lib/theme';
 import { CalcActions } from '@/components/provenance/CalcActions';
 import { SourceLine } from '@/components/provenance/SourceLine';
+import { sourceLineText } from '@/lib/provenance/line';
 import { entityQueries, type EntityLines } from '@/lib/provenance/dashboard';
 
 interface Props {
@@ -25,7 +26,6 @@ interface Props {
   year: number;
   /** Момент (мс UTC), на который показаны цифры */
   getAt: () => number;
-  onChoose: (rate: number) => void;
 }
 
 /** Описание базы налога одной строкой, из цифр калькулятора. */
@@ -43,10 +43,9 @@ function baseNote(e: EntityInput, t: StaticModel['perEntity'][string]['incomeTax
   }
 }
 
-export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, onChoose }: Props) {
+export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt }: Props) {
   const payer = e.status === 'payer';
   const osno = e.taxRegime === 'osno';
-  const demo = e.description.startsWith('Демо');
   const limit = payer ? rules.limit5 : rules.vatExemptLimit;
   const used = limit && !limit.isZero() ? Math.min(100, live.ytd.div(limit).times(100).toNumber()) : 0;
   const usageLabel = payer
@@ -56,6 +55,11 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
   const selectedValue = payer ? stat.forecast[stat.selected]! : stat.fullYear[stat.selected]!;
   const tax = stat.incomeTax;
   const next = tax.next;
+  // строка происхождения под блоком только если она отличается от строки предыдущего блока карточки
+  const metricsText = sourceLineText(lines.metrics);
+  const vatText = sourceLineText(lines.vat);
+  const showVatLine = vatText !== metricsText;
+  const showIncomeLine = sourceLineText(lines.income) !== (showVatLine ? vatText : metricsText);
 
   return (
     <article className="ent">
@@ -75,7 +79,6 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
           <span className="chip regime">
             {REGIME_LABEL[e.taxRegime]}, {tax.ratePct.toString()}%
           </span>
-          {demo ? <span className="chip demo">демо</span> : null}
         </div>
       </div>
 
@@ -111,7 +114,7 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
 
       {osno ? (
         <div className="rates single" role="group" aria-label={`НДС для ${e.name}`}>
-          <div className="rate sel static">
+          <div className="rate sel">
             <span className="rate-top">
               <span className="rate-n">НДС 22%</span>
               <span className="tag">С вычетами</span>
@@ -131,13 +134,7 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
             const value = payer ? stat.forecast[r]! : stat.fullYear[r]!;
             const delta = value.minus(selectedValue);
             return (
-              <button
-                key={r}
-                type="button"
-                className={`rate ${isSel ? 'sel' : 'alt'}`}
-                aria-pressed={isSel}
-                onClick={() => onChoose(r)}
-              >
+              <div key={r} className={`rate ${isSel ? 'sel' : 'alt'}`}>
                 <span className="rate-top">
                   <span className="rate-n">{r}%</span>
                   <span className="tag">{isSel ? 'Выбрана' : 'Сравнение'}</span>
@@ -148,28 +145,22 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
                   <span>{payer ? 'Прогноз года' : 'За весь год'}</span>
                   <b>{mln(value, 2)}</b>
                 </span>
-                <span className="rate-row">
-                  <span>К выбранной</span>
-                  <b>{isSel ? 'выбрана' : signedMln(delta, 2)}</b>
-                </span>
-              </button>
+                {isSel ? null : (
+                  <span className="rate-row">
+                    <span>К выбранной</span>
+                    <b>{signedMln(delta, 2)}</b>
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
       )}
-      <SourceLine data={lines.vat} />
+      {showVatLine ? <SourceLine data={lines.vat} /> : null}
 
       <section className="taxblock" aria-label={`${tax.taxName}, прогноз`}>
         <h4>{tax.taxName}, прогноз</h4>
         <dl>
-          <div>
-            <dt>Режим</dt>
-            <dd>{tax.label}</dd>
-          </div>
-          <div>
-            <dt>Ставка</dt>
-            <dd>{tax.ratePct.toString()}%</dd>
-          </div>
           <div>
             <dt>Начислено</dt>
             <dd>{rub2(live.incomeTaxAccrued)}</dd>
@@ -193,9 +184,9 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt, o
             </dd>
           </div>
         </dl>
-        <p className="taxblock-note">{baseNote(e, tax)}. Проверить с бухгалтером.</p>
+        <p className="taxblock-note">{baseNote(e, tax)}.</p>
       </section>
-      <SourceLine data={lines.income} />
+      {showIncomeLine ? <SourceLine data={lines.income} /> : null}
 
       <CalcActions
         label={`Действия с расчётом: ${e.name}`}

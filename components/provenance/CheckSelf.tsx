@@ -314,7 +314,7 @@ export function CheckSelf({
 
   return (
     <Overlay kind="screen" label="Проверить самому" onClose={onClose}>
-      <OverlayHead title="Проверить самому" sub="Демо-данные" onClose={onClose} />
+      <OverlayHead title="Проверить самому" onClose={onClose} />
       <div className="ov-scroll">
         {state.status === 'loading' ? (
           <div aria-busy="true" aria-label="Загрузка расчёта">

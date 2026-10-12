@@ -5,7 +5,7 @@ import type { Period } from '@/lib/calc/period';
 import { api } from '@/lib/client/api';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
-import { CATEGORY_LABEL, SAMPLE_NOTE } from '@/lib/documents/types';
+import { CATEGORY_LABEL } from '@/lib/documents/types';
 import type { Catalog, TemplateMeta } from './api';
 import { StartDocument } from './StartDocument';
 
@@ -56,7 +56,7 @@ export function MakeDocument({ hint }: { hint: DocHint | null }) {
       </div>
       {open ? (
         <Overlay kind="modal" label="Сформировать документ" onClose={() => setOpen(false)}>
-          <OverlayHead title="Сформировать документ" sub={SAMPLE_NOTE} onClose={() => setOpen(false)} />
+          <OverlayHead title="Сформировать документ" onClose={() => setOpen(false)} />
           <div className="ov-scroll">
             <p className="calc-note">
               Юрлицо и период берутся из вашего вопроса, суммы из того же расчёта, что в ответе.

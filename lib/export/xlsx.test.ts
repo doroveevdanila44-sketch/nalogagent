@@ -221,6 +221,18 @@ describe('файл Excel: листы и живые формулы', () => {
     ['НДС за февраль по Альфе', () => [run({ tax: 'vat', entityIds: ['alfa'], period: { kind: 'month', year: 2026, month: 2 } })]],
     ['УСН и налог на прибыль за год', () => [run({ tax: 'usn', period: { kind: 'year', year: 2026 } }), run({ tax: 'profit', period: { kind: 'year', year: 2026 } })]],
     ['НДС за 3 квартал', () => [run({ tax: 'vat', period: { kind: 'quarter', year: 2026, quarter: 3 } })]],
+    [
+      'прогноз НДС на 2027 год по трём ставкам с ростом 10%',
+      () =>
+        ([5, 7, 22] as const).map((rate) =>
+          run({
+            tax: 'vat',
+            rate,
+            period: { kind: 'year', year: 2027 },
+            scenario: { kind: 'forecast', year: 2027, growth: 10 },
+          }),
+        ),
+    ],
   ];
 
   for (const [name, make] of cases) {
@@ -302,6 +314,30 @@ describe('файл Excel: листы и живые формулы', () => {
     expect(all).toContain('с начала года');
     expect(all).toContain('rate_special_5');
     expect(all).toContain('НК РФ, ст. 164');
+  });
+
+  it('допущения прогноза: на листе «Источник», у расчёта по данным их нет', async () => {
+    const forecast = run({
+      tax: 'vat',
+      rate: 5,
+      entityIds: ['alfa', 'beta'],
+      period: { kind: 'year', year: 2027 },
+      scenario: { kind: 'forecast', year: 2027, growth: 10 },
+    });
+    const wb = await load([forecast]);
+    const text: string[] = [];
+    wb.getWorksheet(SHEET_SOURCE)!.eachRow((row) => text.push((row.values as CellVal[]).filter(Boolean).join(' | ')));
+    const all = text.join('\n');
+    expect(all).toContain('Допущения');
+    for (const a of forecast.assumptions) expect(all).toContain(a);
+    expect(all).toContain('с ростом 10%');
+    expect(all).toContain('дефлятор не утверждён');
+    expect(all).toContain('прогноз по ставке 5%');
+
+    const plain = await load([run({ tax: 'vat', period: { kind: 'ytd' } })]);
+    const plainText: string[] = [];
+    plain.getWorksheet(SHEET_SOURCE)!.eachRow((row) => plainText.push((row.values as CellVal[]).filter(Boolean).join(' | ')));
+    expect(plainText.join('\n')).not.toContain('Допущения');
   });
 
   it('значения в файле совпадают с CalcResult по месяцам, юрлицам и группе', async () => {

@@ -167,9 +167,18 @@ export interface Ambiguity {
 }
 
 /** Что агент не берётся делать, и почему. Объяснение строит unsupported.ts */
+/**
+ * Почему следующий год не посчитать:
+ *  limits  вопрос про утверждённые лимиты и пороги, дефлятора ещё нет
+ *  tax     прогноз считается только по НДС
+ *  mixed   период захватывает текущий и следующий годы
+ *  other   такой вопрос (платёж, вычет) на следующий год не считается
+ */
+export type NextYearReason = 'limits' | 'tax' | 'mixed' | 'other';
+
 export type Unsupported =
   | { kind: 'period_out_of_data'; period: Period }
-  | { kind: 'next_year'; year: number; period: Period }
+  | { kind: 'next_year'; year: number; period: Period; reason: NextYearReason }
   | { kind: 'other_tax'; name: string }
   | { kind: 'unknown_entity'; name: string }
   | { kind: 'legal_assessment' };
@@ -188,6 +197,11 @@ export interface Interpretation {
   confidence: number;
   ambiguities: Ambiguity[];
   unsupported: Unsupported | null;
+  /**
+   * Прогноз следующего года: календарный год и рост выручки в процентах. Считает calcTax по
+   * сценарию; null или поля нет, если вопрос не про следующий год.
+   */
+  forecast?: { year: number; growth: number } | null;
 }
 
 /** Карточка «Понял так» перед результатом. */

@@ -278,7 +278,7 @@ export const MONTH_NAMES = [
 ] as const;
 
 /** В предложном падеже: «в феврале». */
-const MONTHS_PREPOSITIONAL = [
+export const MONTHS_PREPOSITIONAL = [
   'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
   'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
 ] as const;

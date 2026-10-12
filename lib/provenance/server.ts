@@ -7,6 +7,7 @@ import { loadCalcData } from '@/lib/db/queries';
 import { chatMessages, checks, people, reviewRequests } from '@/lib/db/schema';
 import { documentSnapshots, DocError } from '@/lib/documents/service';
 import { buildWorkbook } from '@/lib/export/xlsx';
+import { snapshotTitle } from './line';
 import { exportFileName, requestTitle } from './query';
 import { clampAt, runQueries, type CalcTarget } from './schemas';
 import { fromSnapshot, type CalcSnapshot } from './snapshot';
@@ -96,7 +97,7 @@ function toItem(
     statusLabel: REVIEW_STATUS_LABEL[r.status] ?? r.status,
     comment: r.comment,
     recipient: p,
-    totals: snaps.map((s) => ({ label: `${s.taxName}, ${s.periodLabel}`, total: s.total })),
+    totals: snaps.map((s) => ({ label: snapshotTitle(s), total: s.total })),
     excelName: r.excelName,
     createdAt: r.createdAt.toISOString(),
     demo: true,

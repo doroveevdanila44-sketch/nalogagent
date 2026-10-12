@@ -43,6 +43,8 @@ interface Want {
   /** Слоты, взятые по умолчанию */
   assumed?: Slot[];
   unsupported?: Unsupported['kind'] | null;
+  /** Прогноз следующего года: рост в процентах или null, если вопрос не про следующий год */
+  forecast?: number | null;
 }
 
 const slots = (i: Interpretation, kinds: ('missing' | 'multiple' | 'assumed')[]) =>
@@ -59,6 +61,7 @@ function check(text: string, w: Want, c: InterpretContext = base) {
   if (w.blocking !== undefined) expect(slots(i, ['missing', 'multiple']), `${text}: не хватает`).toEqual([...w.blocking].sort());
   if (w.assumed !== undefined) expect(slots(i, ['assumed']), `${text}: допущено`).toEqual([...w.assumed].sort());
   if (w.unsupported !== undefined) expect(i.unsupported?.kind ?? null, `${text}: не поддерживается`).toBe(w.unsupported);
+  if (w.forecast !== undefined) expect(i.forecast?.growth ?? null, `${text}: прогноз`).toBe(w.forecast);
   return i;
 }
 
@@ -131,8 +134,17 @@ describe('понимание вопроса: таблица формулиров
     ['есть ли признаки дробления', { scenario: 'fragmentation' }],
     ['что если Альфа купит 2 машины по 6 млн', { scenario: 'cars', entities: ['alfa'] }],
     // неподдерживаемое
-    ['налог за 2027', { unsupported: 'next_year' }],
-    ['НДС за январь 2027', { unsupported: 'next_year' }],
+    ['налог за 2027', { unsupported: null, forecast: 0 }],
+    ['НДС за январь 2027', { unsupported: null, forecast: 0 }],
+    ['точный лимит на 2027', { unsupported: 'next_year', forecast: null }],
+    ['налог по УСН за 2027', { unsupported: 'next_year', forecast: null }],
+    ['что с порогами в 2027 году', { unsupported: 'next_year', forecast: null }],
+    // прогноз следующего года: период 2027, налог НДС или не назван
+    ['какую ставку выбрать на 2027 год', { forecast: 0, period: { kind: 'year', year: 2027 }, unsupported: null, scenario: 'compare_rates' }],
+    ['сколько заплатим в 2027', { forecast: 0, tax: 'vat', period: { kind: 'year', year: 2027 }, assumed: ['entity', 'tax'] }],
+    ['что будет с налогом в следующем году', { forecast: 0, period: { kind: 'year', year: 2027 }, unsupported: null }],
+    ['какая ставка выгоднее на следующий год по Бете', { forecast: 0, entities: ['beta'], scenario: 'compare_rates' }],
+    ['ставка на 2027 год при росте выручки 10%', { forecast: 10, rate: null, scenario: null }],
     ['налог за 2024 год', { unsupported: 'period_out_of_data' }],
     ['НДС за 2028 год', { unsupported: 'period_out_of_data' }],
     ['НДФЛ за март', { unsupported: 'other_tax' }],
@@ -256,7 +268,7 @@ describe('короткий ответ продолжает прежний воп
   });
 
   it('непонятый период из прежнего вопроса заменяется новым', () => {
-    const out = interpret('налог за 2027', base);
+    const out = interpret('налог УСН за 2027', base);
     expect(out.unsupported?.kind).toBe('next_year');
     const fixed = interpret('а за 2026 год', ctx({ previous: out }));
     expect(fixed.period).toEqual({ kind: 'year', year: 2026 });
@@ -320,6 +332,67 @@ describe('уверенность', () => {
   });
 
   it('у неподдерживаемого не выше 0,3', () => {
-    expect(interpret('налог за 2027', base).confidence).toBeLessThanOrEqual(0.3);
+    expect(interpret('налог УСН за 2027', base).confidence).toBeLessThanOrEqual(0.3);
+  });
+});
+
+describe('прогноз следующего года: рост выручки и продолжение вопроса', () => {
+  const asked = interpret('какую ставку выбрать на 2027 год', base);
+
+  it('рост выручки понимается словами и знаком, это не ставка НДС', () => {
+    const growth = (t: string) => extractFields(t, base).growth;
+    expect(growth('рост выручки +10%')).toBe(10);
+    expect(growth('рост 5%')).toBe(5);
+    expect(growth('а если рост на 15 процентов?')).toBe(15);
+    expect(growth('падение выручки на 10%')).toBe(-10);
+    expect(growth('а если +20%')).toBe(20);
+    expect(growth('без роста')).toBe(0);
+    expect(growth('какая ставка выгоднее')).toBeNull();
+    // 5% и 7% после слова «рост» это рост, а не ставка НДС
+    expect(extractFields('рост 7%', base).rate).toBeNull();
+    expect(interpret('НДС 7% за март', base).rate).toBe(7);
+  });
+
+  it('кнопка «Рост +10%» пересчитывает тот же прогноз: период, сценарий и юрлицо остаются', () => {
+    const i = interpret('рост выручки +10%', ctx({ previous: asked, refine: true }));
+    expect(i.forecast).toEqual({ year: 2027, growth: 10 });
+    expect(i.period).toEqual({ kind: 'year', year: 2027 });
+    expect(i.scenario).toBe('compare_rates');
+    expect(i.unsupported).toBeNull();
+  });
+
+  it('то же словами без кнопки: «а если рост 20%?»', () => {
+    const i = interpret('а если рост 20%?', ctx({ previous: asked }));
+    expect(i.forecast).toEqual({ year: 2027, growth: 20 });
+  });
+
+  it('«Только Альфа» сохраняет рост', () => {
+    const grown = interpret('рост выручки +10%', ctx({ previous: asked, refine: true }));
+    const only = interpret('по Альфе', ctx({ previous: grown, refine: true }));
+    expect(only.entities).toEqual(['alfa']);
+    expect(only.forecast).toEqual({ year: 2027, growth: 10 });
+  });
+
+  it('другой период после прогноза выводит из прогноза', () => {
+    const i = interpret('а за февраль', ctx({ previous: asked }));
+    expect(i.forecast ?? null).toBeNull();
+    expect(i.period).toEqual(month(2026, 2));
+  });
+
+  it('следующий месяц, квартал и год называются словами', () => {
+    expect(interpret('НДС в следующем квартале', base).period).toEqual(quarter(2027, 1));
+    expect(interpret('НДС на будущий год', base).period).toEqual({ kind: 'year', year: 2027 });
+  });
+
+  it('период из двух лет не прогноз', () => {
+    const i = interpret('НДС с октября 2026 по март 2027', base);
+    expect(i.forecast ?? null).toBeNull();
+    expect(i.unsupported).toMatchObject({ kind: 'next_year', reason: 'mixed' });
+  });
+
+  it('значения вне границ роста отбрасываются', () => {
+    expect(sanitizeFields({ growth: 1000 }, base).growth).toBeNull();
+    expect(sanitizeFields({ growth: -95 }, base).growth).toBeNull();
+    expect(sanitizeFields({ growth: 12 }, base).growth).toBe(12);
   });
 });

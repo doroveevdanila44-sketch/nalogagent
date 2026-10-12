@@ -112,37 +112,40 @@ test('Дашборд: строка происхождения под банне�
   await expect(page.locator('header.top')).toContainText('Демо-данные');
   expect(await page.locator('header.top').innerText()).toMatch(/Демо-данные/);
 
-  // под каждым из четырёх баннеров своя строка в формате «источник · юрлицо · период · обновлено · метка»
-  const line = /Выгрузка из 1С \(демо\) · .+ · .+ · обновлено 10\.10\.2026 18:00 · (факт|прогноз|факт и прогноз)/;
+  // у четырёх баннеров строка одинаковая, поэтому она стоит один раз под заголовком группы:
+  // «источник · обновлено · метка», без юрлица, периода и без метки «Демо-данные» (она в шапке)
+  const line = /^1С \(демо\) · обновлено 10\.10, 18:00 · (факт|прогноз|факт и прогноз)$/;
   const banners = page.locator('.sum-card');
   await expect(banners).toHaveCount(4);
-  for (let i = 0; i < 4; i++) {
-    const src = banners.nth(i).locator('[data-testid="source-line"]');
-    await expect(src).toHaveCount(1);
-    await expect(src).toContainText('Демо-данные');
-    await expect(src).toHaveText(line);
-  }
-  // прогноз за год и налог на прибыль помечены периодом «2026 год», выручка «с начала года»
-  await expect(banners.nth(0).locator('[data-testid="source-line"]')).toContainText('с начала года');
-  await expect(banners.nth(0).locator('[data-testid="source-line"]')).toContainText('факт и прогноз');
-  await expect(banners.nth(2).locator('[data-testid="source-line"]')).toContainText('2026 год');
-  // налог на прибыль и УСН вместе покрывают всю группу
-  await expect(banners.nth(3).locator('[data-testid="source-line"]')).toContainText('Вся группа');
+  const shared = page.locator('.sum > [data-testid="source-line"]');
+  await expect(shared).toHaveCount(1);
+  await expect(shared).toHaveText(line);
+  await expect(shared).not.toContainText('Демо-данные');
+  // текущий месяц ещё не закончен: основа «факт и прогноз»
+  await expect(shared).toContainText('факт и прогноз');
+  await expect(page.locator('.sum-card [data-testid="source-line"]')).toHaveCount(0);
 
-  // три строки под блоками каждой карточки юрлица: цифры, ставки, налог режима
+  // у блоков карточки юрлица (цифры, ставки, налог режима) основа одна, поэтому строка в карточке одна
   const cards = page.locator('article.ent');
   await expect(cards).toHaveCount(5);
   for (let i = 0; i < 5; i++) {
     const lines = cards.nth(i).locator('[data-testid="source-line"]');
-    await expect(lines).toHaveCount(3);
-    for (let k = 0; k < 3; k++) await expect(lines.nth(k)).toHaveText(line);
+    await expect(lines).toHaveCount(1);
+    await expect(lines.first()).toHaveText(line);
     await expect(cards.nth(i).locator('[data-testid="actions"] [data-action]')).toHaveCount(4);
   }
-  // освобождённое юрлицо: цифры ставок условные, строка говорит об этом
+  // освобождённое юрлицо: об условных цифрах сказано один раз над ставками, в строке пометки нет
   const delta = cards.filter({ hasText: 'ИП Дельта' });
-  await expect(delta.locator('[data-testid="source-line"]').nth(1)).toContainText('условный расчёт');
+  await expect(delta.locator('.hint')).toContainText('Сейчас НДС не платится');
+  await expect(delta.locator('[data-testid="source-line"]')).not.toContainText('условный');
+  // юрлицо в строке не повторяется: оно в заголовке карточки
   const alfa = cards.filter({ hasText: 'ООО «Альфа»' });
-  await expect(alfa.locator('[data-testid="source-line"]').first()).toContainText('ООО «Альфа»');
+  await expect(alfa.locator('[data-testid="source-line"]').first()).not.toContainText('ООО «Альфа»');
+  await expect(alfa.locator('[data-testid="source-line"]').first()).not.toContainText('2026');
+
+  // «Демо-данные» в DOM страницы один раз, в шапке
+  const occurrences = await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1);
+  expect(occurrences).toBe(1);
 
   await page.screenshot({ path: `${SHOTS}/prov-dashboard-desktop.png`, fullPage: false });
 });
@@ -302,7 +305,8 @@ test('Проверить самому: чек-лист, ссылка на нор
   await expect(screen.locator('.chk')).toHaveCount(2 + 5 + 1);
   const link = screen.getByRole('link', { name: /НК РФ, ст\. 164/ }).first();
   await expect(link).toHaveAttribute('href', /^https:\/\/www\.consultant\.ru\/document\/cons_doc_LAW_28165\/?$/);
-  await expect(screen.locator('[data-testid="source-line"]').first()).toContainText('Демо-данные');
+  await expect(screen.locator('[data-testid="source-line"]').first()).toContainText('1С (демо)');
+  await expect(screen.locator('[data-testid="source-line"]').first()).not.toContainText('Демо-данные');
 
   // скопировать формулы
   await screen.getByRole('button', { name: 'Скопировать формулы' }).click();
@@ -381,7 +385,7 @@ test('Передать специалисту (демо): запись review_re
   await expect(modal.getByRole('radio')).toHaveCount(3);
   await expect(modal.getByText('Финансовый директор')).toBeVisible();
   await expect(modal.getByText('Бухгалтер', { exact: true })).toBeVisible();
-  await expect(modal).toContainText('Демо-данные');
+  await expect(modal).not.toContainText('Демо-данные');
 
   await modal.getByRole('radio', { name: /Финансовый директор/ }).check();
   await modal.getByLabel('Комментарий').fill('Проверьте ставку и порог');
@@ -391,7 +395,9 @@ test('Передать специалисту (демо): запись review_re
   const done = modal.getByTestId('send-done');
   await expect(done).toBeVisible();
   await expect(done).toContainText('Отправлено на проверку');
-  await expect(done).toContainText('Демо: письмо не отправляется');
+  // «Демо: письмо не отправляется» в окне один раз (над формой и над подтверждением)
+  await expect(modal.getByTestId('demo-mail-note')).toContainText('Демо: письмо не отправляется');
+  expect(((await modal.innerText()).match(/Демо: письмо не отправляется/g) ?? []).length).toBe(1);
   await expect(done).toContainText('Сергей Примеров, Финансовый директор');
 
   const rows = await sql<{
@@ -436,11 +442,91 @@ test('Раздел «Статусы»: история запросов, стат
   await expect(item).toContainText('Отправлено на проверку');
   await expect(item).toContainText('Сергей Примеров, Финансовый директор');
   await expect(item).toContainText('Проверьте ставку и порог');
-  await expect(item).toContainText('Демо: письмо не отправляется');
+  // «Демо: письмо не отправляется» один раз под заголовком раздела, у каждого запроса его нет
+  await expect(item).not.toContainText('Демо: письмо не отправляется');
+  await expect(page.locator('.statuses .sec-h')).toContainText('Демо: письмо не отправляется');
+  await expect(page.getByText('Демо: письмо не отправляется')).toHaveCount(1);
   const [file] = await Promise.all([page.waitForEvent('download'), item.getByRole('button', { name: /Скачать/ }).click()]);
   const wb = await workbookOf(file);
   expect(wb.worksheets.map((w) => w.name)).toEqual(['Итог', 'По месяцам', 'Расчёт', 'Источник']);
   await page.screenshot({ path: `${SHOTS}/prov-statuses-desktop.png` });
+});
+
+test('Прогноз на 2027 год: три ставки, допущения в карточке, пересчёт кнопкой, допущения в панели и в Excel', async ({
+  page,
+}) => {
+  await resetChat();
+  await firstLogin(page, PIN);
+
+  const input = page.getByLabel('Вопрос агенту');
+  await input.fill('какую ставку выбрать на 2027 год');
+  await input.press('Enter');
+  await expect(page.locator('.typing')).toHaveCount(0);
+  const answer = page.locator('.msg:not(.me)').last();
+
+  // не отказ, а расчёт: карточка с допущениями одной строкой, таблица по трём ставкам, окно выбора
+  await expect(answer).not.toContainText('жду дефлятор');
+  await expect(answer.locator('.understood .u-text')).toContainText('Понял так: Вся группа, НДС, 2027 год (прогноз)');
+  await expect(answer.locator('.understood .u-notes')).toHaveText(
+    'Выручка как в 2026, лимиты как в 2026 (дефлятор не утверждён).',
+  );
+  await expect(answer.locator('table').first().locator('thead th')).toHaveText(['Юрлицо', '5%', '7%', '22%']);
+  await expect(answer.locator('table').first().locator('td.best').first()).toBeVisible();
+  await expect(answer).toContainText('Ставку на 2027 год выбирают в ноябре и декабре 2026 года.');
+  await expect(answer.getByRole('group', { name: 'Быстрые ответы' }).locator('.qreply')).toHaveText([
+    'Рост +10%',
+    'Рост +20%',
+    'Только Альфа',
+  ]);
+  // строка происхождения без юрлица и периода, подпись «Цифры из калькулятора» не повторяет её
+  await expect(answer.locator('[data-testid="source-line"]')).toHaveText(/^1С \(демо\) · обновлено 10\.10, 18:00 · прогноз$/);
+  await expect(answer.getByText('Цифры из калькулятора')).toHaveCount(0);
+  // формировать документ по прогнозу не из чего: кнопки нет
+  await expect(answer.getByRole('button', { name: 'Сформировать документ' })).toHaveCount(0);
+  await page.screenshot({ path: `${SHOTS}/prov-forecast-desktop.png` });
+
+  // «Рост +10%»: тот же расчёт с другим коэффициентом, цифры в таблице другие
+  const before = await answer.locator('table').first().innerText();
+  await answer.getByRole('button', { name: 'Рост +10%' }).click();
+  await expect(page.locator('.typing')).toHaveCount(0);
+  const grown = page.locator('.msg:not(.me)').last();
+  await expect(grown.locator('.understood .u-notes')).toHaveText(
+    'Выручка 2026 года +10%, лимиты как в 2026 (дефлятор не утверждён).',
+  );
+  expect(await grown.locator('table').first().innerText()).not.toBe(before);
+
+  // допущения в панели «Показать расчёт»: по вкладке на ставку
+  await grown.locator('[data-action="calc"]').click();
+  const drawer = page.getByTestId('overlay-drawer');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('tab')).toHaveText([
+    'НДС, 2027 год, прогноз по ставке 5%',
+    'НДС, 2027 год, прогноз по ставке 7%',
+    'НДС, 2027 год, прогноз по ставке 22%',
+  ]);
+  const assumptions = drawer.getByTestId('calc-assumptions');
+  await expect(assumptions).toContainText('с ростом 10%');
+  await expect(assumptions).toContainText('Лимиты 2027 года как в 2026 (дефлятор не утверждён)');
+  await drawer.getByRole('button', { name: 'Закрыть' }).first().click();
+  await expect(drawer).toBeHidden();
+
+  // допущения в Excel
+  const [file] = await Promise.all([page.waitForEvent('download'), grown.locator('[data-action="excel"]').click()]);
+  const wb = await workbookOf(file);
+  const text: string[] = [];
+  wb.getWorksheet('Источник')!.eachRow((row) => row.eachCell((c) => text.push(String(c.value ?? ''))));
+  const all = text.join('\n');
+  expect(all).toContain('Допущения');
+  expect(all).toContain('с ростом 10%');
+  expect(all).toContain('дефлятор не утверждён');
+
+  // «Только Альфа» сохраняет рост
+  await grown.getByRole('button', { name: 'Только Альфа' }).click();
+  await expect(page.locator('.typing')).toHaveCount(0);
+  const one = page.locator('.msg:not(.me)').last();
+  await expect(one.locator('.understood .u-text')).toContainText('ООО «Альфа»');
+  await expect(one.locator('.understood .u-notes')).toContainText('+10%');
+  await expect(one.locator('table tbody tr')).toHaveCount(1);
 });
 
 test('Чат: строка происхождения и действия под ответом, суммы сходятся', async ({ page }) => {
@@ -454,8 +540,11 @@ test('Чат: строка происхождения и действия под
   const answer = page.locator('.msg:not(.me)').last();
 
   await expect(answer.locator('[data-testid="source-line"]')).toHaveText(
-    /^Демо-данные Выгрузка из 1С \(демо\) · ООО «Альфа» · февраль 2026 · обновлено 10\.10\.2026 18:00 · факт$/,
+    /^1С \(демо\) · обновлено 10\.10, 18:00 · факт$/,
   );
+  // юрлицо и период в карточке «Понял так» над ответом, в строке они не повторяются
+  await expect(answer.locator('.understood')).toContainText('ООО «Альфа»');
+  await expect(answer.locator('.understood')).toContainText('февраль 2026');
   const bar = answer.locator('[data-testid="actions"]');
   await expect(bar.locator('[data-action]')).toHaveCount(4);
   await page.screenshot({ path: `${SHOTS}/prov-chat-desktop.png` });
@@ -520,10 +609,10 @@ test.describe('Телефон 390 px', () => {
 
     // строки происхождения на месте и не раздувают страницу
     const lines = page.locator('[data-testid="source-line"]');
-    expect(await lines.count()).toBeGreaterThanOrEqual(4 + 15 + 1);
+    expect(await lines.count()).toBeGreaterThanOrEqual(1 + 5 + 1);
     expect(await noScrollX(page)).toEqual({ page: 0, body: 0 });
-    // мелкий шрифт, не больше трёх строк в баннере
-    const lineBox = await page.locator('.sum-card [data-testid="source-line"]').first().evaluate((e) => {
+    // мелкий шрифт, не больше трёх строк в общей строке над баннерами
+    const lineBox = await page.locator('.sum > [data-testid="source-line"]').first().evaluate((e) => {
       const s = getComputedStyle(e);
       const lh = parseFloat(s.lineHeight);
       return { size: parseFloat(s.fontSize), lines: Math.round(e.getBoundingClientRect().height / lh) };
@@ -633,7 +722,8 @@ test.describe('Телефон 390 px', () => {
     await page.getByRole('button', { name: 'Отправить', exact: true }).click();
     await expect(page.locator('.typing')).toHaveCount(0);
     const answer = page.locator('.msg:not(.me)').last();
-    await expect(answer.locator('[data-testid="source-line"]')).toContainText('2 квартал 2026');
+    await expect(answer.locator('.understood')).toContainText('2 квартал 2026');
+    await expect(answer.locator('[data-testid="source-line"]')).toContainText('1С (демо)');
     const fit = await answer.evaluate((e) => ({
       over: e.scrollWidth - e.clientWidth,
       right: e.getBoundingClientRect().right,

@@ -89,6 +89,10 @@ export async function loadDashboardInput(db: Db, now: Moment): Promise<Dashboard
   return dashboardInput(await loadCalcData(db, now));
 }
 
+/**
+ * Запись выбора ставки в rate_choices с историей. В интерфейсе выбор не меняется: выбранная ставка
+ * берётся из таблицы (сид, консоль базы, тесты), нажатием на карточку ставки её не сменить.
+ */
 export async function saveRateChoice(
   db: Db,
   args: { entityId: string; year: number; rate: number; userId: string },
@@ -108,14 +112,4 @@ export async function entityExists(db: Db, entityId: string): Promise<boolean> {
     .where(and(eq(legalEntities.id, entityId)))
     .limit(1);
   return rows.length > 0;
-}
-
-/** Режим налогообложения юрлица или null, если юрлица нет. */
-export async function entityTaxRegime(db: Db, entityId: string): Promise<string | null> {
-  const rows = await db
-    .select({ regime: legalEntities.taxRegime })
-    .from(legalEntities)
-    .where(eq(legalEntities.id, entityId))
-    .limit(1);
-  return rows[0]?.regime ?? null;
 }

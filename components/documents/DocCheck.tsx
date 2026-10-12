@@ -11,6 +11,16 @@ import { errorText, type TargetBody } from '@/components/provenance/client';
 import { SOURCE_LABEL } from '@/lib/documents/types';
 
 /**
+ * Источник значения одной строкой: подпись вида и пояснение не повторяются («Введено вручную» без
+ * второго «Введено вручную»), пометка «вымышленные, демо» из реквизитов не дублируется в каждой строке.
+ */
+function sourceText(label: string, detail: string): string {
+  const d = detail.replace(/\s*\(вымышленные, демо\)/, '').trim();
+  if (!d) return label;
+  return d.toLowerCase().startsWith(label.toLowerCase()) ? d : `${label}. ${d}`;
+}
+
+/**
  * «Проверить самому» для документа: каждое подставленное значение с источником и отметкой
  * «сверил». Отметки сохраняются в таблице checks (кто, что, когда) по ключу «документ и версия».
  */
@@ -77,7 +87,7 @@ export function DocCheck({ doc, onClose }: { doc: DocumentDetail; onClose: () =>
 
   return (
     <Overlay kind="screen" label="Проверить документ самому" onClose={onClose}>
-      <OverlayHead title="Проверить самому" sub={`Версия ${doc.shownVersion}, Демо-данные`} onClose={onClose} />
+      <OverlayHead title="Проверить самому" onClose={onClose} />
       <div className="ov-scroll">
         <p className="chk-intro">
           Каждое значение документа с источником. Сверьте и отметьте. Отметки сохраняются: кто, что и
@@ -111,8 +121,9 @@ export function DocCheck({ doc, onClose }: { doc: DocumentDetail; onClose: () =>
                     <b>{f.label}</b>
                     <span className="chk-val">{missing ? 'не заполнено' : value?.display}</span>
                     <small>
-                      {SOURCE_LABEL[value?.source ?? f.source]}
-                      {missing ? '' : `. ${doc.sources[f.key] ?? ''}`}
+                      {missing
+                        ? SOURCE_LABEL[value?.source ?? f.source]
+                        : sourceText(SOURCE_LABEL[value?.source ?? f.source], doc.sources[f.key] ?? '')}
                     </small>
                   </span>
                 </label>

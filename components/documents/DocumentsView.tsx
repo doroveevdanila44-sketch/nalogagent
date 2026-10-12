@@ -6,14 +6,7 @@ import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { errorText } from '@/components/provenance/client';
 import { shortDateTime } from '@/lib/provenance/line';
-import {
-  CATEGORIES,
-  CATEGORY_LABEL,
-  SAMPLE_NOTE,
-  STATUS_LABEL,
-  type DocumentSummary,
-  type TemplateCategory,
-} from '@/lib/documents/types';
+import { CATEGORIES, CATEGORY_LABEL, type DocumentSummary, type TemplateCategory } from '@/lib/documents/types';
 import type { Catalog, TemplateMeta } from './api';
 import { StartDocument } from './StartDocument';
 import { StatusChip } from './StatusChip';
@@ -22,7 +15,9 @@ type Tab = 'catalog' | 'mine';
 
 /**
  * Раздел «Документы»: каталог шаблонов (фильтр по категории, поиск) и мои документы со статусом,
- * версией и числом недостающих полей. Каждый шаблон это образец: «Образец, проверить юристом».
+ * версией и числом недостающих полей. Без повторов: метки «Демо-данные» и «Образец, проверить
+ * юристом» здесь нет (первая в шапке приложения, вторая в колонтитуле самого файла), подпись
+ * категории на карточке только когда фильтр «Все», число шаблонов не пишется.
  */
 export function DocumentsView() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -83,7 +78,6 @@ export function DocumentsView() {
     <div className="docs">
       <div className="sec-h" style={{ marginTop: 18 }}>
         <h1 id="h-docs">Документы</h1>
-        <p>Демо-данные. {SAMPLE_NOTE}</p>
       </div>
 
       <div className="seg-tabs" role="tablist" aria-label="Раздел документов">
@@ -122,13 +116,12 @@ export function DocumentsView() {
         <section id="panel-catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden={tab !== 'catalog'}>
           <div className="doc-filters">
             <label className="fld">
-              <span>Поиск по названию</span>
               <input
                 aria-label="Поиск по названию"
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Например: договор"
+                placeholder="Поиск по названию"
                 autoComplete="off"
               />
             </label>
@@ -155,9 +148,6 @@ export function DocumentsView() {
             </div>
           </div>
 
-          <p className="calc-note" role="status">
-            Шаблонов: {shown.length}
-          </p>
           {shown.length === 0 ? (
             <p className="statuses-empty sec" data-testid="templates-empty">
               По этому запросу шаблонов нет. Сбросьте фильтр или поиск.
@@ -168,15 +158,12 @@ export function DocumentsView() {
                 <li key={t.key} className="tpl" data-template={t.key}>
                   <div className="tpl-head">
                     <h2>{t.title}</h2>
-                    <span className="tpl-cat">{CATEGORY_LABEL[t.category]}</span>
+                    {category === 'all' ? <span className="tpl-cat">{CATEGORY_LABEL[t.category]}</span> : null}
                   </div>
                   <p className="tpl-desc">{t.description}</p>
                   <p className="tpl-meta">
                     {t.scope === 'group' ? 'По группе' : 'По юрлицу'}
                     {t.needsPeriod ? ', за период' : ''} · файл .{t.output} · полей: {t.fields}
-                  </p>
-                  <p className="tpl-sample">
-                    <span className="demo-chip">{SAMPLE_NOTE}</span>
                   </p>
                   <div className="acts">
                     <button type="button" className="act primary" data-action="fill" onClick={() => setStart(t)}>
@@ -215,8 +202,6 @@ export function DocumentsView() {
                   </p>
                   <p className="req-meta">
                     {d.missing > 0 ? `Не заполнено полей: ${d.missing}` : 'Обязательные поля заполнены'}
-                    {' · '}
-                    {STATUS_LABEL[d.status]}
                   </p>
                 </li>
               ))}

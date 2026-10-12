@@ -1,7 +1,7 @@
 import { dec } from '@/lib/calc/decimal';
 import { rub2 } from '@/lib/calc/format';
 import { moneyText } from '@/lib/calc/provenance';
-import { lineFromSnapshots, preciseDateTime, type SourceLineData } from './line';
+import { lineFromSnapshots, preciseDateTime, snapshotTitle, type SourceLineData } from './line';
 import { normLink, RULE_TITLE, type NormLink } from './norms';
 import type { CalcSnapshot, SnapshotStep } from './snapshot';
 
@@ -189,7 +189,7 @@ export function buildChecklist(snaps: CalcSnapshot[]): CheckSection[] {
 
     return {
       index,
-      title: `${s.taxName}, ${s.periodLabel}`,
+      title: snapshotTitle(s),
       total: s.total === null ? null : rub2(dec(s.total)),
       line: lineFromSnapshots([s]),
       words: wordsFor(s),
@@ -208,7 +208,7 @@ export function buildChecklist(snaps: CalcSnapshot[]): CheckSection[] {
 export function formulasText(snaps: CalcSnapshot[]): string {
   const lines: string[] = [];
   snaps.forEach((s, i) => {
-    const head = `${i > 0 ? '\n' : ''}${s.taxName}, ${s.periodLabel}`;
+    const head = `${i > 0 ? '\n' : ''}${snapshotTitle(s)}`;
     lines.push(head);
     lines.push(`Расчёт на ${preciseDateTime(s.at, s.tz)}. Демо-данные: цифры выдуманы.`);
     lines.push('Шаг\tЮрлицо\tФормула\tРезультат, ₽\tКак считается');

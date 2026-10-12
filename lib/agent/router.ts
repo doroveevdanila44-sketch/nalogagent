@@ -112,7 +112,13 @@ export function classify(
   // короткий ответ на уточнение или поправка к прежнему вопросу: «февраль», «УСН», «по Бете»
   if (opts.context && (opts.context.awaiting.length > 0 || opts.context.hasPrevious)) {
     const f = extractFields(question, { entities, today: opts.context.today });
-    const slot = f.all || f.entities.length > 0 || f.taxes.length > 0 || f.periods.length > 0 || f.rate !== null;
+    const slot =
+      f.all ||
+      f.entities.length > 0 ||
+      f.taxes.length > 0 ||
+      f.periods.length > 0 ||
+      f.rate !== null ||
+      f.growth !== null;
     if (f.fragment && slot) return { cls: 'A' };
   }
 

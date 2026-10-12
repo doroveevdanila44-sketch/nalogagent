@@ -1165,11 +1165,6 @@
     background: var(--color-lake);
     color: var(--color-ink);
   }
-  .chip.demo {
-    background: transparent;
-    border: 1px solid var(--color-accent);
-    color: var(--color-accent);
-  }
   .ent-m {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1239,19 +1234,10 @@
     border-color: var(--color-bad-line);
     color: var(--color-bad-deep);
   }
-  .rate.alt:hover {
-    border-color: var(--color-bad);
-  }
-  /* ОСНО: одна карточка НДС 22% с вычетами, не кнопка */
+  /* Карточки ставок не кнопки: выбранная ставка берётся из rate_choices, по нажатию не меняется.
+     Ни наведения, ни указателя-руки, ни подъёма. ОСНО: одна карточка НДС 22% с вычетами */
   .rates.single {
     grid-template-columns: 1fr;
-  }
-  .rate.static {
-    cursor: default;
-  }
-  .rate.static:hover {
-    transform: none;
-    box-shadow: none;
   }
   .taxblock {
     margin-top: 16px;
@@ -2225,22 +2211,6 @@
   .src-line.on-dark {
     color: var(--color-wine-sub);
   }
-  .demo-chip {
-    display: inline-block;
-    padding: 0 5px;
-    border: 1px solid var(--color-accent);
-    border-radius: 5px;
-    color: var(--color-accent);
-    font-size: 10px;
-    font-weight: 500;
-    line-height: 1.5;
-    white-space: nowrap;
-    vertical-align: 1px;
-  }
-  .src-line.on-dark .demo-chip {
-    border-color: var(--color-cream);
-    color: var(--color-cream);
-  }
   .sum-card .src-line {
     margin-top: 8px;
   }
@@ -3029,11 +2999,6 @@
     justify-content: space-between;
     gap: 2px 12px;
   }
-  .req-foot {
-    margin-top: 10px;
-    font-size: 11px;
-    color: var(--color-muted);
-  }
 
   /* ===== Документы ===== */
   .seg-tabs {
@@ -3178,9 +3143,6 @@
     margin-top: 6px;
     font-size: 12px;
     color: var(--color-muted);
-  }
-  .tpl-sample {
-    margin-top: 8px;
   }
   .tpl-pick {
     list-style: none;
@@ -3706,7 +3668,6 @@
   .icon-btn,
   .sum-item,
   .sug button,
-  .rate,
   .composer button,
   .composer textarea,
   .field input,
@@ -3745,10 +3706,6 @@
   .sug button:active:not(:disabled) {
     transform: scale(0.97);
   }
-  .rate:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 18px color-mix(in srgb, var(--color-ink) 14%, transparent);
-  }
   /* Подъём при наведении только там, где есть мышь: на телефоне после касания :hover залипает, и
      раскрытая карточка вместе с расшифровкой оставалась бы приподнятой */
   @media (hover: hover) {
@@ -3762,10 +3719,6 @@
   }
   .sum-item:has(> .sum-card:active) {
     transform: scale(0.99);
-  }
-  .rate:active {
-    transform: scale(0.99);
-    box-shadow: none;
   }
   .composer button:hover:not(:disabled) {
     transform: translateY(-1px);
@@ -3797,7 +3750,6 @@
     }
     .btn:hover,
     .sug button:active,
-    .rate:hover,
     .sum-item:has(> .sum-card:hover),
     .col.sel,
     .composer button:hover,

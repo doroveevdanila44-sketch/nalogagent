@@ -407,9 +407,12 @@ test('Курсоры, переходы 150-200 мс, нет левых поло�
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
 
   const cursor = (sel: string) => page.locator(sel).first().evaluate((e) => getComputedStyle(e).cursor);
-  for (const sel of ['.tab', '.rate', '.seg', '.icon-btn']) {
+  for (const sel of ['.tab', '.seg', '.icon-btn']) {
     expect(await cursor(sel), sel).toBe('pointer');
   }
+  // карточки ставок не кнопки: указателя-руки нет ни у зелёной, ни у красной
+  expect(await cursor('.rate.sel')).not.toBe('pointer');
+  expect(await cursor('.rate.alt')).not.toBe('pointer');
   await page.getByRole('link', { name: 'Агент' }).click();
   await expect(page.getByLabel('Вопрос агенту')).toBeVisible();
   expect(await cursor('.sug button')).toBe('pointer');
@@ -560,8 +563,10 @@ test('Баннеры группы: четыре отдельные на всех
   }
   await layout(360).then((r) => expect(r.overflow).toBe(false));
 
-  // «можно сэкономить» внутри карточки НДС
-  await expect(page.locator('.sum-card').nth(1)).toContainText(/можно сэкономить .* в год|ставки уже лучшие/);
+  // «можно сэкономить» внутри карточки НДС; когда экономить нечего, строки нет (цвет и метка говорят сами)
+  await expect(page.locator('.sum-card').nth(1)).toContainText(/можно сэкономить .* в год/);
+  await expect(page.locator('.sum-card').nth(1)).not.toContainText('ставки уже лучшие');
+  await expect(page.locator('.sum-card').nth(0)).not.toContainText('по всем юрлицам');
 });
 
 test('Баннеры группы нажимаются: расшифровка под баннером, один раскрыт, переход к карточкам юрлиц', async ({
@@ -677,11 +682,16 @@ test('Юрлица: режим тегом, ОСНО одной карточко�
   await expect(card('ИП Дельта').locator('.chip.regime')).toHaveText('УСН доходы, 6%');
   await expect(card('ООО «Гамма»').locator('.chip.regime')).toHaveText('УСН доходы минус расходы, 15%');
   await expect(card('ООО «Эпсилон»').locator('.chip.regime')).toHaveText('ОСНО, 25%');
-  await expect(card('ООО «Эпсилон»').locator('.chip.demo')).toHaveText('демо');
+  // пометки «демо» на карточке нет: это сказано в описании под названием и в шапке приложения
+  await expect(card('ООО «Эпсилон»').locator('.chip.demo')).toHaveCount(0);
 
   // УСН: три ставки НДС и блок налога по УСН
   const beta = card('ИП Бета');
-  await expect(beta.locator('button.rate')).toHaveCount(3);
+  await expect(beta.locator('.rate')).toHaveCount(3);
+  await expect(beta.locator('button.rate')).toHaveCount(0);
+  await expect(beta.locator('.rate.sel')).toHaveCount(1);
+  // режим и ставка в блоке налога не повторяются: они в тегах карточки
+  await expect(beta.locator('.taxblock dt', { hasText: /^(Режим|Ставка)$/ })).toHaveCount(0);
   await expect(beta.locator('.taxblock h4')).toHaveText('Налог по УСН, прогноз');
   await expect(beta.locator('.taxblock')).toContainText('Ближайший платёж');
   await expect(beta.locator('.taxblock')).toContainText('28 октября');
@@ -690,14 +700,14 @@ test('Юрлица: режим тегом, ОСНО одной карточко�
   // ОСНО: одна карточка НДС 22% с вычетами и блок налога на прибыль
   const eps = card('ООО «Эпсилон»');
   await expect(eps.locator('button.rate')).toHaveCount(0);
-  await expect(eps.locator('.rate.sel.static')).toContainText('НДС 22%');
-  await expect(eps.locator('.rate.sel.static')).toContainText('С вычетами');
+  await expect(eps.locator('.rate')).toHaveCount(1);
+  await expect(eps.locator('.rate.sel')).toContainText('НДС 22%');
+  await expect(eps.locator('.rate.sel')).toContainText('С вычетами');
   await expect(eps.locator('.taxblock h4')).toHaveText('Налог на прибыль, прогноз');
-  await expect(eps.locator('.taxblock')).toContainText('25%');
   await expect(eps.locator('.taxblock-note')).toContainText('прибыль');
 
   // «Начислено» растёт вместе с выручкой
-  const accrued = eps.locator('.taxblock dd').nth(2);
+  const accrued = eps.locator('.taxblock dd').nth(0);
   const first = await accrued.innerText();
   await page.waitForTimeout(3000);
   expect(await accrued.innerText()).not.toBe(first);
@@ -706,13 +716,13 @@ test('Юрлица: режим тегом, ОСНО одной карточко�
   await expect(page.locator('.warn', { hasText: 'ООО «Эпсилон» на ОСНО: прогноз налога на прибыль за год' })).toBeVisible();
   await expect(page.locator('.warn', { hasText: /\d{1,2} [а-я]+: .*(УСН|НДС)/ }).first()).toBeVisible();
 
-  // сервер не принимает выбор ставки для ОСНО
+  // маршрута смены ставки нет: сервер не принимает выбор ни для кого
   const st = await (await page.request.get('/api/auth/state')).json();
   const res = await page.request.post('/api/rates', {
     headers: { 'x-csrf-token': st.csrf, origin: 'http://localhost:3101' },
     data: { entityId: 'epsilon', rate: 5 },
   });
-  expect(res.status()).toBe(422);
+  expect(res.status()).toBe(404);
 });
 
 test('Касание тонкого сегмента на телефоне: область не меньше 40 px, выбирается сегмент под пальцем', async ({ browser }) => {

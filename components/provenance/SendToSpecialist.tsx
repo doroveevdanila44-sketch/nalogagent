@@ -11,7 +11,7 @@ import { errorText, type TargetBody } from './client';
 import { Overlay, OverlayHead } from './Overlay';
 import { SourceLine } from './SourceLine';
 import { useSnapshots } from './useSnapshots';
-import { lineFromSnapshots, shortDateTime } from '@/lib/provenance/line';
+import { lineFromSnapshots, shortDateTime, snapshotTitle } from '@/lib/provenance/line';
 
 export const DEMO_MAIL_NOTE = 'Демо: письмо не отправляется';
 
@@ -65,7 +65,7 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
 
   return (
     <Overlay kind="modal" label="Передать специалисту" onClose={onClose}>
-      <OverlayHead title="Передать специалисту" sub={DEMO_MAIL_NOTE} onClose={onClose} />
+      <OverlayHead title="Передать специалисту" onClose={onClose} />
       <div className="ov-scroll">
         <p className="demo-banner" data-testid="demo-mail-note">
           {DEMO_MAIL_NOTE}. Запрос сохранится в разделе «Статусы», получатель ничего не получит.
@@ -99,7 +99,7 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
                 </div>
               ) : null}
             </dl>
-            <p className="calc-note">{DEMO_MAIL_NOTE}. К запросу приложены снимок расчёта и файл Excel.</p>
+            <p className="calc-note">К запросу приложены снимок расчёта и файл Excel.</p>
             <div className="acts" role="group" aria-label="Что дальше">
               <Link className="act" href="/statuses" prefetch={false} onClick={onClose}>
                 Открыть статусы
@@ -126,9 +126,8 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
                 <ul className="send-totals">
                   {snaps.map((s, i) => (
                     <li key={i}>
-                      <span>
-                        {s.taxName}, {s.periodLabel}
-                      </span>
+                      {/* один расчёт уже назван заголовком выше */}
+                      <span>{snaps.length === 1 ? 'Итог' : snapshotTitle(s)}</span>
                       <b>{s.total === null ? 'не рассчитано' : rub2(dec(s.total))}</b>
                     </li>
                   ))}
@@ -190,7 +189,6 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
                 Отмена
               </button>
             </div>
-            <p className="calc-note">{DEMO_MAIL_NOTE}.</p>
           </>
         )}
       </div>
