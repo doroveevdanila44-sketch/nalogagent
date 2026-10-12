@@ -108,6 +108,7 @@ export function DashboardView() {
         live={live}
         stat={stat}
         lines={payload.provenance.banners}
+        breakdown={payload.provenance.breakdown}
         year={payload.provenance.year}
         getAt={getAt}
       />

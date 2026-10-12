@@ -352,7 +352,7 @@ function TourRun({ onClose }: { onClose: () => void }) {
           <button type="button" className="tour-skip" data-action="tour-skip" onClick={finish}>
             Пропустить
           </button>
-          <button type="button" className="act" data-action="tour-back" disabled={index === 0} onClick={back}>
+          <button type="button" className="act ghost" data-action="tour-back" disabled={index === 0} onClick={back}>
             Назад
           </button>
           <button type="button" className="act primary" data-action="tour-next" data-tour-primary onClick={next}>

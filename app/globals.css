@@ -345,9 +345,11 @@
     color: var(--color-ink);
     font-weight: 600;
   }
+  /* Компьютер: боковая панель на всю высоту окна от самого верха, шапка правее неё (от правого края
+     панели до правого края окна), контент правее панели. Первая вкладка стоит на уровне шапки. */
   @media (min-width: 760px) {
     .tabs {
-      top: var(--header-h);
+      top: 0;
       right: auto;
       bottom: 0;
       width: var(--side-w);
@@ -356,18 +358,29 @@
       align-items: stretch;
       justify-content: flex-start;
       gap: 6px;
-      padding: 12px 8px;
+      padding: calc(var(--safe-top) + 8px) 8px 12px;
     }
     .tab {
       min-height: 72px;
       gap: 6px;
     }
-    /* Контент сдвинут на ширину панели, нижнего отступа под панель на компьютере нет */
+    .top {
+      margin-left: var(--side-w);
+    }
+    /* Контент сдвинут на ширину панели, нижнего отступа под панель на компьютере нет. Боковые поля
+       одинаковые слева и справа и не зависят от ширины окна: 24 px, от 1280 px 32 px. */
     .app-body {
       padding-left: var(--side-w);
     }
     .app-main {
+      max-width: none;
+      padding-inline: 24px;
       padding-bottom: 24px;
+    }
+  }
+  @media (min-width: 1280px) {
+    .app-main {
+      padding-inline: 32px;
     }
   }
 
@@ -632,6 +645,145 @@
     outline-offset: -2px;
   }
 
+  /* Цвета баннеров. «Выручка с начала года» и «НДС начислен» бордо; «НДС за год» бежевый с обводкой и
+     бордовым текстом; «Налог на прибыль за год» мятный с тёмным текстом (контраст не ниже 4,5:1).
+     Расшифровка раскрывается в цветах своего баннера, на бежевом и мятном строки на тон темнее. */
+  .sum-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    vertical-align: 1px;
+  }
+  .sum-card[data-card='vatForecast'] {
+    padding: 15px;
+    border: 1px solid var(--color-line);
+    background: var(--color-soft);
+    color: var(--color-wine);
+  }
+  .sum-card[data-card='profit'] {
+    background: var(--color-lake);
+    color: var(--color-ink);
+  }
+  .sum-card[data-card='vatForecast'] .sum-label,
+  .sum-card[data-card='vatForecast'] .sum-sub,
+  .sum-card[data-card='vatForecast'] .src-line {
+    color: var(--color-wine);
+  }
+  .sum-card[data-card='profit'] .sum-label,
+  .sum-card[data-card='profit'] .sum-sub,
+  .sum-card[data-card='profit'] .src-line {
+    color: var(--color-ink);
+  }
+  .sum-card[data-card='vatForecast'] .sum-chev {
+    stroke: var(--color-wine);
+  }
+  .sum-card[data-card='profit'] .sum-chev {
+    stroke: var(--color-ink);
+  }
+  .sum-item[data-card='vatForecast'].open,
+  .sum-item[data-card='profit'].open {
+    box-shadow: 0 0 0 2px var(--color-wine);
+  }
+  .sum-detail[data-card='vatForecast'],
+  .sum-detail[data-card='profit'] {
+    color: var(--color-ink);
+  }
+  .sum-detail[data-card='vatForecast'] {
+    border: 1px solid var(--color-line);
+    border-top: 0;
+    background: var(--color-soft);
+  }
+  .sum-detail[data-card='profit'] {
+    background: var(--color-lake);
+  }
+  .sum-detail[data-card='vatForecast'] li {
+    background: color-mix(in srgb, var(--color-soft) 91%, var(--color-ink));
+  }
+  .sum-detail[data-card='profit'] li {
+    background: color-mix(in srgb, var(--color-lake) 86%, var(--color-ink));
+  }
+  .sum-detail[data-card='vatForecast'] h3,
+  .sum-detail[data-card='vatForecast'] h4,
+  .sum-detail[data-card='vatForecast'] li,
+  .sum-detail[data-card='vatForecast'] .sum-row-name small,
+  .sum-detail[data-card='vatForecast'] .sum-note,
+  .sum-detail[data-card='vatForecast'] .sum-more,
+  .sum-detail[data-card='profit'] h3,
+  .sum-detail[data-card='profit'] h4,
+  .sum-detail[data-card='profit'] li,
+  .sum-detail[data-card='profit'] .sum-row-name small,
+  .sum-detail[data-card='profit'] .sum-note,
+  .sum-detail[data-card='profit'] .sum-more {
+    color: var(--color-ink);
+  }
+  .sum-detail[data-card='vatForecast'] .sum-row-name i,
+  .sum-detail[data-card='profit'] .sum-row-name i {
+    border-color: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  }
+
+  /* Разбивка по месяцам в расшифровке: месяц, налог, пометка «факт», «идёт» или «прогноз» */
+  .sum-detail h4 {
+    margin: 14px 2px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-cream);
+  }
+  .bd-months {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  @media (min-width: 640px) {
+    .bd-months {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .sum-detail .bd-months li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 2px 8px;
+    padding: 8px 10px;
+  }
+  .sum-detail .bd-months li b {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    font-size: 15px;
+  }
+  .sum-detail .bd-months li small {
+    grid-column: 1 / -1;
+    font-size: 12px;
+  }
+  .bd-name {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .bd-pill {
+    justify-self: end;
+    padding: 0 6px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .bd-months li[data-status='fact'] .bd-pill {
+    background: color-mix(in srgb, currentColor 18%, transparent);
+  }
+  .bd-months li[data-status='forecast'] .bd-pill {
+    border-style: dashed;
+  }
+  .sum-row-name small + small {
+    margin-top: 1px;
+  }
+
   /* Компьютер: четыре отдельные карточки в одном ряду (четыре равные колонки, зазор 16 px, радиус
      22 px), над ними строка заголовка без фона. Расшифровка общей панелью под рядом. */
   @media (min-width: 1024px) {
@@ -669,6 +821,11 @@
     .sum-card.open {
       box-shadow: inset 0 0 0 2px var(--color-lemon);
     }
+    /* на бежевом и мятном лимонная обводка не видна: бордовая */
+    .sum-card[data-card='vatForecast'].open,
+    .sum-card[data-card='profit'].open {
+      box-shadow: inset 0 0 0 2px var(--color-wine);
+    }
   }
   /* Панель расшифровки под рядом карточек (компьютер, от 1024 px). Высоту ставит и плавно меняет код
      (GroupSummary): 450 мс; новое содержимое мягко проявляется. */
@@ -691,9 +848,17 @@
     border-radius: 22px;
   }
   /* строки расшифровки стоят в ряд: пять юрлиц на всю ширину панели */
-  .sum-panel .sum-detail ul {
+  .sum-panel .sum-detail ul.sum-rows {
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 8px;
+  }
+  /* двенадцать месяцев двумя рядами по шесть */
+  .sum-panel .bd-months {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .sum-panel .sum-detail[data-card='vatForecast'] {
+    border-top: 1px solid var(--color-line);
   }
 
   /* Предупреждения: в списке заголовок, метка и стрелка, пояснение раскрывается по строке. Список
@@ -1352,6 +1517,29 @@
     /* положение от нижнего края ведёт код чата; встроенная привязка прокрутки с ним спорит */
     overflow-anchor: none;
   }
+  /* Компьютер: полоса прокрутки не перекрывает пузыри и не сдвигает их. Место под неё занято с обеих
+     сторон, поэтому левый и правый отступы списка равны; блок под списком занимает то же место. */
+  @media (min-width: 760px) {
+    .chat-scroll {
+      overflow-x: hidden;
+      scrollbar-gutter: stable both-edges;
+    }
+    .composer-wrap {
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-gutter: stable both-edges;
+      /* поля на 4 px: обводка фокуса у края не обрезается; линия сверху остаётся по ширине списка */
+      margin-inline: -4px;
+      padding-inline: 4px;
+      border-top: 0;
+      background:
+        linear-gradient(var(--color-line), var(--color-line)) 4px 0 / calc(100% - 8px) 1px no-repeat,
+        var(--color-page);
+    }
+    .msg {
+      max-width: min(720px, 80%);
+    }
+  }
   .chat-empty {
     display: flex;
     align-items: center;
@@ -1544,13 +1732,14 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  /* Быстрые ответы в цвете подсказок чата: бордо, светлый текст, высота 36 px */
+  /* Быстрые ответы: невыбранные белые с обводкой, выбранный (то, как агент понял вопрос) бордо.
+     Высота 36 px. */
   .qreply {
     height: 36px;
     max-width: 100%;
-    background: var(--color-wine);
-    border: 1px solid var(--glass-edge);
-    color: var(--color-cream);
+    background: var(--color-page);
+    border: 1px solid var(--color-line);
+    color: var(--color-ink);
     border-radius: 999px;
     padding: 0 14px;
     font-size: 14px;
@@ -1562,13 +1751,22 @@
       transform var(--t),
       opacity var(--t);
   }
+  .qreply.on {
+    background: var(--color-wine);
+    border-color: var(--color-wine);
+    color: var(--color-cream);
+  }
   @media (hover: hover) {
     .qreply:hover:not(:disabled) {
+      border-color: var(--color-wine-hover);
       background: var(--color-wine-hover);
+      color: var(--color-cream);
     }
   }
   .qreply:active:not(:disabled) {
+    border-color: var(--color-wine-hover);
     background: var(--color-wine-hover);
+    color: var(--color-cream);
     transform: scale(0.97);
   }
   .qreply:disabled {
@@ -1730,9 +1928,17 @@
     padding: 0 16px;
     border: 0;
     border-radius: 12px;
-    background: var(--color-ink);
-    color: var(--color-on-ink);
+    background: var(--color-wine);
+    color: var(--color-cream);
     font-weight: 500;
+  }
+  @media (hover: hover) {
+    .composer button:hover:not(:disabled) {
+      background: var(--color-wine-hover);
+    }
+  }
+  .composer button:active:not(:disabled) {
+    background: var(--color-wine-hover);
   }
   .composer button:disabled {
     opacity: 0.55;
@@ -2230,6 +2436,8 @@
     gap: 8px;
     margin-top: 12px;
   }
+  /* Основные кнопки действий («Заполнить», «Отправить», «Выгрузить в Excel» и подобные): бордо, светлый
+     текст, при наведении на тон светлее, при нажатии уменьшение до 0,97 */
   .act {
     flex: 1 1 140px;
     display: inline-flex;
@@ -2238,10 +2446,10 @@
     min-width: 0;
     min-height: 44px;
     padding: 6px 14px;
-    border: 1px solid var(--color-ink);
+    border: 1px solid var(--color-wine);
     border-radius: 12px;
-    background: var(--color-page);
-    color: var(--color-ink);
+    background: var(--color-wine);
+    color: var(--color-cream);
     font-size: 14px;
     font-weight: 500;
     line-height: 1.2;
@@ -2259,23 +2467,33 @@
   }
   @media (hover: hover) {
     .act:hover:not(:disabled) {
-      background: var(--color-mint);
+      border-color: var(--color-wine-hover);
+      background: var(--color-wine-hover);
     }
   }
   .act:active:not(:disabled) {
-    transform: scale(0.98);
+    border-color: var(--color-wine-hover);
+    background: var(--color-wine-hover);
+    transform: scale(0.97);
   }
   .act:disabled {
     opacity: 0.55;
   }
-  .act.primary {
-    background: var(--color-ink);
-    color: var(--color-on-ink);
+  /* Второстепенное действие рядом с основным («Назад» в обучении): белая кнопка с обводкой */
+  .act.ghost {
+    border-color: var(--color-line);
+    background: var(--color-page);
+    color: var(--color-ink);
   }
   @media (hover: hover) {
-    .act.primary:hover:not(:disabled) {
-      background: var(--color-accent);
+    .act.ghost:hover:not(:disabled) {
+      border-color: var(--color-line);
+      background: var(--color-mint);
     }
+  }
+  .act.ghost:active:not(:disabled) {
+    border-color: var(--color-line);
+    background: var(--color-mint);
   }
   .acts.on-dark .act {
     background: var(--color-wine-soft);
@@ -2303,9 +2521,6 @@
   }
   .msg .acts {
     margin-top: 10px;
-  }
-  .msg .act {
-    background: var(--color-page);
   }
 
   /* Окна: панель расчёта, экран проверки, передача специалисту */
@@ -2524,9 +2739,9 @@
     line-height: 1.25;
   }
   .calc-tab.on {
-    background: var(--color-ink);
-    border-color: var(--color-ink);
-    color: var(--color-on-ink);
+    background: var(--color-wine);
+    border-color: var(--color-wine);
+    color: var(--color-cream);
   }
   .kv-list {
     list-style: none;
@@ -3016,9 +3231,9 @@
     font-weight: 500;
   }
   .seg-tabs button.on {
-    background: var(--color-ink);
-    border-color: var(--color-ink);
-    color: var(--color-on-ink);
+    background: var(--color-wine);
+    border-color: var(--color-wine);
+    color: var(--color-cream);
   }
   .fld {
     display: block;
@@ -3097,9 +3312,9 @@
     font-weight: 500;
   }
   .filter.on {
-    background: var(--color-ink);
-    border-color: var(--color-ink);
-    color: var(--color-on-ink);
+    background: var(--color-wine);
+    border-color: var(--color-wine);
+    color: var(--color-cream);
   }
   .tpl-list {
     list-style: none;
@@ -3643,6 +3858,21 @@
     border-color: var(--color-bad);
   }
 
+  /* ===== Компьютер: единый вертикальный ритм ===== */
+  /* Первый блок страницы стоит на 18 px ниже шапки на всех экранах (у страницы документа было 14 px).
+     Блоки внутри каталога документов разделены одинаково, 14 px (было 14, 6, 10 и 10). */
+  @media (min-width: 760px) {
+    .doc-back {
+      margin-top: 18px;
+    }
+    .seg-tabs,
+    .doc-filters,
+    .chips-row,
+    .tpl-list {
+      margin-top: 14px;
+    }
+  }
+
   /* ===== Обучение: затемнение с вырезом и карточка шага ===== */
   .tour {
     position: fixed;
@@ -3786,6 +4016,11 @@
     }
     .sum-item.open:has(> .sum-card:hover) {
       box-shadow: 0 0 0 2px var(--color-lake), 0 10px 22px color-mix(in srgb, var(--color-ink) 22%, transparent);
+    }
+    /* у бежевого и мятного баннера обводка открытого бордовая и при наведении */
+    .sum-item[data-card='vatForecast'].open:has(> .sum-card:hover),
+    .sum-item[data-card='profit'].open:has(> .sum-card:hover) {
+      box-shadow: 0 0 0 2px var(--color-wine), 0 10px 22px color-mix(in srgb, var(--color-ink) 22%, transparent);
     }
   }
   .sum-item:has(> .sum-card:active) {

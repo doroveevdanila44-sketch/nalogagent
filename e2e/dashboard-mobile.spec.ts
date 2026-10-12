@@ -543,7 +543,7 @@ test.describe('Компьютер', () => {
         heights: new Set(boxes.map((b) => Math.round(b.height))).size,
         bgs: cards.map((e) => getComputedStyle(e).backgroundColor),
         radii: cards.map((e) => getComputedStyle(e).borderTopLeftRadius),
-        labels: cards.map((e) => e.querySelector('.sum-label')!.textContent),
+        labels: cards.map((e) => (e.querySelector('.sum-label')!.firstChild?.textContent ?? '').trim()),
         values: cards.map((e) => e.querySelector('.sum-value')!.textContent),
         subs: cards.map((e) => e.querySelector('.sum-sub')?.textContent ?? ''),
         headBg: hcs.backgroundColor,
@@ -559,21 +559,21 @@ test.describe('Компьютер', () => {
     expect(Math.max(...m.widths) - Math.min(...m.widths)).toBeLessThanOrEqual(1); // четыре равные колонки
     expect(m.gaps).toEqual([16, 16, 16]);
     expect(m.heights).toBe(1);
-    expect(m.bgs).toEqual([WINE, WINE, WINE, WINE]); // у каждой свой фон
+    // у каждой свой фон: бордо, бордо, бежевый #FFF8D6, мятный #A0D2A8
+    expect(m.bgs).toEqual([WINE, WINE, 'rgb(255, 248, 214)', LAKE]);
     expect(m.radii).toEqual(['22px', '22px', '22px', '22px']);
-    expect(m.labels).toEqual([
-      'Выручка с начала года',
-      'НДС начислен',
-      'Прогноз НДС за год',
-      'Налог на прибыль: прогноз за год',
-    ]);
+    expect(m.labels[0]).toBe('Выручка с начала года');
+    expect(m.labels[1]).toBe('НДС начислен');
+    expect(m.labels[2]).toMatch(/^НДС за \d{4} год$/);
+    expect(m.labels[3]).toMatch(/^Налог на прибыль за \d{4} год$/);
     for (const v of m.values) expect(v && v.length > 0).toBe(true);
     // пояснения только там, где они добавляют сказанное: у выручки его нет, у НДС оно есть,
     // пока можно сэкономить; «по всем юрлицам» и «ставки уже лучшие» не пишутся
     expect(m.subs[0]).toBe('');
     expect(m.subs[1]).toMatch(/^(можно сэкономить .* в год)?$/);
-    expect(m.subs[2]).toBe('по выбранным ставкам');
-    expect(m.subs[3]).toMatch(/^УСН по остальным юрлицам: .* в год$/);
+    // у прогнозов факт с начала года и остаток по сезонности из того же расчёта
+    expect(m.subs[2]).toMatch(/^факт [\d,]+.млн \+ остаток [\d,]+.млн$/);
+    expect(m.subs[3]).toMatch(/^Эпсилон, ОСНО: факт [\d,]+.млн \+ остаток [\d,]+.млн$/);
     expect(m.headBg).toBe('rgba(0, 0, 0, 0)'); // строка заголовка без фона
     expect(m.headAbove).toBe(true);
     expect(m.clipped).toBe(false);
@@ -618,7 +618,7 @@ test.describe('Компьютер', () => {
     await settle(page);
     await expect(cards.nth(3)).toHaveAttribute('aria-expanded', 'true');
     await expect(panel).toBeVisible();
-    await expect(page.locator('#sum-panel .sum-detail h3')).toHaveText('Налог на прибыль и УСН за год по юрлицам');
+    await expect(page.locator('#sum-panel .sum-detail h3')).toHaveText(/^Налог на прибыль и УСН за \d{4} год: по юрлицам$/);
     const open = await geo();
     expect(open.cardTops).toEqual(closed.cardTops);
     expect(Math.abs(open.panelTop - open.listBottom)).toBeLessThanOrEqual(1); // сразу под рядом
@@ -645,10 +645,11 @@ test.describe('Компьютер', () => {
         regions: document.querySelectorAll('[role="region"][id^="sum-"]').length,
       };
     });
-    expect(look.bg).toBe(WINE);
-    expect(look.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
-    expect(look.rowBg).not.toBe(WINE); // строки на тон светлее
-    expect(look.ring).toContain('rgb(255, 243, 178)'); // обводка #FFF3B2
+    // налог на прибыль мятный: расшифровка в его цветах, строки темнее, обводка бордовая
+    expect(look.bg).toBe(LAKE);
+    expect(look.color).toBe('rgb(42, 43, 20)'); // #2A2B14
+    expect(look.rowBg).not.toBe(LAKE);
+    expect(look.ring).toContain(WINE);
     expect(look.ring).toContain('2px');
     expect(look.chev).toMatch(/^matrix\(-1,/); // стрелка повёрнута
     expect(look.panelAnim).toEqual({ prop: 'height', dur: '0.45s', fn: 'cubic-bezier(0.22, 1, 0.36, 1)' });
@@ -724,8 +725,9 @@ test.describe('Компьютер', () => {
       expect(m.right, `${width}`).toBe(16);
       expect(m.w).toBe(44);
       expect(m.h).toBe(44);
-      expect(m.topW).toBe(m.vw); // шапка на всю ширину окна
-      expect(Math.abs(m.markCx - m.vw / 2)).toBeLessThanOrEqual(1); // знак по центру окна
+      // шапка правее боковой панели (96 px) до правого края окна, знак по центру шапки
+      expect(m.topW).toBe(m.vw - 96);
+      expect(Math.abs(m.markCx - (96 + m.vw) / 2)).toBeLessThanOrEqual(1);
       expect(Math.abs(m.cy - m.headH / 2)).toBeLessThanOrEqual(1); // кнопка по центру строки шапки
     }
 

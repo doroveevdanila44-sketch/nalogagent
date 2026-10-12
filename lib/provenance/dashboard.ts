@@ -28,11 +28,32 @@ export interface EntityLines {
   conditional: boolean;
 }
 
+/** Месяц в разбивке баннера: налог из результата calcTax и пометка, факт это или прогноз. */
+export interface BreakdownMonth {
+  /** «янв», «фев»... */
+  short: string;
+  /** «январь 2026» */
+  label: string;
+  /** fact: месяц закрыт, partial: идёт, forecast: прогноз по сезонности */
+  status: 'fact' | 'partial' | 'forecast';
+  /** Налог месяца по группе (НДС, у баннера прибыли налог на прибыль) */
+  amount: string | null;
+  /** У баннера прибыли: налог по УСН за тот же месяц */
+  extra: string | null;
+}
+
+/** Разбивка по месяцам для баннеров «НДС за год» и «Налог на прибыль за год». */
+export interface BannerBreakdown {
+  months: BreakdownMonth[];
+}
+
 export interface DashboardProvenance {
   year: number;
   banners: Record<BannerId, SourceLineData>;
   chart: SourceLineData;
   entities: Record<string, EntityLines>;
+  /** Месяцы факт и прогноз, из тех же расчётов calcTax за год */
+  breakdown: Record<'vatForecast' | 'profit', BannerBreakdown>;
 }
 
 export type DashboardResponse = DashboardPayload & { provenance: DashboardProvenance };
@@ -113,5 +134,24 @@ export function buildDashboardProvenance(data: CalcData, tz: string, at: number)
     };
   }
 
-  return { year, banners, chart: lineFromSnapshots([vatYear]), entities };
+  // Разбивка по месяцам: налог каждого месяца группы из расчёта за год, статус месяца оттуда же
+  const monthsOf = (main: CalcSnapshot, extra?: CalcSnapshot): BreakdownMonth[] =>
+    main.months.map((m, i) => ({
+      short: m.label.split(' ')[0]!.slice(0, 3),
+      label: m.label,
+      status: m.status,
+      amount: m.tax,
+      extra: extra?.months[i]?.tax ?? null,
+    }));
+
+  return {
+    year,
+    banners,
+    chart: lineFromSnapshots([vatYear]),
+    entities,
+    breakdown: {
+      vatForecast: { months: monthsOf(vatYear) },
+      profit: { months: monthsOf(profitYear, usnYear) },
+    },
+  };
 }

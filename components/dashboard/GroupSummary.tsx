@@ -4,8 +4,10 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from '
 import { useMediaQuery } from '@/lib/client/media';
 import { entityColor } from '@/lib/theme';
 import {
+  ZERO,
   dateRu,
   dateRuYear,
+  dec,
   mln,
   rub,
   rub2,
@@ -17,8 +19,8 @@ import {
 import { CalcActions } from '@/components/provenance/CalcActions';
 import { SourceLine } from '@/components/provenance/SourceLine';
 import { sourceLineText, type SourceLineData } from '@/lib/provenance/line';
-import { bannerQueries } from '@/lib/provenance/dashboard';
-import { groupCaption, groupMetrics, type GroupMetricId } from './group-metrics';
+import { bannerQueries, type DashboardProvenance } from '@/lib/provenance/dashboard';
+import { factPlusRest, groupCaption, groupMetrics, type GroupMetric, type GroupMetricId } from './group-metrics';
 
 type CardId = GroupMetricId;
 
@@ -29,6 +31,8 @@ interface Props {
   stat: StaticModel;
   /** Строки происхождения под баннерами (из результатов calcTax) */
   lines: Record<GroupMetricId, SourceLineData>;
+  /** Месяцы факт и прогноз для баннеров «НДС за год» и «Налог на прибыль за год» (calcTax за год) */
+  breakdown: DashboardProvenance['breakdown'];
   /** Год расчёта: для запросов «за год» */
   year: number;
   /** Момент (мс UTC), на который сейчас показаны цифры */
@@ -88,7 +92,7 @@ function SumPanel({ openId, render }: { openId: CardId | null; render: (id: Card
  * Раскрыта одна, повторное нажатие закрывает, при нажатии на другую открывается она. Из расшифровки
  * можно перейти к карточкам юрлиц. Живые значения идут из LiveModel.
  */
-export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: Props) {
+export function GroupSummary({ moment, input, live, stat, lines, breakdown, year, getAt }: Props) {
   const [open, setOpen] = useState<CardId | null>(null);
   const wide = useMediaQuery('(min-width: 1024px)');
   const { entities } = input;
@@ -104,11 +108,11 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
 
   const payerNames = entities.filter((e) => e.status === 'payer');
 
-  const metrics = groupMetrics(live, stat, entities);
+  const metrics = groupMetrics(live, stat, entities, year);
   const texts = metrics.map((m) => sourceLineText(lines[m.id]));
   const sharedLine = texts.every((t) => t === texts[0]);
 
-  type Row = { id: string; name: string; color: string; tag: string; value: string };
+  type Row = { id: string; name: string; color: string; tag: string; value: string; note?: string };
   const detail: Record<CardId, { title: string; rows: Row[] }> = {
     revenue: {
       title: 'Выручка с начала года по юрлицам',
@@ -134,20 +138,22 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
       }),
     },
     vatForecast: {
-      title: 'Прогноз НДС за год по юрлицам',
+      title: `НДС за ${year} год: по юрлицам`,
       rows: entities.map((e) => {
         const s = stat.perEntity[e.id]!;
+        const payer = e.status === 'payer';
         return {
           id: e.id,
           name: e.name,
           color: entityColor(e),
-          tag: e.status === 'payer' ? (e.taxRegime === 'osno' ? '22% с вычетами' : `ставка ${s.selected}%`) : 'освобождено',
+          tag: payer ? (e.taxRegime === 'osno' ? '22% с вычетами' : `ставка ${s.selected}%`) : 'освобождено',
           value: mln(s.forecast[s.selected]!, 2),
+          note: payer ? factPlusRest(live.perEntity[e.id]!.accrued[s.selected] ?? ZERO, s.forecast[s.selected]!) : undefined,
         };
       }),
     },
     profit: {
-      title: 'Налог на прибыль и УСН за год по юрлицам',
+      title: `Налог на прибыль и УСН за ${year} год: по юрлицам`,
       rows: entities.map((e) => {
         const t = stat.perEntity[e.id]!.incomeTax;
         return {
@@ -156,6 +162,7 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
           color: entityColor(e),
           tag: `${t.label}, ${t.ratePct.toString()}%`,
           value: mln(t.forecast, 2),
+          note: factPlusRest(live.perEntity[e.id]!.incomeTaxAccrued, t.forecast),
         };
       }),
     },
@@ -171,13 +178,18 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
       .join('; ') +
     '.';
 
+  const STATUS_WORD = { fact: 'факт', partial: 'идёт', forecast: 'прогноз' } as const;
+
   /** Содержимое расшифровки: общее для панели под рядом и для раскрытия по месту */
   const renderDetail = (id: CardId, inCell: boolean) => {
     const d = detail[id];
+    const months = id === 'vatForecast' || id === 'profit' ? breakdown[id].months : null;
+    // на бежевом и мятном баннере расшифровка в его цветах, кнопки светлого вида
+    const light = id === 'vatForecast' || id === 'profit';
     return (
-      <div className={inCell ? 'sum-detail acc-body' : 'sum-detail'}>
+      <div className={inCell ? 'sum-detail acc-body' : 'sum-detail'} data-card={id}>
         <h3>{d.title}</h3>
-        <ul>
+        <ul className="sum-rows">
           {d.rows.map((r) => (
             <li key={r.id}>
               <span className="sum-row-name">
@@ -185,15 +197,31 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
                 <span>
                   {r.name}
                   <small>{r.tag}</small>
+                  {r.note ? <small data-testid="row-note">{r.note}</small> : null}
                 </span>
               </span>
               <b>{r.value}</b>
             </li>
           ))}
         </ul>
+        {months ? (
+          <>
+            <h4>По месяцам{id === 'profit' ? ': налог на прибыль и УСН' : ''}</h4>
+            <ul className="bd-months" data-testid={`months-${id}`}>
+              {months.map((m) => (
+                <li key={m.label} data-status={m.status}>
+                  <span className="bd-name">{m.short}</span>
+                  <b>{m.amount === null ? 'нет данных' : mln(dec(m.amount), 2)}</b>
+                  <span className="bd-pill">{STATUS_WORD[m.status]}</span>
+                  {m.extra !== null ? <small>УСН {mln(dec(m.extra), 2)}</small> : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
         {id === 'profit' && <p className="sum-note">{profitNote}</p>}
         <CalcActions
-          tone="dark"
+          tone={light ? 'light' : 'dark'}
           focus={id === 'revenue' ? 'revenue' : 'tax'}
           label={`Действия с расчётом: ${d.title}`}
           getTarget={() => ({ queries: bannerQueries(id, year), at: getAt() })}
@@ -206,21 +234,29 @@ export function GroupSummary({ moment, input, live, stat, lines, year, getAt }: 
   };
 
   /** Карточка; на телефоне и планшете вместе с расшифровкой в одной ячейке списка */
-  const item = ({ id, label, value, sub }: { id: CardId; label: string; value: string; sub: string }) => {
+  const item = ({ id, label, tag, value, sub }: GroupMetric) => {
     const isOpen = open === id;
     return (
-      <div key={id} className={`sum-item ${!wide && isOpen ? 'open' : ''}`}>
+      <div key={id} className={`sum-item ${!wide && isOpen ? 'open' : ''}`} data-card={id}>
         <button
           type="button"
           id={`sum-btn-${id}`}
+          data-card={id}
           className={`sum-card ${isOpen ? 'open' : ''}`}
           aria-expanded={isOpen}
           aria-controls={wide ? 'sum-panel' : `sum-detail-${id}`}
           onClick={() => toggle(id)}
         >
-          <span className="sum-label">{label}</span>
+          <span className="sum-label">
+            {label}
+            {tag ? <span className="sum-tag">{tag}</span> : null}
+          </span>
           <strong className="sum-value">{value}</strong>
-          {sub ? <span className="sum-sub">{sub}</span> : null}
+          {sub.map((line) => (
+            <span key={line} className="sum-sub">
+              {line}
+            </span>
+          ))}
           {sharedLine ? null : <SourceLine data={lines[id]} tone="dark" inline />}
           <svg className="sum-chev" viewBox="0 0 24 24" aria-hidden="true">
             <path d="m7 10 5 5 5-5" />

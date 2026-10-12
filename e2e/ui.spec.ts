@@ -339,10 +339,10 @@ test('Боковая панель на компьютере и нижняя на
   expect(desk.nav.x).toBe(0);
   expect(desk.nav.w).toBeGreaterThanOrEqual(90);
   expect(desk.nav.w).toBeLessThanOrEqual(100);
-  expect(Math.abs(desk.nav.y - desk.top.b)).toBeLessThanOrEqual(1); // под шапкой
+  expect(desk.nav.y).toBe(0); // панель от самого верха окна
   expect(Math.abs(desk.nav.b - desk.vh)).toBeLessThanOrEqual(1); // до низа окна
-  expect(desk.top.x).toBe(0);
-  expect(desk.top.w).toBe(1440); // шапка на всю ширину
+  expect(desk.top.x).toBe(desk.nav.w); // шапка начинается у правого края панели
+  expect(desk.top.w).toBe(1440 - desk.nav.w); // и идёт до правого края окна
   expect(desk.main.x).toBeGreaterThanOrEqual(desk.nav.w); // контент правее панели
   expect(desk.composer.x).toBeGreaterThanOrEqual(desk.nav.w - 1);
   expect(desk.tabs[1]!.y).toBeGreaterThan(desk.tabs[0]!.y); // столбиком
@@ -513,7 +513,7 @@ test('Баннеры группы: четыре отдельные на всех
         label: getComputedStyle(els[0]!.querySelector('.sum-label')!).color,
         value: getComputedStyle(els[0]!.querySelector('.sum-value')!).color,
         tabular: getComputedStyle(els[0]!.querySelector('.sum-value')!).fontVariantNumeric,
-        labels: els.map((e) => e.querySelector('.sum-label')!.textContent),
+        labels: els.map((e) => (e.querySelector('.sum-label')!.firstChild?.textContent ?? '').trim()),
       };
     });
   };
@@ -530,12 +530,10 @@ test('Баннеры группы: четыре отдельные на всех
   expect(phone.tabular).toContain('tabular-nums');
   expect(phone.gap).toBe(12);
   expect(phone.overflow).toBe(false);
-  expect(phone.labels).toEqual([
-    'Выручка с начала года',
-    'НДС начислен',
-    'Прогноз НДС за год',
-    'Налог на прибыль: прогноз за год',
-  ]);
+  expect(phone.labels[0]).toBe('Выручка с начала года');
+  expect(phone.labels[1]).toBe('НДС начислен');
+  expect(phone.labels[2]).toMatch(/^НДС за \d{4} год$/);
+  expect(phone.labels[3]).toMatch(/^Налог на прибыль за \d{4} год$/);
 
   const tablet = await layout(768);
   expect(tablet.xs).toBe(2); // два на два
@@ -583,7 +581,8 @@ test('Баннеры группы нажимаются: расшифровка �
   await expect(profit).toHaveAttribute('aria-expanded', 'true');
   const detail = page.locator('#sum-detail-profit');
   await expect(detail).toBeVisible();
-  await expect(detail.locator('li')).toHaveCount(5);
+  await expect(detail.locator('ul.sum-rows li')).toHaveCount(5);
+  await expect(detail.locator('.bd-months li')).toHaveCount(12);
   await expect(detail).toContainText('ООО «Эпсилон»');
   await expect(detail).toContainText('ОСНО, 25%');
 

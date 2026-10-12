@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState, type MouseEvent, type PointerEvent } from 'react';
-import type { ChangeOptions, Understanding } from '@/lib/agent/types';
+import type { ChangeOptions, QuickReply, Understanding } from '@/lib/agent/types';
 import { QuickReplies } from './QuickReplies';
 
 const hold = (e: PointerEvent | MouseEvent) => e.preventDefault();
@@ -25,6 +25,16 @@ export function Understood({
   const [open, setOpen] = useState(false);
   const panel = useId();
   const items = change ? [...change.entity, ...change.tax, ...change.period] : [];
+  // выбрано то, как агент понял вопрос: юрлицо, налог и период из карточки
+  const current = { entity: card.entity, tax: card.tax, period: card.period };
+  const isSelected = (q: QuickReply): boolean => {
+    const cur = q.group ? current[q.group] : undefined;
+    if (!cur) return false;
+    const a = q.label.toLowerCase();
+    const b = cur.toLowerCase();
+    // подпись кнопки короче карточки: «Альфа» это «ООО «Альфа»», «февраль» это «февраль 2026»
+    return a === b || (q.group === 'period' ? b.startsWith(a) : b.includes(a));
+  };
 
   return (
     <div className="understood">
@@ -53,6 +63,7 @@ export function Understood({
           <QuickReplies
             items={items}
             label="Варианты уточнения"
+            isSelected={isSelected}
             showGroupLabels
             disabled={disabled}
             onPick={(text) => {

@@ -21,6 +21,7 @@ export function QuickReplies({
   disabled,
   label,
   showGroupLabels = false,
+  isSelected,
 }: {
   items: QuickReply[];
   onPick: (text: string) => void;
@@ -28,6 +29,8 @@ export function QuickReplies({
   label: string;
   /** Подписи рядов «Юрлицо», «Налог», «Период»: нужны, когда в наборе несколько видов кнопок */
   showGroupLabels?: boolean;
+  /** Какой вариант сейчас выбран: он бордовый, остальные белые. Без функции все белые */
+  isSelected?: (q: QuickReply) => boolean;
 }) {
   // ряды по виду кнопки; без вида одна общая строка
   const rows: { group: Slot | null; list: QuickReply[] }[] = [];
@@ -43,19 +46,23 @@ export function QuickReplies({
         <div className="qrow" key={r}>
           {showGroupLabels && row.group ? <span className="qlabel">{GROUP_LABEL[row.group]}</span> : null}
           <div className="qlist">
-            {row.list.map((q) => (
-              <button
-                key={`${q.group ?? ''}:${q.text}`}
-                type="button"
-                className="qreply"
-                disabled={disabled}
-                onPointerDown={hold}
-                onMouseDown={hold}
-                onClick={() => onPick(q.text)}
-              >
-                {q.label}
-              </button>
-            ))}
+            {row.list.map((q) => {
+              const on = isSelected?.(q) ?? false;
+              return (
+                <button
+                  key={`${q.group ?? ''}:${q.text}`}
+                  type="button"
+                  className={on ? 'qreply on' : 'qreply'}
+                  aria-pressed={isSelected ? on : undefined}
+                  disabled={disabled}
+                  onPointerDown={hold}
+                  onMouseDown={hold}
+                  onClick={() => onPick(q.text)}
+                >
+                  {q.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}
