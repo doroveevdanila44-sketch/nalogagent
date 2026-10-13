@@ -69,7 +69,14 @@ async function expectHoleOnStep(page: Page, selectors: string[], timeout = 15_00
           );
           for (const b of boxes) {
             if (!b.ok) continue;
-            const d = [hole.x - (b.x - 6), hole.y - (b.y - 6), hole.width - (b.w + 12), hole.height - (b.h + 12)];
+            // зазор 6 px вокруг, но не за краем окна
+            const vw = page.viewportSize()!.width;
+            const vh = page.viewportSize()!.height;
+            const l = Math.max(0, b.x - 6);
+            const tp = Math.max(0, b.y - 6);
+            const r = Math.min(vw, b.x + b.w + 6);
+            const bt = Math.min(vh, b.y + b.h + 6);
+            const d = [hole.x - l, hole.y - tp, hole.width - (r - l), hole.height - (bt - tp)];
             if (d.every((v) => Math.abs(v) <= 2)) return 'совпал';
           }
         }
@@ -82,6 +89,7 @@ async function expectHoleOnStep(page: Page, selectors: string[], timeout = 15_00
 
 /** Три строки шага: метки «Что это», «Как читать», «Что делать» жирные, текст не пустой и короткий. */
 async function expectThreeLines(page: Page, label: string): Promise<string[]> {
+  await cardReady(page, label);
   const rows = card(page).locator('.tour-body p');
   await expect(rows, label).toHaveCount(3);
   const labels = await card(page).locator('.tour-body p > b').allInnerTexts();
@@ -97,14 +105,128 @@ async function expectThreeLines(page: Page, label: string): Promise<string[]> {
 
 const stepByIndex = (i: number): TourStep => TOUR_STEPS[i]!;
 
+/**
+ * В окружении тестов сессия блокируется после 15 секунд без обращений к серверу (PIN_IDLE_MINUTES
+ * 0.25). Долгий проход тура упирается в это: появляется экран PIN, человек вводит PIN, тур
+ * возвращается на тот же шаг. Тест делает то же самое и ждёт, пока карточка снова видна.
+ */
+async function cardReady(page: Page, label: string, timeout = 30_000): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const lock = page.getByRole('dialog', { name: 'Ввод PIN' });
+        if (await lock.isVisible().catch(() => false)) {
+          await typePin(page, PIN);
+          await expect(lock).toHaveCount(0);
+        }
+        return card(page).isVisible();
+      },
+      { message: `${label}: карточка видна`, timeout },
+    )
+    .toBe(true);
+}
+
+/** Закрывает тур кнопкой «Пропустить обучение»: единственный способ, кроме «Готово» на последнем шаге. */
+const skip = (page: Page) => card(page).getByRole('button', { name: 'Пропустить обучение' }).click();
+
+/**
+ * Следит в самой странице: затемнение (вырез) без видимой карточки показываться не должно ни в
+ * один кадр. Нарушения копятся в window.__tourViolations.
+ */
+async function watchInvariant(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __tourViolations: string[]; __tourWatch?: boolean };
+    w.__tourViolations = [];
+    if (w.__tourWatch) return;
+    w.__tourWatch = true;
+    const tick = () => {
+      const hole = document.querySelector('[data-testid="tour-hole"]');
+      const card = document.querySelector<HTMLElement>('[data-testid="tour-card"]');
+      if (hole && (!card || getComputedStyle(card).visibility === 'hidden')) {
+        w.__tourViolations.push(`вырез без карточки, шаг ${document.querySelector('[data-testid="tour"]')?.getAttribute('data-step')}`);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+const violations = (page: Page) => page.evaluate(() => (window as unknown as { __tourViolations?: string[] }).__tourViolations ?? []);
+
+/** Карточка на экране целиком, вырез (если есть) целиком в окне просмотра. */
+async function expectInWindow(page: Page, label: string): Promise<void> {
+  const g = await page.evaluate(() => {
+    const c = document.querySelector('[data-testid="tour-card"]')!.getBoundingClientRect();
+    const hole = document.querySelector('[data-testid="tour-hole"]')?.getBoundingClientRect() ?? null;
+    return {
+      card: { l: c.left, r: c.right, t: c.top, b: c.bottom },
+      hole: hole ? { l: hole.left, r: hole.right, t: hole.top, b: hole.bottom } : null,
+      vw: window.innerWidth,
+      vh: window.innerHeight,
+    };
+  });
+  expect(g.card.l, label).toBeGreaterThanOrEqual(0);
+  expect(g.card.r, label).toBeLessThanOrEqual(g.vw + 0.5);
+  expect(g.card.t, label).toBeGreaterThanOrEqual(0);
+  expect(g.card.b, label).toBeLessThanOrEqual(g.vh + 0.5);
+  if (g.hole) {
+    expect(g.hole.l, `${label}: вырез в окне`).toBeGreaterThanOrEqual(-1);
+    expect(g.hole.t, `${label}: вырез в окне`).toBeGreaterThanOrEqual(-1);
+    expect(g.hole.r, `${label}: вырез в окне`).toBeLessThanOrEqual(g.vw + 1);
+    expect(g.hole.b, `${label}: вырез в окне`).toBeLessThanOrEqual(g.vh + 1);
+  }
+}
+
+/**
+ * Быстрый обход всех шагов для проверки гонок: на каждом шаге карточка видна и в окне, счётчик
+ * верный, подсвечен существующий элемент или карточка стоит по центру, нажатие на затемнение
+ * ничего не закрывает.
+ */
+async function walkAll(page: Page, label: string): Promise<void> {
+  for (let i = 0; i < TOTAL; i += 1) {
+    const step = stepByIndex(i);
+    const at = `${label}, шаг ${i + 1} (${step.id})`;
+    await cardReady(page, at);
+    await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+    // подсвечен элемент шага (запасного вида «карточка по центру» на этом пути быть не должно)
+    try {
+      await expectHoleOnStep(page, step.targets, 20_000);
+    } catch (e) {
+      const phase = await tour(page).getAttribute('data-phase');
+      throw new Error(`${at}: подсветка не встала, фаза ${phase}: ${(e as Error).message.split('\n')[0]}`);
+    }
+    await expectInWindow(page, at);
+    // нажатие на затемнение вне выреза и карточки ничего не закрывает
+    const spot = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid="tour-card"]')!.getBoundingClientRect();
+      const h = document.querySelector('[data-testid="tour-hole"]')?.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const inside = (x: number, y: number) =>
+        (x >= c.left && x <= c.right && y >= c.top && y <= c.bottom) ||
+        (h && x >= h.left && x <= h.right && y >= h.top && y <= h.bottom);
+      for (const [x, y] of [[4, vh / 2], [vw - 4, vh / 2], [vw / 2, vh - 4], [vw / 2, 70]] as const) {
+        if (!inside(x, y)) return { x, y };
+      }
+      return null;
+    });
+    if (spot) {
+      await page.mouse.click(spot.x, spot.y);
+      await expect(tour(page), `${at}: затемнение не закрывает тур`).toBeVisible();
+      await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+    }
+    if (i < TOTAL - 1) await next(page).click();
+  }
+}
+
 /** Первый шаг тура, когда человек начал с вкладки «Агент»: подсвечено поле ввода */
 const FIRST_TARGET = ['[data-tour="chat-input"]'];
 
 /** Идёт по шагам кнопкой «Дальше» с нынешнего шага, пока счётчик не покажет нужный. */
 async function goTo(page: Page, index: number): Promise<void> {
-  const current = async () => Number(/Шаг (\d+) из/.exec(await count(page).innerText())![1]) - 1;
+  const current = async () => Number(/Шаг (\d+) из/.exec((await count(page).textContent()) ?? '')![1]) - 1;
   for (let i = await current(); i < index; i += 1) {
     await expect(count(page)).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+    await cardReady(page, `переход к шагу ${index + 1}, шаг ${i + 1}`);
     await next(page).click();
   }
   await expect(count(page)).toHaveText(`Шаг ${index + 1} из ${TOTAL}`);
@@ -137,7 +259,8 @@ for (const width of [390, 1440]) {
     await expect(card(page)).toHaveAttribute('aria-modal', 'true');
     await expect(count(page)).toHaveText(`Шаг 1 из ${TOTAL}`);
     await expect(card(page).getByRole('button', { name: 'Назад' })).toBeDisabled();
-    await expect(card(page).getByRole('button', { name: 'Пропустить' })).toBeVisible();
+    await expect(card(page).getByRole('button', { name: 'Пропустить обучение' })).toBeVisible();
+    await watchInvariant(page);
 
     // страница под обучением недоступна
     for (const sel of ['header.top', '.app-body', 'nav.tabs']) {
@@ -148,6 +271,8 @@ for (const width of [390, 1440]) {
     for (let i = 0; i < TOTAL; i += 1) {
       const step = stepByIndex(i);
       const label = `шаг ${i + 1} (${step.id})`;
+      // карточка показывается, когда элемент найден и стоит на месте: до этого она скрыта
+      await cardReady(page, label);
       await expect(count(page), label).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
       await expect(page.getByTestId('tour-chapter'), label).toHaveText(CHAPTER_TITLE[step.chapter]);
       if (typeof step.title === 'string') await expect(page.getByTestId('tour-title'), label).toHaveText(step.title);
@@ -245,6 +370,7 @@ for (const width of [390, 1440]) {
         await next(page).click();
       }
     }
+    expect(await violations(page), 'затемнения без карточки не было').toEqual([]);
     expect(titles.length).toBe(TOTAL);
     expect(new Set(titles).size, 'заголовки шагов разные').toBeGreaterThan(TOTAL - 3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
@@ -280,10 +406,12 @@ test('Пример ответа: если «Понял так» уже есть 
   await resetChat();
   await firstLogin(page, PIN);
   const input = page.getByLabel('Вопрос агенту');
-  await input.fill('НДС по Альфе за февраль');
+  // ответ на этот вопрос уже несёт всё, что подсвечивает глава: «Понял так», уточнения, «Передать специалисту»
+  await input.fill('какую ставку выбрать на 2027 год');
   await input.press('Enter');
   await expect(page.locator('.typing')).toHaveCount(0);
   await expect(page.locator('.msg:not(.me) .understood').last()).toBeVisible();
+  await expect(page.locator('[data-tour="quick"]').last()).toBeVisible();
   const before = (await sql<{ n: number }>('select count(*)::int as n from chat_messages'))[0]!.n;
   const docsBefore = (await sql<{ n: number }>('select count(*)::int as n from documents'))[0]!.n;
 
@@ -298,7 +426,7 @@ test('Пример ответа: если «Понял так» уже есть 
   await expectHoleOnStep(page, ['[data-tour="act-send"]']);
   await page.waitForTimeout(600);
   expect((await sql<{ n: number }>('select count(*)::int as n from chat_messages'))[0]!.n).toBe(before);
-  await page.keyboard.press('Escape');
+  await skip(page);
   await expect(tour(page)).toHaveCount(0);
   expect((await sql<{ n: number }>('select count(*)::int as n from documents'))[0]!.n).toBe(docsBefore);
   expect(await seenAt()).toBe('2026-10-01T09:00:00.000Z');
@@ -326,8 +454,10 @@ for (const width of [390, 1440]) {
     await expect(tour(page)).toBeVisible();
     await expect(count(page)).toHaveText(`Шаг 1 из ${TOTAL}`);
 
-    // Escape закрывает; время первого показа не сдвигается
+    // Escape тур не закрывает; кнопка «Пропустить обучение» закрывает; время первого показа не сдвигается
     await page.keyboard.press('Escape');
+    await expect(tour(page)).toBeVisible();
+    await skip(page);
     await expect(tour(page)).toHaveCount(0);
     expect(await seenAt()).toBe('2026-10-01T09:00:00.000Z');
 
@@ -350,18 +480,103 @@ for (const width of [390, 1440]) {
   });
 }
 
-test('Escape закрывает обучение и отмечает его пройденным', async ({ page }) => {
+test('Закрывается только кнопкой: Escape, затемнение, пустое место, жест и «назад» браузера не закрывают', async ({ page }) => {
   await setSeen(null);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await firstLogin(page, PIN);
   await expect(tour(page)).toBeVisible();
   await next(page).click();
   await expect(count(page)).toHaveText(`Шаг 2 из ${TOTAL}`);
   await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(tour(page)).toBeVisible();
+  await expect(count(page)).toHaveText(`Шаг 2 из ${TOTAL}`);
+  // нажатие на затемнение, на пустое место и двойное нажатие
+  for (const [x, y] of [[700, 300], [1300, 800], [500, 150]] as const) {
+    await page.mouse.click(x, y);
+  }
+  await page.mouse.dblclick(900, 450);
+  await expect(tour(page)).toBeVisible();
+  // кнопка «назад» браузера тур не закрывает: тур остаётся и возвращает на страницу шага
+  await goTo(page, idx('banner-revenue'));
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
+  await page.goBack();
+  await expect(tour(page)).toBeVisible();
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
+  await expect(count(page)).toHaveText(`Шаг ${idx('banner-revenue') + 1} из ${TOTAL}`);
+  expect(await seenAt()).toBeNull();
+  // единственный способ закрыть: «Пропустить обучение»
+  await skip(page);
   await expect(tour(page)).toHaveCount(0);
   await expect.poll(seenAt).not.toBeNull();
   // Escape не открыл и не закрыл ничего под обучением
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('«Показ»: нажатие по подсвеченному ничего не делает; «попробуйте»: проходит только нажатие по подсвеченному', async ({ page }) => {
+  test.setTimeout(120_000);
+  await setSeen(null);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await firstLogin(page, PIN);
+  await expect(tour(page)).toBeVisible();
+  // шаг «попробуйте»: баннер «Выручка с начала года»
+  await goTo(page, idx('banner-revenue'));
+  await expect(tour(page)).toHaveAttribute('data-mode', 'try');
+  await expectHoleOnStep(page, ['[data-tour="banner-revenue"]']);
+  const banner = page.locator('[data-tour="banner-revenue"]');
+  await expect(banner).toHaveAttribute('aria-expanded', 'false');
+  // нажатие мимо выреза (на соседний баннер) ничего не раскрывает
+  const other = (await page.locator('[data-tour="banner-vat"]').boundingBox())!;
+  await page.mouse.click(other.x + other.width / 2, other.y + other.height / 2);
+  await expect(page.locator('[data-tour="banner-vat"]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(tour(page)).toBeVisible();
+  // нажатие по подсвеченному доходит до страницы: расшифровка раскрылась
+  const hole = (await page.getByTestId('tour-hole').boundingBox())!;
+  await page.mouse.click(hole.x + hole.width / 2, hole.y + hole.height / 2);
+  await expect(banner).toHaveAttribute('aria-expanded', 'true');
+  await expect(tour(page)).toBeVisible();
+  await expect(count(page)).toHaveText(`Шаг ${idx('banner-revenue') + 1} из ${TOTAL}`);
+  // следующий шаг: раскрытое сворачивается само
+  await next(page).click();
+  await expect(count(page)).toHaveText(`Шаг ${idx('banner-vat') + 1} из ${TOTAL}`);
+  await expect(banner).toHaveAttribute('aria-expanded', 'false');
+
+  // шаг «показ»: кнопка «Показать расчёт» подсвечена, но не нажимается
+  await goTo(page, idx('actions'));
+  await expect(tour(page)).toHaveAttribute('data-mode', 'show');
+  await expectHoleOnStep(page, ['[data-tour="actions"]']);
+  const h2 = (await page.getByTestId('tour-hole').boundingBox())!;
+  await page.mouse.click(h2.x + 40, h2.y + h2.height / 2);
+  await expect(page.getByTestId('overlay-drawer')).toHaveCount(0);
+  await expect(tour(page)).toBeVisible();
+  await skip(page);
+});
+
+for (const width of [390, 1440]) {
+  test(`Гонки: тур проходится пять раз подряд без зависаний, карточка на каждом шаге, ${width} px`, async ({ page }) => {
+    test.setTimeout(420_000);
+    await setSeen(new Date('2026-10-01T09:00:00Z'));
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await firstLogin(page, PIN);
+    await page.waitForTimeout(300);
+    for (let run = 1; run <= 5; run += 1) {
+      const lock = page.getByRole('dialog', { name: 'Ввод PIN' });
+      if (await lock.isVisible().catch(() => false)) await typePin(page, PIN);
+      await page.getByRole('button', { name: 'Меню' }).click();
+      await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
+      await expect(tour(page)).toBeVisible();
+      await watchInvariant(page);
+      await walkAll(page, `проход ${run}`);
+      await expect(next(page)).toHaveText('Готово');
+      await next(page).click();
+      await expect(tour(page)).toHaveCount(0);
+      expect(await violations(page), `проход ${run}: затемнения без карточки не было`).toEqual([]);
+      await expect(page.getByTestId('overlay-drawer')).toHaveCount(0);
+      await expect(page.getByRole('dialog', { name: 'Меню', exact: true })).toHaveCount(0);
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/agent');
+    }
+  });
+}
 
 test('«Пропустить» закрывает обучение с шага на другой странице; «Назад» возвращает на шаг', async ({ page }) => {
   await setSeen(null);
@@ -422,6 +637,8 @@ test('prefers-reduced-motion: вырез и карточка без анимац
   await firstLogin(page, PIN);
   await expect(tour(page)).toBeVisible();
   await next(page).click();
+  // вырез появляется вместе с карточкой, когда элемент найден и стоит на месте
+  await expect(page.getByTestId('tour-hole')).toBeVisible();
   const durations = await page.evaluate(() => {
     const ms = (v: string) => Math.max(...v.split(',').map((x) => (x.trim().endsWith('ms') ? parseFloat(x) : parseFloat(x) * 1000)));
     const hole = getComputedStyle(document.querySelector('[data-testid="tour-hole"]')!);
@@ -431,16 +648,18 @@ test('prefers-reduced-motion: вырез и карточка без анимац
   expect(durations.hole).toBeLessThan(1);
   expect(durations.card).toBeLessThan(1);
   expect(durations.anim).toBeLessThan(1);
-  await page.keyboard.press('Escape');
+  await skip(page);
+  await expect(tour(page)).toHaveCount(0);
 
   // без reduce вырез переезжает плавно
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
   await expect(tour(page)).toBeVisible();
+  await expect(page.getByTestId('tour-hole')).toBeVisible();
   const smooth = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="tour-hole"]')!).transitionDuration) * 1000);
   expect(smooth).toBeGreaterThanOrEqual(200);
-  await page.keyboard.press('Escape');
+  await skip(page);
 });
 
 test('Планшет 768 px: первые восемь шагов, карточка в окне и подсвеченное не закрыто', async ({ page }) => {
@@ -464,11 +683,11 @@ test('Планшет 768 px: первые восемь шагов, карточ�
     expect(geo.b).toBeLessThanOrEqual(geo.vh + 1);
     if (i < 7) await next(page).click();
   }
-  await page.keyboard.press('Escape');
+  await skip(page);
   await expect(tour(page)).toHaveCount(0);
 });
 
-test('Нажатие на затемнение закрывает, нажатие в вырез ничего не делает', async ({ page }) => {
+test('Нажатие на затемнение и в вырез тур не закрывает', async ({ page }) => {
   await setSeen(null);
   await page.setViewportSize({ width: 1440, height: 900 });
   await firstLogin(page, PIN);
@@ -480,6 +699,8 @@ test('Нажатие на затемнение закрывает, нажати�
   await expect(tour(page)).toBeVisible();
   expect(new URL(page.url()).pathname).toBe('/agent');
   await page.mouse.click(1000, 120);
+  await expect(tour(page)).toBeVisible();
+  await skip(page);
   await expect(tour(page)).toHaveCount(0);
 });
 
@@ -497,7 +718,7 @@ test('Обучение прячется при блокировке на PIN и 
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toHaveCount(0);
   await expect(tour(page)).toBeVisible();
   await expect(count(page)).toHaveText(`Шаг 2 из ${TOTAL}`);
-  await page.keyboard.press('Escape');
+  await skip(page);
 });
 
 test('Доступность: карточка обучения без нарушений axe на телефоне и компьютере', async ({ page }) => {
@@ -526,14 +747,14 @@ test('Доступность: карточка обучения без нару�
   await goTo(page, idx('tax-switch'));
   await expectHoleOnStep(page, ['[data-tour="tax-switch"]']);
   await scan('выбор налога, компьютер');
-  await page.keyboard.press('Escape');
+  await skip(page);
   await expect(tour(page)).toHaveCount(0);
 });
 
 test.describe('Жест на телефоне', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-  test('смахнуть карточку вниз закрывает обучение, короткий жест не закрывает', async ({ page }) => {
+  test('смахнуть карточку вниз тур не закрывает', async ({ page }) => {
     await setSeen(null);
     await firstLogin(page, PIN);
     await expect(tour(page)).toBeVisible();
@@ -563,6 +784,10 @@ test.describe('Жест на телефоне', () => {
     await swipe(20);
     await expect(tour(page)).toBeVisible();
     await swipe(140);
+    await expect(tour(page)).toBeVisible();
+    await expect(count(page)).toHaveText(`Шаг 1 из ${TOTAL}`);
+    expect(await seenAt()).toBeNull();
+    await skip(page);
     await expect(tour(page)).toHaveCount(0);
     await expect.poll(seenAt).not.toBeNull();
   });

@@ -210,7 +210,7 @@ export function formulasText(snaps: CalcSnapshot[]): string {
   snaps.forEach((s, i) => {
     const head = `${i > 0 ? '\n' : ''}${snapshotTitle(s)}`;
     lines.push(head);
-    lines.push(`Расчёт на ${preciseDateTime(s.at, s.tz)}. Демо-данные: цифры выдуманы.`);
+    lines.push(`Расчёт на ${preciseDateTime(s.at, s.tz)}.`);
     lines.push('Шаг\tЮрлицо\tФормула\tРезультат, ₽\tКак считается');
     const names = new Map(s.entities.map((e) => [e.entityId, e.name]));
     for (const st of s.steps) {

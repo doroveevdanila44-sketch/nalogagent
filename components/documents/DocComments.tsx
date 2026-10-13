@@ -7,7 +7,7 @@ import { shortDateTime } from '@/lib/provenance/line';
 
 /**
  * «Комментарии»: список с пометкой «решено» и форма нового комментария к документу целиком или к
- * полю. Ответы бухгалтера из демо подписаны «Демо» в самом комментарии.
+ * полю. Имитированные ответы бухгалтера подписаны «имитация» в самом комментарии.
  */
 export function DocComments({
   doc,
@@ -44,7 +44,7 @@ export function DocComments({
                 <b>{c.authorName}</b>
                 <span className="cm-kind">
                   {c.kind === 'remark' ? 'Замечание' : c.kind === 'approval' ? 'Согласование' : 'Комментарий'}
-                  {c.isDemo ? ' · Демо' : ''}
+                  {c.isDemo ? ' · имитация' : ''}
                 </span>
               </div>
               <p>{c.body}</p>

@@ -432,6 +432,11 @@ export const documents = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     createdAt: tstz('created_at').notNull().defaultNow(),
     updatedAt: tstz('updated_at').notNull().defaultNow(),
+    /**
+     * Мягкое удаление черновика: момент удаления. Такой документ нигде не показывается, до 24 часов
+     * его можно вернуть, потом строка удаляется окончательно вместе с версиями и комментариями.
+     */
+    deletedAt: tstz('deleted_at'),
   },
   (t) => [
     check('documents_status', sql`${t.status} in ('draft','review','remarks','approved','withdrawn')`),

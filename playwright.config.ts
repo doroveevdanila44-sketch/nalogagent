@@ -27,8 +27,15 @@ export default defineConfig({
     timezoneId: 'Asia/Kamchatka',
     trace: 'off',
   },
-  // Системный Chrome: не требует отдельной загрузки браузера Playwright
-  projects: [{ name: 'chrome', use: { ...devices['Desktop Chrome'], channel: 'chrome' } }],
+  // Системный Chrome: не требует отдельной загрузки браузера Playwright. Проект WebKit с iPhone
+  // включается PW_WEBKIT=1 на машине, где Playwright поддерживает WebKit (на macOS 13 не поддерживает):
+  // он прогоняет тест оболочки (шапка и нижняя панель не двигаются при прокрутке) на движке Safari.
+  projects: [
+    { name: 'chrome', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
+    ...(process.env.PW_WEBKIT
+      ? [{ name: 'webkit-iphone', testMatch: /shell\.spec\.ts/, use: { ...devices['iPhone 14'] } }]
+      : []),
+  ],
   webServer: {
     command: `mkdir -p .data && npm run build && npx next start -p ${PORT} > ${SERVER_LOG} 2>&1`,
     url: `http://localhost:${PORT}/login`,

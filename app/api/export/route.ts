@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { failure, json, requireApiAuth } from '@/lib/auth/server';
 import { getDb } from '@/lib/db/client';
+import { contentDisposition } from '@/lib/documents/file-name';
 import { getEnv } from '@/lib/env';
 import { QueriesTargetSchema } from '@/lib/provenance/schemas';
 import { excelFor, resolveTarget, reviewExcel, TargetError } from '@/lib/provenance/server';
@@ -11,18 +12,12 @@ export const dynamic = 'force-dynamic';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-/** Имя файла в заголовке: ASCII-запасное и полное в кодировке UTF-8 (RFC 5987). */
-function disposition(name: string): string {
-  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  return `attachment; filename="calc.xlsx"; filename*=UTF-8''${encoded}`;
-}
-
 function file(name: string, body: Buffer): NextResponse {
   return new NextResponse(new Uint8Array(body), {
     status: 200,
     headers: {
       'Content-Type': XLSX,
-      'Content-Disposition': disposition(name),
+      'Content-Disposition': contentDisposition(name, 'attachment'),
       'Content-Length': String(body.length),
       'Cache-Control': 'no-store',
     },

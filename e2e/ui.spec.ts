@@ -304,7 +304,8 @@ test('Оверлей PIN поверх дашборда: центр, страни
   }
   await typePin(page, PIN);
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).not.toBe('hidden');
+  // блокировка прокрутки, поставленная экраном PIN, снята (страница сама не прокручивается: html hidden из CSS)
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');
 });
 
 test('Боковая панель на компьютере и нижняя на телефоне', async ({ page }) => {
@@ -355,7 +356,7 @@ test('Боковая панель на компьютере и нижняя на
   // шапка прилипает к верху при прокрутке
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, 600));
+  await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 600));
   await page.waitForTimeout(150);
   const stuck = await page.evaluate(() => document.querySelector('.top')!.getBoundingClientRect().top);
   expect(stuck).toBe(0);
@@ -598,9 +599,9 @@ test('Баннеры группы нажимаются: расшифровка �
   await expect(revenue).toBeHidden();
 
   await profit.click();
-  const before = await page.evaluate(() => window.scrollY);
+  const before = await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop);
   await detail.getByRole('button', { name: 'К карточкам юрлиц' }).click();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before + 100);
+  await expect.poll(() => page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop)).toBeGreaterThan(before + 100);
 });
 
 test('График на телефоне: ось закреплена, столбцы прокручиваются, текущий месяц по центру', async ({ page }) => {

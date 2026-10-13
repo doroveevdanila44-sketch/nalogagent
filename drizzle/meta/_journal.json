@@ -43,6 +43,13 @@
       "when": 1791799342199,
       "tag": "0005_user_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791900861874,
+      "tag": "0006_documents_deleted_at",
+      "breakpoints": true
     }
   ]
 }

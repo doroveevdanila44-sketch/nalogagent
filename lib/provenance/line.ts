@@ -15,8 +15,6 @@ export const KIND_LABEL: Record<PeriodKind, string> = {
   mixed: 'факт и прогноз',
 };
 
-export const DEMO_LABEL = 'Демо-данные';
-
 export interface SourceLineData {
   /** Название источника; null, если источник в базе не заведён */
   source: string | null;
@@ -51,9 +49,9 @@ export function stampShort(epochMs: number, tz: string, currentYear: number): st
   return `${day}, ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
 }
 
-/** «Выгрузка из 1С (демо)» это «1С (демо)»: слова об источнике-выгрузке в строке не нужны. */
+/** Источник в строке происхождения как есть: «Выгрузка из 1С». Слова «демо» в названии нет. */
 export function shortSource(title: string): string {
-  return title.replace(/^выгрузка из\s+/i, '');
+  return title.replace(/\s*\((?:демо|demo)\)/gi, '').trim();
 }
 
 /** «10.10.2026 18:42:07»: момент расчёта с секундами. */

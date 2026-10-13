@@ -78,7 +78,7 @@ test('Полоса под часами: theme-color бордо на входе �
   expect(await themeColor(page)).toBe('#A0D2A8');
 });
 
-test('Шапка прилипает к верху без отрыва: свой padding-top под safe-area, фон html цвета шапки', async ({ page }) => {
+test('Шапка стоит у верха без отрыва: свой padding-top под safe-area, фон html цвета шапки, не fixed и не sticky', async ({ page }) => {
   await resetChat();
   await firstLogin(page, PIN);
 
@@ -101,8 +101,8 @@ test('Шапка прилипает к верху без отрыва: свой 
         htmlOverscroll: getComputedStyle(document.documentElement).overscrollBehaviorY,
       };
     });
-    expect(m.position, label).toBe('sticky');
-    expect(m.top, label).toBe('0px');
+    // обычный элемент колонки оболочки: не fixed и не sticky относительно страницы
+    expect(m.position, label).toBe('relative');
     expect(m.padTop, label).toBe('47px'); // safe-area один раз, внутри шапки
     expect(m.marginTop, label).toBe('0px');
     expect(m.height, label).toBe(47 + 54); // отступ учтён один раз: 47 + 54, а не 47 + 47 + 54
@@ -111,13 +111,13 @@ test('Шапка прилипает к верху без отрыва: свой 
     expect(m.overscroll, label).toBe('none');
     expect(m.htmlOverscroll, label).toBe('none');
 
-    // при прокрутке шапка остаётся у верхнего края, над ней нет просвета
+    // при прокрутке шапка остаётся у верхнего края, над ней нет просвета; страница не прокручивается
     for (const y of [150, 600, 5000]) {
-      await page.evaluate((v) => window.scrollTo(0, v), y);
+      await page.evaluate((v) => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, v), y);
       await page.waitForTimeout(100);
       expect(await page.evaluate(() => document.querySelector('.top')!.getBoundingClientRect().top), `${label} ${y}`).toBe(0);
     }
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 0));
   };
 
   // агент: несколько ответов, чтобы страница прокручивалась

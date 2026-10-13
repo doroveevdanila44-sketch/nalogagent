@@ -114,7 +114,7 @@ test('Дашборд: строка происхождения под банне�
 
   // у четырёх баннеров строка одинаковая, поэтому она стоит один раз под заголовком группы:
   // «источник · обновлено · метка», без юрлица, периода и без метки «Демо-данные» (она в шапке)
-  const line = /^1С \(демо\) · обновлено 10\.10, 18:00 · (факт|прогноз|факт и прогноз)$/;
+  const line = /^Выгрузка из 1С · обновлено 10\.10, 18:00 · (факт|прогноз|факт и прогноз)$/;
   const banners = page.locator('.sum-card');
   await expect(banners).toHaveCount(4);
   const shared = page.locator('.sum > [data-testid="source-line"]');
@@ -184,7 +184,7 @@ async function sameAmounts(page: Page, index: number, kind: 'rub2' | 'rub' | 'ml
   await expect(drawer.getByRole('heading', { name: 'Разбивка по месяцам' })).toBeVisible();
   await expect(drawer).toContainText('НК РФ, ст. 164');
   await expect(drawer).toContainText('действует с 1 января 2026');
-  await expect(drawer).toContainText('Выгрузка из 1С (демо)');
+  await expect(drawer).toContainText('Выгрузка из 1С');
   await expect(drawer.locator('[data-month]')).toHaveCount(index === 2 ? 12 : 10);
 
   // Excel из панели: те же суммы, листы и формулы
@@ -217,7 +217,8 @@ async function sameAmounts(page: Page, index: number, kind: 'rub2' | 'rub' | 'ml
   // источник в файле
   const text: string[] = [];
   wb.getWorksheet('Источник')!.eachRow((row) => row.eachCell((c) => text.push(String(c.value ?? ''))));
-  expect(text.join('\n')).toContain('Демо-данные');
+  expect(text.join('\n')).toContain('Выгрузка из 1С');
+  expect(text.join('\n').toLowerCase()).not.toContain('демо');
   expect(text.join('\n')).toContain('10 октября 2026, 18:00');
   return { page, drawer, card };
 }
@@ -305,7 +306,7 @@ test('Проверить самому: чек-лист, ссылка на нор
   await expect(screen.locator('.chk')).toHaveCount(2 + 5 + 1);
   const link = screen.getByRole('link', { name: /НК РФ, ст\. 164/ }).first();
   await expect(link).toHaveAttribute('href', /^https:\/\/www\.consultant\.ru\/document\/cons_doc_LAW_28165\/?$/);
-  await expect(screen.locator('[data-testid="source-line"]').first()).toContainText('1С (демо)');
+  await expect(screen.locator('[data-testid="source-line"]').first()).toContainText('Выгрузка из 1С');
   await expect(screen.locator('[data-testid="source-line"]').first()).not.toContainText('Демо-данные');
 
   // скопировать формулы
@@ -369,7 +370,7 @@ test('Проверить самому: отметка «сверил» сохр�
     .toBe(before);
 });
 
-test('Передать специалисту (демо): запись review_requests, подпись «Демо: письмо не отправляется», история в «Статусах»', async ({
+test('Передать специалисту: запись review_requests, подпись «Письмо не отправляется» только в окне, история в «Статусах»', async ({
   page,
 }) => {
   await firstLogin(page, PIN);
@@ -381,11 +382,11 @@ test('Передать специалисту (демо): запись review_re
   await card.locator('[data-action="send"]').click();
   const modal = page.getByTestId('overlay-modal');
   await expect(modal).toBeVisible();
-  await expect(modal.getByTestId('demo-mail-note')).toContainText('Демо: письмо не отправляется');
+  await expect(modal.getByTestId('demo-mail-note')).toContainText('Письмо не отправляется');
   await expect(modal.getByRole('radio')).toHaveCount(3);
   await expect(modal.getByText('Финансовый директор')).toBeVisible();
   await expect(modal.getByText('Бухгалтер', { exact: true })).toBeVisible();
-  await expect(modal).not.toContainText('Демо-данные');
+  await expect(modal).not.toContainText(/демо/i);
 
   await modal.getByRole('radio', { name: /Финансовый директор/ }).check();
   await modal.getByLabel('Комментарий').fill('Проверьте ставку и порог');
@@ -395,9 +396,10 @@ test('Передать специалисту (демо): запись review_re
   const done = modal.getByTestId('send-done');
   await expect(done).toBeVisible();
   await expect(done).toContainText('Отправлено на проверку');
-  // «Демо: письмо не отправляется» в окне один раз (над формой и над подтверждением)
-  await expect(modal.getByTestId('demo-mail-note')).toContainText('Демо: письмо не отправляется');
-  expect(((await modal.innerText()).match(/Демо: письмо не отправляется/g) ?? []).length).toBe(1);
+  // «Письмо не отправляется» в окне один раз (над формой и над подтверждением), слова «демо» нет
+  await expect(modal.getByTestId('demo-mail-note')).toContainText('Письмо не отправляется');
+  expect(((await modal.innerText()).match(/Письмо не отправляется/g) ?? []).length).toBe(1);
+  expect(await modal.innerText()).not.toMatch(/демо/i);
   await expect(done).toContainText('Сергей Примеров, Финансовый директор');
 
   const rows = await sql<{
@@ -442,10 +444,9 @@ test('Раздел «Статусы»: история запросов, стат
   await expect(item).toContainText('Отправлено на проверку');
   await expect(item).toContainText('Сергей Примеров, Финансовый директор');
   await expect(item).toContainText('Проверьте ставку и порог');
-  // «Демо: письмо не отправляется» один раз под заголовком раздела, у каждого запроса его нет
-  await expect(item).not.toContainText('Демо: письмо не отправляется');
-  await expect(page.locator('.statuses .sec-h')).toContainText('Демо: письмо не отправляется');
-  await expect(page.getByText('Демо: письмо не отправляется')).toHaveCount(1);
+  // «Письмо не отправляется» стоит только внутри окна отправки: ни в заголовке раздела, ни у запросов
+  await expect(item).not.toContainText('Письмо не отправляется');
+  await expect(page.getByText('Письмо не отправляется')).toHaveCount(0);
   const [file] = await Promise.all([page.waitForEvent('download'), item.getByRole('button', { name: /Скачать/ }).click()]);
   const wb = await workbookOf(file);
   expect(wb.worksheets.map((w) => w.name)).toEqual(['Итог', 'По месяцам', 'Расчёт', 'Источник']);
@@ -479,7 +480,7 @@ test('Прогноз на 2027 год: три ставки, допущения �
     'Только Альфа',
   ]);
   // строка происхождения без юрлица и периода, подпись «Цифры из калькулятора» не повторяет её
-  await expect(answer.locator('[data-testid="source-line"]')).toHaveText(/^1С \(демо\) · обновлено 10\.10, 18:00 · прогноз$/);
+  await expect(answer.locator('[data-testid="source-line"]')).toHaveText(/^Выгрузка из 1С · обновлено 10\.10, 18:00 · прогноз$/);
   await expect(answer.getByText('Цифры из калькулятора')).toHaveCount(0);
   // формировать документ по прогнозу не из чего: кнопки нет
   await expect(answer.getByRole('button', { name: 'Сформировать документ' })).toHaveCount(0);
@@ -540,7 +541,7 @@ test('Чат: строка происхождения и действия под
   const answer = page.locator('.msg:not(.me)').last();
 
   await expect(answer.locator('[data-testid="source-line"]')).toHaveText(
-    /^1С \(демо\) · обновлено 10\.10, 18:00 · факт$/,
+    /^Выгрузка из 1С · обновлено 10\.10, 18:00 · факт$/,
   );
   // юрлицо и период в карточке «Понял так» над ответом, в строке они не повторяются
   await expect(answer.locator('.understood')).toContainText('ООО «Альфа»');
@@ -723,7 +724,7 @@ test.describe('Телефон 390 px', () => {
     await expect(page.locator('.typing')).toHaveCount(0);
     const answer = page.locator('.msg:not(.me)').last();
     await expect(answer.locator('.understood')).toContainText('2 квартал 2026');
-    await expect(answer.locator('[data-testid="source-line"]')).toContainText('1С (демо)');
+    await expect(answer.locator('[data-testid="source-line"]')).toContainText('Выгрузка из 1С');
     const fit = await answer.evaluate((e) => ({
       over: e.scrollWidth - e.clientWidth,
       right: e.getBoundingClientRect().right,

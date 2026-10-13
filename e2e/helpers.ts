@@ -73,3 +73,16 @@ export async function resetChat(): Promise<void> {
   await client.query('delete from agent_state');
   await client.end();
 }
+
+/**
+ * Долгие сценарии (несколько создаваемых документов, ожидание уведомления на 8 секунд): в окружении
+ * тестов сессия блокируется после 15 секунд без обращений к серверу (PIN_IDLE_MINUTES 0.25), а
+ * «касание» активности записывается реже. Отметка активности уносится в будущее: сессия не
+ * блокируется по простою, остальная блокировка (PIN при запуске, кнопка) работает как обычно.
+ */
+export async function holdSession(): Promise<void> {
+  const client = new Client({ connectionString: E2E_DB_URL });
+  await client.connect();
+  await client.query(`update sessions set last_activity = now() + interval '1 day', locked_at = null`);
+  await client.end();
+}

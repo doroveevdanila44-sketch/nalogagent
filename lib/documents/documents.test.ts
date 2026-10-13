@@ -43,11 +43,15 @@ import { createTestDb } from '@/lib/db/testing';
 import {
   addComment,
   createDocument,
+  deleteDocuments,
   DocError,
   downloadDocument,
   getDocument,
   listDocuments,
+  purgeDeleted,
   resolveComment,
+  restoreDocuments,
+  RESTORE_WINDOW_MS,
   saveVersion,
   simulateReply,
   submitDocument,
@@ -141,14 +145,16 @@ describe('каталог и справочник реквизитов (сид)',
     expect(TEMPLATES.filter((t) => t.output === 'xlsx').map((t) => t.category)).toEqual(['declaration', 'declaration']);
   });
 
-  it('реквизиты юрлиц вымышленные и помечены демо', async () => {
+  it('реквизиты юрлиц вымышленные: признак в базе, пометок «демо» в значениях нет', async () => {
     const rows = await db.select().from(legalEntities);
     expect(rows).toHaveLength(5);
     for (const r of rows) {
       const q = r.requisites as { demo?: boolean; inn?: string; address?: string };
       expect(q.demo).toBe(true);
       expect(q.inn).toMatch(/^99/); // региона 99 нет
-      expect(q.address).toContain('(демо)');
+      expect(q.address).toBeTruthy();
+      // пометка «Демо-данные» одна, в шапке: в значениях, которые идут в документ, слова «демо» нет
+      expect(JSON.stringify(q).toLowerCase()).not.toContain('демо');
     }
     expect(Object.keys(SEED_REQUISITES).sort()).toEqual(['alfa', 'beta', 'delta', 'epsilon', 'gamma']);
   });
@@ -385,7 +391,8 @@ describe('версии, статусы, согласование', () => {
     expect(d.status).toBe('remarks');
     const remark = d.comments.find((c) => c.kind === 'remark')!;
     expect(remark.isDemo).toBe(true);
-    expect(remark.authorName).toContain('(демо)');
+    expect(remark.authorName).toContain('(имитация)');
+    expect(remark.authorName.toLowerCase()).not.toContain('демо');
     expect(remark.fieldKey).toBeTruthy();
     expect(d.can.simulate).toBe(false);
 
@@ -480,7 +487,7 @@ describe('файлы: .docx и .xlsx', () => {
       user: { contract_number: '12', contract_date: '2026-10-10', rent_price: '7500' },
     });
     const out = await downloadDocument(db, { userId, id, tz: TZ });
-    expect(out.name).toBe('Договор аренды автомобиля без экипажа, ООО «Альфа».docx');
+    expect(out.name).toBe('Договор аренды автомобиля без экипажа_ООО «Альфа».docx');
     expect(out.mime).toBe(DOCX_MIME);
     expect(out.file.subarray(0, 2).toString()).toBe('PK');
 
@@ -501,6 +508,11 @@ describe('файлы: .docx и .xlsx', () => {
     expect(xml).toContain('w:highlight');
     const header = await zip.file(/^word\/header\d*\.xml$/)[0]!.async('string');
     expect(header).toContain('Образец, проверить юристом');
+    // колонтитулы и свойства файла без пометок «демо»: метка «Демо-данные» одна, в шапке приложения
+    for (const part of Object.keys(zip.files).filter((n) => /^(word\/(header|footer)\d*\.xml|docProps\/.*\.xml)$/.test(n))) {
+      const text = await zip.file(part)!.async('string');
+      expect(text.toLowerCase(), part).not.toContain('демо');
+    }
     // колонтитул мелким шрифтом: 8 пт это w:sz 16
     expect(header).toContain('<w:sz w:val="16"/>');
     // выделен именно пропущенный реквизит, а не весь абзац
@@ -559,7 +571,7 @@ describe('файлы: .docx и .xlsx', () => {
     });
     const d = await getDocument(db, { userId, id, tz: TZ });
     expect(d.output).toBe('xlsx');
-    expect(d.fileName).toBe(`${d.title}.xlsx`);
+    expect(d.fileName).toBe(documentFileName(d.title, 'xlsx'));
     const out = await downloadDocument(db, { userId, id, tz: TZ });
     expect(out.name).toBe(d.fileName);
     expect(out.mime).toBe(XLSX_MIME);
@@ -567,7 +579,7 @@ describe('файлы: .docx и .xlsx', () => {
     await wb.xlsx.load(out.file as unknown as ArrayBuffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Проект декларации', 'Итог', 'По месяцам', 'Расчёт', 'Источник']);
     const ws = wb.getWorksheet('Проект декларации')!;
-    expect(String(ws.getCell('A1').value)).toBe('Проект. Не для подачи');
+    expect(String(ws.getCell('A1').value)).toBe('Проект');
     let found: number | null = null;
     ws.eachRow((row) => {
       if (String(row.getCell(1).value).startsWith('НДС по расчёту')) found = row.getCell(2).value as number;
@@ -631,8 +643,10 @@ describe('«Открыть»: маршрут /api/documents/[id]/file', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe(DOCX_MIME);
     const cd = res.headers.get('content-disposition')!;
-    expect(cd).toMatch(/^attachment; filename="document\.docx"; filename\*=UTF-8''/);
-    expect(nameOf(cd)).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
+    // латинское запасное имя и полное по RFC 5987: на iOS, macOS и Windows имя по-русски
+    expect(cd).toMatch(/^attachment; filename="Dogovor_arendy_avtomobilya_bez_ekipazha_IP_Beta\.docx"; filename\*=UTF-8''/);
+    expect(cd.split("filename*=UTF-8''")[1]).toContain('%D0%94%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80');
+    expect(nameOf(cd)).toBe('Договор аренды автомобиля без экипажа_ИП Бета.docx');
     const body = Buffer.from(await res.arrayBuffer());
     expect(body.subarray(0, 2).toString()).toBe('PK');
     expect(Number(res.headers.get('content-length'))).toBe(body.length);
@@ -656,8 +670,8 @@ describe('«Открыть»: маршрут /api/documents/[id]/file', () => {
     const res = await get(id);
     expect(res.headers.get('content-type')).toBe(XLSX_MIME);
     const cd = res.headers.get('content-disposition')!;
-    expect(cd).toContain('filename="document.xlsx"');
-    expect(nameOf(cd)).toMatch(/^Проект декларации по НДС, ООО «Альфа», .+\.xlsx$/);
+    expect(cd).toMatch(/filename="Proekt_deklaratsii_po_NDS_OOO_Alfa_[A-Za-z0-9_.-]+\.xlsx"/);
+    expect(nameOf(cd)).toMatch(/^Проект декларации по НДС_ООО «Альфа»_.+\.xlsx$/);
     // незаполненное поле жёлтое: ячейка с [подписью] залита FFFF00
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load((await res.arrayBuffer()) as ArrayBuffer);
@@ -675,13 +689,13 @@ describe('«Открыть»: маршрут /api/documents/[id]/file', () => {
     const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
     await saveVersion(db, { userId, id, baseVersion: 1, edits: { contract_number: '77' }, nowMs: NOW, tz: TZ });
     const current = await get(id);
-    expect(nameOf(current.headers.get('content-disposition')!)).toBe('Договор аренды автомобиля без экипажа, ООО «Альфа».docx');
+    expect(nameOf(current.headers.get('content-disposition')!)).toBe('Договор аренды автомобиля без экипажа_ООО «Альфа».docx');
     const currentText = await docText(Buffer.from(await current.arrayBuffer()));
     expect(currentText).toContain('№ 77');
 
     const old = await get(id, '?version=1');
     expect(nameOf(old.headers.get('content-disposition')!)).toBe(
-      'Договор аренды автомобиля без экипажа, ООО «Альфа» (версия 1).docx',
+      'Договор аренды автомобиля без экипажа_ООО «Альфа» (версия 1).docx',
     );
     const oldText = await docText(Buffer.from(await old.arrayBuffer()));
     expect(oldText).toContain('№ [Номер договора]');
@@ -697,11 +711,19 @@ describe('«Открыть»: маршрут /api/documents/[id]/file', () => {
   it('имя файла: без недопустимых знаков, с версией и ASCII-запасным именем', () => {
     expect(documentFileName('Договор: аренда/субаренда?', 'docx')).toBe('Договор аренда субаренда.docx');
     expect(documentFileName('  ', 'xlsx')).toBe('Документ.xlsx');
-    expect(documentFileName('Справка, ООО «Альфа»', 'docx', 3)).toBe('Справка, ООО «Альфа» (версия 3).docx');
+    expect(documentFileName('Справка, ООО «Альфа»', 'docx', 3)).toBe('Справка_ООО «Альфа» (версия 3).docx');
     expect(documentFileName('а'.repeat(300), 'docx').length).toBeLessThanOrEqual(155);
-    const cd = contentDisposition('Справка, ООО «Альфа».docx', 'inline');
-    expect(cd.startsWith('inline; filename="document.docx"; filename*=UTF-8\'\'')).toBe(true);
-    expect(cd).not.toMatch(/[^\x20-\x7e]/);
+    const cd = contentDisposition('НДС_Альфа_2026-02.xlsx', 'attachment');
+    // обычное имя латиницей без знака процента, полное в filename* процентным кодированием UTF-8
+    expect(cd).toBe(
+      "attachment; filename=\"NDS_Alfa_2026-02.xlsx\"; filename*=UTF-8''%D0%9D%D0%94%D0%A1_%D0%90%D0%BB%D1%8C%D1%84%D0%B0_2026-02.xlsx",
+    );
+    const doc = contentDisposition('Договор аренды без экипажа_ИП Бета.docx', 'inline');
+    expect(doc.startsWith('inline; filename="Dogovor_arendy_bez_ekipazha_IP_Beta.docx"; filename*=UTF-8\'\'')).toBe(true);
+    expect(doc.split('filename*=')[0]).not.toContain('%');
+    expect(doc).not.toMatch(/[^\x20-\x7e]/);
+    // имя без латиницы и расширения не пустое
+    expect(contentDisposition('???', 'attachment')).toContain('filename="document"');
   });
 });
 
@@ -817,3 +839,127 @@ describe('миграция 0004 только добавляет', () => {
 });
 
 void renderBlocks;
+
+describe('удаление черновиков: мягкое, с возвратом и очисткой через сутки', () => {
+  const rowsOf = async (id: string) => db.select().from(documents).where(eq(documents.id, id));
+
+  it('черновик удаляется мягко: из списка и из чтения исчез, строка и версии пока есть', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    await saveVersion(db, { userId, id, baseVersion: 1, edits: { contract_number: '5' }, nowMs: NOW, tz: TZ });
+    expect((await listDocuments(db, userId, NOW)).some((d) => d.id === id)).toBe(true);
+
+    const gone = await deleteDocuments(db, { userId, ids: [id], nowMs: NOW + 1000 });
+    expect(gone).toEqual([id]);
+    expect((await listDocuments(db, userId, NOW + 2000)).some((d) => d.id === id)).toBe(false);
+    await expect(getDocument(db, { userId, id, tz: TZ })).rejects.toMatchObject({ status: 404 });
+    await expect(downloadDocument(db, { userId, id, tz: TZ })).rejects.toMatchObject({ status: 404 });
+    // строка, версии и лента на месте до окончательной очистки
+    const [row] = await rowsOf(id);
+    expect(row!.deletedAt).not.toBeNull();
+    const versions = await db.select().from(documentVersions).where(eq(documentVersions.documentId, id));
+    expect(versions).toHaveLength(2);
+  });
+
+  it('«Отменить»: удалённый возвращается со всеми версиями', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'beta' });
+    await deleteDocuments(db, { userId, ids: [id], nowMs: NOW });
+    expect(await restoreDocuments(db, { userId, ids: [id], nowMs: NOW + 5000 })).toEqual([id]);
+    expect((await listDocuments(db, userId, NOW + 6000)).some((d) => d.id === id)).toBe(true);
+    const d = await getDocument(db, { userId, id, tz: TZ });
+    expect(d.status).toBe('draft');
+    expect((await rowsOf(id))[0]!.deletedAt).toBeNull();
+  });
+
+  it('через сутки черновик стирается окончательно вместе с версиями, комментариями и лентой', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    await addComment(db, { userId, id, fieldKey: null, body: 'Проверить пункт 3', nowMs: NOW });
+    await deleteDocuments(db, { userId, ids: [id], nowMs: NOW });
+
+    // прошло меньше суток: строка на месте, очистка её не трогает
+    expect(await purgeDeleted(db, NOW + RESTORE_WINDOW_MS - 60_000)).toBe(0);
+    expect(await rowsOf(id)).toHaveLength(1);
+
+    // прошли сутки: очистка идёт при чтении списка
+    await listDocuments(db, userId, NOW + RESTORE_WINDOW_MS + 60_000);
+    expect(await rowsOf(id)).toHaveLength(0);
+    expect(await db.select().from(documentVersions).where(eq(documentVersions.documentId, id))).toHaveLength(0);
+    expect(await db.select().from(documentComments).where(eq(documentComments.documentId, id))).toHaveLength(0);
+    expect(await db.select().from(documentEvents).where(eq(documentEvents.documentId, id))).toHaveLength(0);
+    // вернуть стёртый уже нельзя
+    await expect(restoreDocuments(db, { userId, ids: [id], nowMs: NOW + RESTORE_WINDOW_MS + 120_000 })).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('вернуть можно только пока не прошли сутки, даже если очистка ещё не успела', async () => {
+    const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    await deleteDocuments(db, { userId, ids: [id], nowMs: NOW });
+    await expect(
+      restoreDocuments(db, { userId, ids: [id], nowMs: NOW + RESTORE_WINDOW_MS + 1000 }),
+    ).rejects.toMatchObject({ status: 404 });
+    await purgeDeleted(db, NOW + RESTORE_WINDOW_MS + 2000);
+  });
+
+  it('на проверке, с замечаниями, согласованный и отозванный не удаляются; пачка не меняется целиком', async () => {
+    const review = await makeCertificate();
+    await submitDocument(db, { userId, id: review, recipientId: 'demo-accountant', comment: '', nowMs: NOW });
+    await expect(deleteDocuments(db, { userId, ids: [review], nowMs: NOW })).rejects.toMatchObject({
+      status: 409,
+      code: 'not_draft',
+    });
+
+    const approved = await makeCertificate();
+    await submitDocument(db, { userId, id: approved, recipientId: 'demo-accountant', comment: '', nowMs: NOW });
+    await simulateReply(db, { userId, id: approved, kind: 'approve', nowMs: NOW + 1000 });
+    expect((await getDocument(db, { userId, id: approved, tz: TZ })).status).toBe('approved');
+    await expect(deleteDocuments(db, { userId, ids: [approved], nowMs: NOW })).rejects.toMatchObject({ status: 409 });
+
+    // один черновик и один согласованный в одной пачке: не удаляется ни один
+    const draft = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    await expect(deleteDocuments(db, { userId, ids: [draft, approved], nowMs: NOW })).rejects.toBeInstanceOf(DocError);
+    expect((await rowsOf(draft))[0]!.deletedAt).toBeNull();
+
+    // на проверке документ сначала отзывают, после этого он уже не черновик и всё равно не удаляется
+    await withdrawDocument(db, { userId, id: review, nowMs: NOW + 2000 });
+    expect((await getDocument(db, { userId, id: review, tz: TZ })).status).toBe('withdrawn');
+    await expect(deleteDocuments(db, { userId, ids: [review], nowMs: NOW })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('несколько черновиков удаляются разом; чужого и несуществующего нет', async () => {
+    const a = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    const b = await create('contract_rent_no_crew', { entityId: 'beta' });
+    expect(new Set(await deleteDocuments(db, { userId, ids: [a, b, a], nowMs: NOW }))).toEqual(new Set([a, b]));
+    await expect(
+      deleteDocuments(db, { userId, ids: ['00000000-0000-4000-8000-000000000000'], nowMs: NOW }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('маршруты: удалить, вернуть, не черновик даёт 409', async () => {
+    const { POST: delPost } = await import('@/app/api/documents/delete/route');
+    const { POST: restPost } = await import('@/app/api/documents/restore/route');
+    const id = await create('contract_rent_no_crew', { entityId: 'alfa' });
+    const res = await delPost(post('/api/documents/delete', { ids: [id] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ids: [id] });
+    const back = await restPost(post('/api/documents/restore', { ids: [id] }));
+    expect(back.status).toBe(200);
+    expect((await rowsOf(id))[0]!.deletedAt).toBeNull();
+
+    // документ на проверке: 409, статус не меняется
+    const sent = await makeCertificate();
+    await submitDocument(db, { userId, id: sent, recipientId: 'demo-accountant', comment: '', nowMs: NOW });
+    const bad = await delPost(post('/api/documents/delete', { ids: [sent] }));
+    expect(bad.status).toBe(409);
+    expect(((await bad.json()) as { code: string }).code).toBe('not_draft');
+    expect((await rowsOf(sent))[0]!.deletedAt).toBeNull();
+  });
+});
+
+describe('файлы без пометок «демо»', () => {
+  it('в коде сборки .docx и .xlsx слов «демо» и demo нет', () => {
+    for (const f of ['lib/documents/files.ts', 'lib/export/xlsx.ts', 'lib/export/excel-formula.ts']) {
+      const text = fs.readFileSync(path.resolve(process.cwd(), f), 'utf8');
+      expect(/демо|demo/i.test(text), f).toBe(false);
+    }
+  });
+});

@@ -247,7 +247,8 @@ describe('предупреждения о платежах и ОСНО', () => {
     const w = list.find((x) => x.kind === 'osno-profit')!;
     expect(w.level).toBe('info');
     expect(nb(w.title)).toBe('ООО «Эпсилон» на ОСНО: прогноз налога на прибыль за год 4,16 млн');
-    expect(w.text).toContain('Данные демо');
+    expect(w.text).toContain('Проверьте с бухгалтером');
+    expect(w.text.toLowerCase()).not.toContain('демо');
   });
 
   it('счётчик: одно срочное, всего семь', () => {

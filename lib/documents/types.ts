@@ -20,7 +20,7 @@ export const CATEGORIES: readonly TemplateCategory[] = ['contract', 'addendum', 
 
 /** Пометка на каждом шаблоне: образцы юридически не проверены. */
 export const SAMPLE_NOTE = 'Образец, проверить юристом';
-export const DRAFT_WATERMARK = 'Проект. Не для подачи';
+export const DRAFT_WATERMARK = 'Проект';
 
 export type FieldSource = 'entity' | 'calc' | 'user';
 

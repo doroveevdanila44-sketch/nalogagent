@@ -65,8 +65,8 @@ export function explainUnsupported(u: Unsupported, ctx: ExplainContext): string[
       const label = formatPeriod(u.period);
       return [
         range
-          ? `Данные в демо ${range}, за ${label} посчитать не могу.`
-          : `За ${label} данных в демо нет.`,
+          ? `Данные есть ${range}, за ${label} посчитать не могу.`
+          : `За ${label} данных нет.`,
       ];
     }
     case 'next_year': {

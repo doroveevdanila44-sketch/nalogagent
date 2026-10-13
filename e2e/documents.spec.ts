@@ -150,7 +150,7 @@ for (const width of [390, 1440]) {
     const gap = await page.evaluate(() => {
       const head = document.querySelector('header.top')!.getBoundingClientRect();
       const h1 = document.querySelector('h1')!.getBoundingClientRect();
-      return { gap: h1.top - head.bottom, y: window.scrollY };
+      return { gap: h1.top - head.bottom, y: (document.querySelector('main.app-main') as HTMLElement).scrollTop };
     });
     expect(gap.y).toBe(0);
     expect(gap.gap).toBeGreaterThanOrEqual(width === 390 ? 24 : 32);
@@ -197,31 +197,31 @@ test('Прокрутка раздела: открывается в самом н
   await firstLogin(page, PIN);
   await go(page, 'Дашборд');
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 500));
   await toDocuments(page);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop)).toBe(0);
 
-  await page.evaluate(() => window.scrollTo(0, 420));
+  await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 420));
   await page.waitForTimeout(150);
   await page.locator('[data-template="report_group_summary"] [data-action="fill"]').click();
   const dialog = page.getByRole('dialog', { name: /Заполнить:/ });
   await expect(dialog).toBeVisible();
-  const before = await page.evaluate(() => window.scrollY);
+  const before = await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop);
   expect(before).toBeGreaterThan(200);
   await dialog.getByLabel('Вид периода').selectOption({ label: 'Год' });
   await dialog.getByRole('button', { name: 'Заполнить', exact: true }).click();
   await expect(page.getByTestId('sheet')).toBeVisible();
   // лист открывается с начала
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop)).toBe(0);
 
   await page.getByRole('link', { name: 'К документам' }).click();
   await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
-  await expect.poll(async () => Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThanOrEqual(2);
+  await expect.poll(async () => Math.abs((await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop)) - before)).toBeLessThanOrEqual(2);
 
   // из другого раздела раздел «Документы» снова открывается с начала
   await go(page, 'Дашборд');
   await toDocuments(page);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTop)).toBe(0);
 });
 
 // ===== лист документа =====
@@ -285,17 +285,24 @@ for (const width of [390, 1440]) {
     expect(sticky.pos).toBe('sticky');
     expect(sticky.bottom).toBeLessThanOrEqual(sticky.vh + 0.5);
     expect(sticky.bottom).toBeGreaterThan(sticky.vh - 120);
-    await page.evaluate(() => window.scrollTo(0, 600));
+    await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 600));
     await page.waitForTimeout(150);
     const stuck = (await bar(page).boundingBox())!;
     expect(Math.abs(stuck.y + stuck.height - (await page.evaluate(() => window.innerHeight)))).toBeLessThanOrEqual(2);
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => (document.querySelector('main.app-main') as HTMLElement).scrollTo(0, 0));
     expect(await overflow(page)).toBeLessThanOrEqual(0);
 
     // меню «ещё»: скачивание, проверка, история, комментарии; «Править» и «Дозаполнить» в нём нет
     await openMenu(page);
     const items = await page.getByRole('menuitem').allInnerTexts();
-    expect(items.map((t) => t.replace(/\s+\d+$/, ''))).toEqual(['Скачать .docx', 'Проверить самому', 'История версий', 'Комментарии']);
+    // у черновика в конце меню «Удалить» (красный пункт)
+    expect(items.map((t) => t.replace(/\s+\d+$/, ''))).toEqual([
+      'Скачать .docx',
+      'Проверить самому',
+      'История версий',
+      'Комментарии',
+      'Удалить',
+    ]);
     await page.keyboard.press('Escape');
     await page.screenshot({ path: `${SHOTS}/doc-sheet-${width}.png` });
   });
@@ -494,7 +501,7 @@ test('«Дозаполнить»: форма только по пропущен�
   await form.getByLabel(/Номер договора/).fill('15');
   await form.getByLabel(/Дата договора/).fill('2026-10-10');
   await form.getByLabel(/Арендатор: наименование или ФИО/).fill('ИП Тестов Т.Т.');
-  await form.getByLabel(/Арендатор: реквизиты/).fill('ИНН 990000000099 (демо)');
+  await form.getByLabel(/Арендатор: реквизиты/).fill('ИНН 990000000099');
   await form.getByLabel(/Автомобиль: марка, модель, госномер/).fill('Образцовая модель А000АА41');
   await form.getByLabel(/Срок аренды/).fill('30 суток');
   await form.getByLabel(/Арендная плата за сутки/).fill('7 500,50');
@@ -528,7 +535,7 @@ test('«Дозаполнить»: форма только по пропущен�
   const old = await fetchFile(page);
   expect(old.href).toContain('version=1');
   expect(nameFrom(old.res.headers()['content-disposition']!)).toBe(
-    'Договор аренды автомобиля без экипажа, ООО «Альфа» (версия 1).docx',
+    'Договор аренды автомобиля без экипажа_ООО «Альфа» (версия 1).docx',
   );
 
   const rows = await sql<{ n: number }>('select n from document_versions where document_id = $1 order by n', [docId(page)]);
@@ -596,7 +603,7 @@ test('Скачать из меню: .docx с колонтитулом и выд�
   await startFromCatalog(page, 'contract_rent_no_crew', { entity: 'ИП Бета' });
   await openMenu(page);
   const [download] = await Promise.all([page.waitForEvent('download'), menuItem(page, 'Скачать .docx').click()]);
-  expect(download.suggestedFilename()).toBe('Договор аренды автомобиля без экипажа, ИП Бета.docx');
+  expect(download.suggestedFilename()).toBe('Договор аренды автомобиля без экипажа_ИП Бета.docx');
 
   const { res, body } = await fetchFile(page);
   expect(res.headers()['content-type']).toBe(DOCX);
@@ -619,7 +626,7 @@ test('Декларация: таблица на экране, те же дейс
   await expect(page.getByTestId('sheet-page')).toHaveAttribute('data-kind', 'xlsx');
   const grid = sheet(page).locator('table.grid-table');
   await expect(grid).toBeVisible();
-  await expect(page.getByTestId('draft-mark')).toHaveText('Проект. Не для подачи');
+  await expect(page.getByTestId('draft-mark')).toHaveText('Проект');
   await expect(grid.getByRole('rowheader', { name: 'Налогоплательщик' })).toBeVisible();
   await expect(grid.getByRole('rowheader', { name: 'Код налогового органа' })).toBeVisible();
   expect(await sheet(page).locator('table.sheet-table tbody tr').count()).toBe(12);
@@ -644,7 +651,7 @@ test('Декларация: таблица на экране, те же дейс
   await wb.xlsx.load(body as unknown as ArrayBuffer);
   expect(wb.worksheets.map((w) => w.name)).toEqual(['Проект декларации', 'Итог', 'По месяцам', 'Расчёт', 'Источник']);
   const ws = wb.getWorksheet('Проект декларации')!;
-  expect(String(ws.getCell('A1').value)).toBe('Проект. Не для подачи');
+  expect(String(ws.getCell('A1').value)).toBe('Проект');
   let found: number | null = null;
   ws.eachRow((r) => {
     if (String(r.getCell(1).value).startsWith('НДС по расчёту')) found = r.getCell(2).value as number;
@@ -717,7 +724,7 @@ test('Отправить: окно с получателем и коммента
   await bar(page).getByRole('button', { name: 'Отправить', exact: true }).click();
   const modal = page.getByTestId('overlay-modal');
   await expect(modal).toBeVisible();
-  await expect(modal.getByTestId('demo-mail-note')).toHaveText('Письмо не отправляется, это демонстрация');
+  await expect(modal.getByTestId('demo-mail-note')).toHaveText('Письмо не отправляется');
   await expect(modal.getByRole('radio')).toHaveCount(2);
   await modal.getByRole('radio', { name: /Финансовый директор/ }).check();
   await modal.getByLabel('Комментарий').fill('Проверьте итог за год');
@@ -731,14 +738,15 @@ test('Отправить: окно с получателем и коммента
   await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toHaveCount(0);
 
   const demo = page.getByTestId('demo-reply');
-  await expect(demo).toContainText('Демо');
+  await expect(demo).toContainText('Имитировать ответ бухгалтера');
+  expect(await demo.innerText()).not.toMatch(/демо/i);
   await demo.getByRole('button', { name: 'Замечание' }).click();
   await expect(status(page)).toHaveText(/Есть замечания/);
   await expect(page.getByTestId('more-dot')).toBeVisible();
   await openMenu(page);
   await menuItem(page, /^Комментарии/).click();
   const comments = page.getByTestId('overlay-drawer');
-  await expect(comments.getByTestId('comments')).toContainText('Замечание · Демо');
+  await expect(comments.getByTestId('comments')).toContainText('Замечание · имитация');
   await expect(comments.getByTestId('comments')).toContainText('Проверьте итог за год');
   await page.keyboard.press('Escape');
 
@@ -954,7 +962,7 @@ test('Меню «ещё»: стрелки, Home и End, Escape возвраща�
   await button.focus();
   await page.keyboard.press('Enter');
   const items = page.getByRole('menuitem');
-  await expect(items).toHaveCount(4);
+  await expect(items).toHaveCount(5);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();

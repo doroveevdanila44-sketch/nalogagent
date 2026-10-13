@@ -5,7 +5,7 @@ import { CalcActions } from '@/components/provenance/CalcActions';
 import type { TargetBody } from '@/components/provenance/client';
 import type { DocumentDetail } from '@/lib/documents/detail';
 import { gridRows, type RenderBlock, type Seg, type TableCell } from '@/lib/documents/render';
-import { SOURCE_LABEL } from '@/lib/documents/types';
+import { DRAFT_WATERMARK, SOURCE_LABEL } from '@/lib/documents/types';
 
 /** Свойства подсказки источника: наведение, фокус, долгое нажатие (DocumentSheet). */
 export type TipProps = (text: string) => Record<string, unknown>;
@@ -179,7 +179,7 @@ export function GridSheet({ ctx }: { ctx: SheetCtx }) {
     <div className="sheet-grid">
       {ctx.doc.category === 'declaration' ? (
         <p className="grid-mark" data-testid="draft-mark">
-          Проект. Не для подачи
+          {DRAFT_WATERMARK}
         </p>
       ) : null}
       <table className="grid-table">

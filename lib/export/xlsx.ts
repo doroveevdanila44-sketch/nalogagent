@@ -6,7 +6,7 @@ import { formatLoadedAt } from '@/lib/calc/provenance';
 import type { FormulaStep } from '@/lib/calc/provenance';
 import type { CalcResult, EntityResult } from '@/lib/calc/service';
 import { PALETTE } from '@/lib/theme';
-import { DEMO_LABEL, KIND_LABEL, preciseDateTime, shortDateTime } from '@/lib/provenance/line';
+import { KIND_LABEL, preciseDateTime, shortDateTime } from '@/lib/provenance/line';
 import { leavesOf, parseExpression, printExcel, signatureOf, type ExprNode, type Leaf } from './excel-formula';
 
 /**
@@ -15,7 +15,7 @@ import { leavesOf, parseExpression, printExcel, signatureOf, type ExprNode, type
  *  «По месяцам» выручка и налог по месяцам и юрлицам, строки группы суммами;
  *  «Расчёт»     каждый шаг формулы расчёта живой формулой Excel: числа шага лежат в отдельных
  *               ячейках (выручка, ставка, доля вычета), результат считает формула;
- *  «Источник»   откуда цифры, дата выгрузки, период, факт или прогноз, метка «Демо-данные», правила.
+ *  «Источник»   откуда цифры, дата выгрузки, период, факт или прогноз, юрлицо, правила.
  *
  * Все числа приходят из CalcResult. Файл содержит и посчитанные значения (кэш формул), поэтому
  * цифры видны в любой программе просмотра, а при открытии в Excel формулы пересчитываются.
@@ -297,7 +297,7 @@ export function addCalcSheets(wb: ExcelJS.Workbook, results: CalcResult[], meta:
 /** Новая книга со свойствами приложения; формулы пересчитываются при открытии. */
 export function newWorkbook(meta: WorkbookMeta, title: string): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'Агент по НДС (демо)';
+  wb.creator = 'Агент по НДС';
   wb.title = title;
   wb.created = new Date(meta.at);
   wb.modified = new Date(meta.at);
@@ -317,7 +317,7 @@ export async function buildWorkbook(results: CalcResult[], meta: WorkbookMeta): 
 function sheetIntro(ws: ExcelJS.Worksheet, title: string, meta: WorkbookMeta, note: string): void {
   ws.getCell('A1').value = title;
   ws.getCell('A1').font = { bold: true, size: 14, color: { argb: argb(PALETTE.ink) } };
-  ws.getCell('A2').value = `${DEMO_LABEL}: цифры выдуманы, файл для проверки расчёта. Расчёт на ${preciseDateTime(meta.at, meta.tz)}.`;
+  ws.getCell('A2').value = `Файл для проверки расчёта. Расчёт на ${preciseDateTime(meta.at, meta.tz)}.`;
   ws.getCell('A2').font = { bold: true, color: { argb: argb(PALETTE.accent) } };
   ws.getCell('A3').value = note;
   ws.getCell('A3').font = { italic: true, color: { argb: argb(PALETTE.muted) } };
@@ -630,21 +630,17 @@ function writeSource(ws: ExcelJS.Worksheet, results: CalcResult[], meta: Workboo
     row += 1;
   };
 
-  kv('Метка', `${DEMO_LABEL}: цифры выдуманы, это не данные клиента и не отчётность`, true);
+  // Только то, что нужно, чтобы проверить откуда цифры: источник, дата выгрузки, период, основа,
+  // юрлицо. Технического кода источника, часового пояса и служебной даты расчёта здесь нет.
   kv('Источник', src ? src.title : 'не указан');
-  kv('Вид источника', src ? src.kind : '');
   kv('Дата выгрузки', src ? formatLoadedAt(src.loadedAt, meta.tz) : '');
-  kv('Расчёт на', `${preciseDateTime(meta.at, meta.tz)} (${meta.tz})`);
-  const [y, m, d] = first.asOf.split('-').map(Number) as [number, number, number];
-  kv('Дата расчёта', dateRuYear({ year: y, month: m - 1, day: d }));
   row += 1;
 
   results.forEach((r, i) => {
     kv(results.length > 1 ? `Результат ${i + 1}` : 'Результат', titleOf(r), true);
-    kv('Налог', r.taxName);
-    kv('Период', `${r.periodLabel} (${r.from} .. ${r.to})`);
-    kv('Основа данных', KIND_LABEL[r.kind]);
-    kv('Юрлица', r.entities.filter((e) => e.applicable).map((e) => e.name).join(', ') || 'нет');
+    kv('Период', r.periodLabel);
+    kv('Факт или прогноз', KIND_LABEL[r.kind]);
+    kv('Юрлицо', r.entities.filter((e) => e.applicable).map((e) => e.name).join(', ') || 'нет');
     // допущения прогноза: что принято, потому что точных данных нет
     r.assumptions.forEach((a, k) => kv(k === 0 ? 'Допущения' : '', a));
     row += 1;

@@ -301,17 +301,23 @@ describe('файл Excel: листы и живые формулы', () => {
     });
   }
 
-  it('источник: метка «Демо-данные», дата выгрузки, период, основа', async () => {
+  it('источник: выгрузка из 1С, дата выгрузки, период, основа и юрлицо, без «демо», кода источника и часового пояса', async () => {
     const wb = await load([run({ tax: 'vat', period: { kind: 'ytd' } })]);
     const ws = wb.getWorksheet(SHEET_SOURCE)!;
     const text: string[] = [];
     ws.eachRow((row) => text.push(row.values ? (row.values as CellVal[]).filter(Boolean).join(' | ') : ''));
     const all = text.join('\n');
-    expect(all).toContain('Демо-данные');
-    expect(all).toContain('Выгрузка из 1С (демо)');
-    expect(all).toContain('10 октября 2026, 18:00');
-    expect(all).toContain('факт и прогноз');
-    expect(all).toContain('с начала года');
+    expect(all).toContain('Источник | Выгрузка из 1С');
+    expect(all).toContain('Дата выгрузки | 10 октября 2026, 18:00');
+    expect(all).toContain('Факт или прогноз | факт и прогноз');
+    expect(all).toContain('Юрлицо |');
+    expect(all).toContain('Период | с начала года');
+    // служебное в листе не показывается: метка, технический код источника, часовой пояс, служебная дата
+    expect(all.toLowerCase()).not.toContain('демо');
+    expect(all).not.toContain('demo_1c');
+    expect(all).not.toContain('Asia/');
+    expect(all).not.toContain('Дата расчёта');
+    expect(all).not.toContain('Вид источника');
     expect(all).toContain('rate_special_5');
     expect(all).toContain('НК РФ, ст. 164');
   });

@@ -176,7 +176,7 @@ export function buildWarnings(
         `Прибыль за год ${mln(tax.base, 2)}: выручка без НДС ${mln(tax.income, 2)} минус расходы ${mln(tax.expenses, 2)}, ` +
         `ставка ${tax.ratePct.toString()}%. Начислено на сегодня ${rub(tax.accrued)}.` +
         (next ? ` Ближайший платёж ${dateRu(next.due)}, ${rub(next.amount)}.` : '') +
-        ` Данные демо, проверьте с бухгалтером.`,
+        ` Проверьте с бухгалтером.`,
     });
   }
 

@@ -92,7 +92,7 @@
 
   body {
     margin: 0;
-    min-height: 100dvh;
+    min-height: 100%;
     overscroll-behavior-y: none;
     background: var(--color-page);
     color: var(--color-ink);
@@ -199,28 +199,59 @@
     padding-inline: 16px;
   }
 
-  /* ===== Каркас ===== */
-  /* Страница строится на динамической высоте окна (100dvh): с открытой клавиатурой она сжимается
-     вместе с вьюпортом, и поле ввода остаётся над клавиатурой */
-  .app-body {
-    min-height: calc(100dvh - var(--header-h));
-  }
-  .app-main {
-    padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 20px);
-  }
-  /* Агент: чат занимает высоту окна и прокручивает только список сообщений, страница стоит на месте.
-     Запас под панель вкладок считает сам чат (.chat-root). */
-  .app-main:has(> .chat-root) {
-    padding-bottom: 0;
-  }
-  html:has(.chat-root),
-  html:has(.chat-root) body {
+  /* ===== Каркас =====
+     Оболочка это колонка на высоту окна: шапка, область содержимого, нижняя панель вкладок (телефон).
+     Шапка и панель обычные элементы колонки, не fixed и не sticky относительно страницы, поэтому при
+     прокрутке они не двигаются (на iPhone в Safari панель уезжала на середину экрана). Прокручивается
+     одна область, main. Страница (html и body) не прокручивается вообще. Высота это динамическая
+     высота окна (100dvh), без 100vh: с адресной строкой Safari и экранной клавиатурой она считается
+     верно, а --kb (lib/client/keyboard.ts) укорачивает оболочку на высоту клавиатуры iOS, и поле
+     ввода чата остаётся над ней. */
+  html:has(.app-shell),
+  html:has(.app-shell) body {
+    height: 100%;
     overflow: hidden;
+  }
+  .app-shell[hidden] {
+    display: none;
+  }
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    height: calc(100dvh - var(--kb, 0px));
+    overflow: hidden;
+  }
+  .app-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Единственная прокручиваемая область. Верхний отступ внутри неё: первый заголовок каждого экрана
+     стоит не ближе 24 px от шапки на телефоне и 32 px на компьютере и уходит вместе с содержимым. */
+  .app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+  /* Агент: чат занимает всю область и прокручивает только список сообщений. Отступ сверху у списка. */
+  .app-main:has(> .chat-root) {
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+  #overlay-root {
+    flex: none;
   }
 
   .top {
-    position: sticky;
-    top: 0;
+    position: relative;
+    flex: none;
     z-index: 30;
     background: var(--color-lake);
     color: var(--color-ink);
@@ -305,10 +336,8 @@
 
   /* Телефон: панель вкладок внизу. Компьютер (от 760 px): вертикальная панель слева под шапкой */
   .tabs {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    flex: none;
+    position: relative;
     z-index: 40;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -350,6 +379,8 @@
      панели до правого края окна), контент правее панели. Первая вкладка стоит на уровне шапки. */
   @media (min-width: 760px) {
     .tabs {
+      position: fixed;
+      left: 0;
       top: 0;
       right: auto;
       bottom: 0;
@@ -376,6 +407,7 @@
     .app-main {
       max-width: none;
       padding-inline: 24px;
+      padding-top: 32px;
       padding-bottom: 24px;
     }
   }
@@ -444,7 +476,7 @@
   /* ===== Дашборд ===== */
   /* Группа: заголовок и четыре отдельные карточки */
   .sum {
-    margin-top: 18px;
+    margin-top: 0;
   }
   .sum-head h2 {
     font-size: 19px;
@@ -1221,9 +1253,13 @@
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
-  .seg-hint {
-    font-size: 13px;
-    color: var(--color-muted);
+  /* Ничего не выбрано: области нет ни на экране, ни в раскладке; она остаётся живой для чтения с экрана */
+  .seg-card.empty {
+    min-height: 0;
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: none;
   }
   /* Выбран весь столбец: месяц, итог и разбивка по юрлицам */
   .seg-col {
@@ -1505,8 +1541,7 @@
   .chat-root {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--header-h) - var(--tabs-h) - var(--kb, 0px));
-    height: calc(100dvh - var(--header-h) - var(--tabs-h) - var(--kb, 0px));
+    height: 100%;
     min-height: 0;
   }
   .chat-scroll {
@@ -1546,14 +1581,24 @@
     align-items: center;
     justify-content: center;
     min-height: 100%;
-    padding-block: 16px;
+    padding-block: 24px;
+  }
+  @media (min-width: 760px) {
+    .chat-empty {
+      padding-block: 32px;
+    }
   }
   .chat {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding-top: 18px;
+    padding-top: 24px;
     padding-bottom: 14px;
+  }
+  @media (min-width: 760px) {
+    .chat {
+      padding-top: 32px;
+    }
   }
   .msg {
     max-width: min(680px, 94%);
@@ -2496,6 +2541,22 @@
     border-color: var(--color-line);
     background: var(--color-mint);
   }
+  /* Опасное действие («Удалить» в окне подтверждения): красная кнопка из состояний палитры */
+  .act.danger {
+    border-color: var(--color-bad);
+    background: var(--color-bad);
+    color: var(--color-on-ink);
+  }
+  @media (hover: hover) {
+    .act.danger:hover:not(:disabled) {
+      border-color: var(--color-bad-deep);
+      background: var(--color-bad-deep);
+    }
+  }
+  .act.danger:active:not(:disabled) {
+    border-color: var(--color-bad-deep);
+    background: var(--color-bad-deep);
+  }
   .acts.on-dark .act {
     background: var(--color-wine-soft);
     border-color: var(--glass-edge);
@@ -3432,7 +3493,7 @@
   /* Тонкая панель вверху: назад, название, строка «Версия, статус», меню «ещё». Прилипает под шапкой. */
   .sheet-bar {
     position: sticky;
-    top: var(--header-h);
+    top: 0;
     z-index: 25;
     display: flex;
     align-items: center;
@@ -3711,7 +3772,7 @@
   /* Нижняя панель листа: счётчик пропусков со стрелками, «Дозаполнить», «Отправить». Закреплена. */
   .sheet-actions {
     position: sticky;
-    bottom: var(--tabs-h);
+    bottom: 0;
     z-index: 25;
     display: flex;
     flex-wrap: wrap;
@@ -3788,13 +3849,9 @@
   }
 
   /* Раздел «Документы»: каталог слева, документ справа от 1100 px; на телефоне и планшете документ на весь экран */
+  /* Отступ от шапки (24 px на телефоне, 32 px на компьютере) даёт область main */
   .docs-head {
-    margin-top: 24px;
-  }
-  @media (min-width: 760px) {
-    .docs-head {
-      margin-top: 32px;
-    }
+    margin-top: 0;
   }
   .docs-title {
     font-size: 24px;
@@ -3816,7 +3873,7 @@
     .docs-shell.has-doc .docs-rail {
       display: block;
       position: sticky;
-      top: var(--header-h);
+      top: 0;
       max-height: calc(100dvh - var(--header-h));
       margin-inline: -4px;
       padding: 0 4px 24px;
@@ -3852,6 +3909,75 @@
     html[data-sheet='open'] .tabs {
       display: none;
     }
+  }
+
+  /* Режим «Выбрать» в списке документов: отметить несколько черновиков и удалить выбранные */
+  .sel-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .sel-bar .act {
+    flex: 0 0 auto;
+    padding-inline: 16px;
+  }
+  .sel-count {
+    margin-right: auto;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .req-pick {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin: -10px 0 -10px -12px;
+  }
+  .req-pick input {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--color-wine);
+  }
+  /* Уведомление «Черновик удалён» с кнопкой «Отменить» */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--tabs-h) + 16px);
+    z-index: 65;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(480px, calc(100vw - 32px));
+    padding: 8px 8px 8px 16px;
+    border-radius: 14px;
+    background: var(--color-ink);
+    color: var(--color-on-ink);
+    font-size: 14px;
+    font-weight: 500;
+    transform: translateX(-50%);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--color-ink) 35%, transparent);
+  }
+  .toast-undo {
+    flex: none;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--color-lemon);
+    color: var(--color-ink);
+    font: inherit;
+    font-weight: 600;
+  }
+  .toast-undo:disabled {
+    opacity: 0.6;
+  }
+  .menu-item.danger {
+    color: var(--color-bad);
   }
 
   .doc-status.sm {
@@ -4120,16 +4246,20 @@
   }
 
   /* ===== Обучение: затемнение с вырезом и карточка шага ===== */
+  /* Корень сам нажатий не принимает: на шагах «попробуйте» нажатие по вырезу проходит к странице,
+     а вокруг выреза стоят щиты (.tour-block) и карточка */
   .tour {
     position: fixed;
     inset: 0;
     z-index: 70;
+    pointer-events: none;
   }
-  /* Ловит нажатия мимо карточки: страница под обучением не отвечает */
+  /* Ловит нажатия мимо карточки и выреза: страница под обучением не отвечает, тур не закрывается */
   .tour-block {
     position: absolute;
     inset: 0;
     touch-action: none;
+    pointer-events: auto;
   }
   /* Вырез: рамка прозрачна, затемнение это тень вокруг неё. Рамка плавно переезжает между шагами. */
   .tour-hole {
@@ -4144,10 +4274,8 @@
       width 340ms cubic-bezier(0.22, 1, 0.36, 1),
       height 340ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  .tour-hole.empty {
-    outline-color: transparent;
-  }
   .tour-card {
+    pointer-events: auto;
     position: absolute;
     box-sizing: border-box;
     padding: 16px;
@@ -4155,16 +4283,14 @@
     background: var(--color-page);
     color: var(--color-ink);
     box-shadow: 0 18px 44px color-mix(in srgb, var(--color-ink) 35%, transparent);
-    touch-action: none;
     animation: tour-in 220ms ease-out;
     /* три строки на шаг: на низком окне карточка прокручивается, а не уходит за край */
     max-height: calc(100dvh - 24px);
     overflow-y: auto;
   }
+  /* Положение карточки не анимируется: она появляется сразу на своём месте, а не едет из угла */
   .tour-card.placed {
     transition:
-      top 340ms cubic-bezier(0.22, 1, 0.36, 1),
-      left 340ms cubic-bezier(0.22, 1, 0.36, 1),
       transform 180ms ease-out,
       opacity 180ms ease-out;
   }
@@ -4206,6 +4332,7 @@
   }
   .tour-acts {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin-top: 14px;

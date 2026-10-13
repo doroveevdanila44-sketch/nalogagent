@@ -91,9 +91,9 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
   }
 
   const doc = new Document({
-    creator: 'Агент по НДС (демо)',
+    creator: 'Агент по НДС',
     title: meta.title,
-    description: `${SAMPLE_NOTE}. Демо-данные. Версия ${meta.version}`,
+    description: `${SAMPLE_NOTE}. Версия ${meta.version}`,
     sections: [
       {
         // колонтитул мелким шрифтом (8 пт): образец юридически не проверен
@@ -116,7 +116,7 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
                 alignment: AlignmentType.LEFT,
                 children: [
                   new TextRun({
-                    text: `Демо-данные · версия ${meta.version} · контрольная сумма ${meta.hash.slice(0, 12)}`,
+                    text: `Версия ${meta.version} · контрольная сумма ${meta.hash.slice(0, 12)}`,
                     size: 16,
                     color: PALETTE.muted.replace('#', ''),
                   }),
@@ -135,7 +135,7 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
 // ===== .xlsx (проекты деклараций) =====
 
 /**
- * Лист «Проект декларации» с показателями и водяным знаком «Проект. Не для подачи», дальше листы
+ * Лист «Проект декларации» с показателями и водяным знаком «Проект», дальше листы
  * расчёта («Итог», «По месяцам», «Расчёт», «Источник») с живыми формулами: сумма в проекте и на
  * листах расчёта одна и та же.
  */
@@ -161,7 +161,7 @@ export async function buildDeclarationXlsx(
   ws.mergeCells(row, 1, row, 4);
   row += 1;
   const note = ws.getCell(row, 1);
-  note.value = `${SAMPLE_NOTE}. Демо-данные: цифры выдуманы. Версия ${meta.version}, контрольная сумма ${meta.hash.slice(0, 12)}.`;
+  note.value = `${SAMPLE_NOTE}. Версия ${meta.version}, контрольная сумма ${meta.hash.slice(0, 12)}.`;
   note.font = { italic: true, color: { argb: ARGB(PALETTE.muted) } };
   ws.mergeCells(row, 1, row, 4);
   row += 2;

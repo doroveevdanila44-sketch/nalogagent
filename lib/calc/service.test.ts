@@ -68,7 +68,7 @@ describe('снимок из базы', () => {
     expect(data.entities.map((e) => e.id)).toEqual(['alfa', 'beta', 'delta', 'gamma', 'epsilon']);
     expect(data.revenue).toHaveLength(5 * 24);
     expect(new Set(data.revenue.map((r) => r.sourceId))).toEqual(new Set(['demo-1c']));
-    expect(data.source).toMatchObject({ id: 'demo-1c', kind: 'demo_1c', title: 'Выгрузка из 1С (демо)', isDemo: true });
+    expect(data.source).toMatchObject({ id: 'demo-1c', kind: 'demo_1c', title: 'Выгрузка из 1С', isDemo: true });
     // для калькулятора в monthly лежат только строки года «сегодня»
     expect(data.entities[0]!.monthly).toHaveLength(12);
   });
@@ -347,7 +347,7 @@ describe('каждое число объяснено шагами формулы
 describe('источник, момент и правила', () => {
   it('источник, as_of, границы периода и подпись', () => {
     const r = calc({ tax: 'vat', period: { kind: 'month', year: 2026, month: 2 } });
-    expect(r.source).toMatchObject({ id: 'demo-1c', title: 'Выгрузка из 1С (демо)', isDemo: true, kind: 'demo_1c' });
+    expect(r.source).toMatchObject({ id: 'demo-1c', title: 'Выгрузка из 1С', isDemo: true, kind: 'demo_1c' });
     expect(r.source!.loadedAt).toBe('2026-10-10T06:00:00.000Z');
     expect(r.asOf).toBe('2026-10-10');
     expect(r.periodLabel).toBe('февраль 2026');

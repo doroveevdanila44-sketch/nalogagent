@@ -322,7 +322,14 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
         <span className="legend-note">Штриховка: прогноз</span>
       </div>
 
-      <div className="seg-card" aria-live="polite" aria-atomic="true">
+      {/* Подпись выбранного сегмента или столбца появляется только после выбора: без постоянной плашки
+          с пояснением (как пользоваться графиком сказано в обучении). Пустая область живая для
+          чтения с экрана и размера не имеет. */}
+      <div
+        className={activeSeg || activeCol !== null ? 'seg-card' : 'seg-card empty'}
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {activeSeg && activeColumn && activeAmount && activeEntity ? (
           <>
             <span className="seg-dot" style={{ background: entityColor(activeEntity) }} />
@@ -355,12 +362,7 @@ function RevenueChartBase({ columns, entities }: { columns: MonthColumn[]; entit
               ))}
             </ul>
           </div>
-        ) : (
-          <span className="seg-hint">
-            Наведите или нажмите на сегмент, чтобы увидеть юрлицо, месяц и сумму. Нажмите на подпись месяца,
-            чтобы выделить весь столбец.
-          </span>
-        )}
+        ) : null}
       </div>
     </>
   );

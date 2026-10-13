@@ -13,12 +13,12 @@ import { SourceLine } from './SourceLine';
 import { useSnapshots } from './useSnapshots';
 import { lineFromSnapshots, shortDateTime, snapshotTitle } from '@/lib/provenance/line';
 
-export const DEMO_MAIL_NOTE = 'Демо: письмо не отправляется';
+export const MAIL_NOTE = 'Письмо не отправляется';
 
 /**
- * Окно «Передать специалисту» (демо). Получатель из вымышленного справочника, комментарий,
- * «Отправить». Создаётся запись review_requests со снимком расчёта и Excel; письмо никуда не уходит,
- * и окно, и подтверждение подписаны «Демо: письмо не отправляется».
+ * Окно «Передать специалисту». Получатель из справочника, комментарий, «Отправить». Создаётся
+ * запись review_requests со снимком расчёта и Excel; письмо никуда не уходит, об этом сказано
+ * только здесь, в окне: «Письмо не отправляется».
  */
 export function SendToSpecialist({ target, onClose }: { target: TargetBody; onClose: () => void }) {
   const state = useSnapshots(target);
@@ -68,7 +68,7 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
       <OverlayHead title="Передать специалисту" onClose={onClose} />
       <div className="ov-scroll">
         <p className="demo-banner" data-testid="demo-mail-note">
-          {DEMO_MAIL_NOTE}. Запрос сохранится в разделе «Статусы», получатель ничего не получит.
+          {MAIL_NOTE}. Запрос сохранится в разделе «Статусы», получатель ничего не получит.
         </p>
 
         {done ? (

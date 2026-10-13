@@ -9,11 +9,10 @@ import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { shortDateTime } from '@/lib/provenance/line';
 import type { ReviewItem } from '@/lib/provenance/types';
 import { downloadFile, errorText } from './client';
-import { DEMO_MAIL_NOTE } from './SendToSpecialist';
 
 /**
  * Раздел «Статусы»: история запросов на проверку, переданных специалисту. Записи создаёт кнопка
- * «Передать специалисту» (демо): статус «Отправлено на проверку», письмо не отправляется.
+ * «Передать специалисту»: статус «Отправлено на проверку».
  */
 export function StatusesView() {
   const [items, setItems] = useState<ReviewItem[] | null>(null);
@@ -58,9 +57,8 @@ export function StatusesView() {
 
   return (
     <div className="statuses">
-      <div className="sec-h" style={{ marginTop: 18 }}>
+      <div className="sec-h">
         <h1 id="h-statuses">Статусы</h1>
-        <p>{DEMO_MAIL_NOTE}</p>
       </div>
 
       {error ? (

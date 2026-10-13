@@ -59,7 +59,9 @@ export function sourceRef(row: {
   loadedAt: Date | string;
 }): SourceRef {
   const at = row.loadedAt instanceof Date ? row.loadedAt : new Date(row.loadedAt);
-  return { id: row.id, kind: row.kind, title: row.title, isDemo: row.isDemo, loadedAt: at.toISOString() };
+  // «Выгрузка из 1С (демо)» в базе, «Выгрузка из 1С» на экране и в файлах: метка «Демо-данные» одна, в шапке
+  const title = row.title.replace(/\s*\((?:демо|demo)\)/gi, '').trim();
+  return { id: row.id, kind: row.kind, title, isDemo: row.isDemo, loadedAt: at.toISOString() };
 }
 
 export function ruleRef(row: RuleRow): RuleRef {
@@ -85,7 +87,7 @@ export function formatLoadedAt(loadedAtIso: string, tz: string): string {
   return `${dateRuYear({ year: m.year, month: m.month, day: m.day })}, ${p(hh)}:${p(mm)}`;
 }
 
-/** «Выгрузка из 1С (демо), загружена 10 октября 2026, 18:00» */
+/** «Выгрузка из 1С, загружена 10 октября 2026, 18:00» */
 export function sourceLine(source: SourceRef, tz: string): string {
   return `${source.title}, загружена ${formatLoadedAt(source.loadedAt, tz)}`;
 }

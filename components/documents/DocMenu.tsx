@@ -10,6 +10,8 @@ export interface MenuItem {
   /** Ссылка вместо действия: «Скачать» */
   href?: string;
   download?: boolean;
+  /** Опасное действие («Удалить»): красный текст */
+  danger?: boolean;
   onSelect?: () => void;
 }
 
@@ -107,7 +109,7 @@ export function DocMenu({ items, dot = false }: { items: MenuItem[]; dot?: boole
                 key={it.key}
                 type="button"
                 role="menuitem"
-                className="menu-item"
+                className={it.danger ? 'menu-item danger' : 'menu-item'}
                 data-action={it.key}
                 onClick={() => {
                   setOpen(false);

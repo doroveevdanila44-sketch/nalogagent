@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, ApiError, LOCKED_EVENT, setCsrf } from '@/lib/client/api';
+import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { watchKeyboard } from '@/lib/client/keyboard';
 import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { Wordmark } from './Wordmark';
@@ -11,7 +11,7 @@ import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
 import { Tour } from './onboarding/Tour';
 
-export const UNLOCKED_EVENT = 'pva:unlocked';
+export { UNLOCKED_EVENT };
 
 interface Props {
   children: ReactNode;
@@ -147,6 +147,17 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     }
   }, []);
 
+  // Прокручивается область main, а не окно, и она одна на все разделы: при переходе в другой раздел
+  // (дашборд, документы, агент) содержимое открывается с начала. Список и лист документов внутри
+  // раздела «Документы» сохраняют положение сами (DocumentsShell).
+  const section = pathname.split('/')[1] ?? '';
+  const lastSection = useRef(section);
+  useLayoutEffect(() => {
+    if (lastSection.current === section) return;
+    lastSection.current = section;
+    document.querySelector<HTMLElement>('.app-main')?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [section]);
+
   // Высота шапки (она растёт, когда показан баннер «Нет сети»): боковая панель и нижние элементы
   // привязаны к ней через CSS-переменную --header-h
   useLayoutEffect(() => {
@@ -267,7 +278,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
-      <div hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+      <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
         <header className="top" ref={headerRef}>
           {/* Метка демо: один раз в шапке, на всех экранах после входа */}
           <span className="demo-badge" data-testid="demo-badge">

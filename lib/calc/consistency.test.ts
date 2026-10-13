@@ -127,7 +127,7 @@ describe('/api/dashboard и расчётный сервис дают одни и
     expect(payload.source).toMatchObject({
       id: 'demo-1c',
       kind: 'demo_1c',
-      title: 'Выгрузка из 1С (демо)',
+      title: 'Выгрузка из 1С',
       isDemo: true,
       loadedAt: '2026-10-10T06:00:00.000Z',
     });
@@ -166,11 +166,11 @@ describe('сид: один источник, детерминированный 
     expect(after).toEqual(before);
   });
 
-  it('один источник «Выгрузка из 1С (демо)», загружен 10 октября 2026, 18:00', async () => {
+  it('один источник «Выгрузка из 1С», загружен 10 октября 2026, 18:00', async () => {
     const { sources } = await snapshot();
     expect(sources).toHaveLength(1);
     const s = sources[0]!;
-    expect(s).toMatchObject({ id: 'demo-1c', kind: 'demo_1c', title: 'Выгрузка из 1С (демо)', isDemo: true });
+    expect(s).toMatchObject({ id: 'demo-1c', kind: 'demo_1c', title: 'Выгрузка из 1С', isDemo: true });
     expect(formatLoadedAt(s.loadedAt.toISOString(), TZ).replace(/ /g, ' ')).toBe('10 октября 2026, 18:00');
   });
 

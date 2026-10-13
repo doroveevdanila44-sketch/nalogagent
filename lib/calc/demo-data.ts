@@ -40,7 +40,7 @@ export const SEED_ENTITIES: EntityInput[] = [
   {
     id: 'epsilon', name: 'ООО «Эпсилон»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer',
     annualRevenue: dec(74_000_000), inputVatShare: dec('0.55'), color: ENTITY_COLORS.epsilon!,
-    description: 'Демо: условное юрлицо на ОСНО, данные выдуманы',
+    description: 'Условное юрлицо на ОСНО',
     taxRegime: 'osno', usnRate: null, annualExpenses: dec(44_000_000),
   },
 ];
@@ -72,7 +72,7 @@ export const SEED_RULE_ROWS: RuleRow[] = [
 export const SEED_SOURCE = {
   id: 'demo-1c',
   kind: 'demo_1c',
-  title: 'Выгрузка из 1С (демо)',
+  title: 'Выгрузка из 1С',
   isDemo: true,
   loadedAt: { year: 2026, month: 10, day: 10, hour: 18, minute: 0 },
 } as const;

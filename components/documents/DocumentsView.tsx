@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { errorText } from '@/components/provenance/client';
 import { shortDateTime } from '@/lib/provenance/line';
 import { CATEGORIES, CATEGORY_LABEL, type DocumentSummary, type TemplateCategory } from '@/lib/documents/types';
 import type { Catalog, TemplateMeta } from './api';
+import { ConfirmDelete, restoreDrafts } from './ConfirmDelete';
+import { DocsShellContext } from './DocumentsShell';
 import { StartDocument } from './StartDocument';
 import { StatusChip } from './StatusChip';
 
@@ -37,6 +40,13 @@ export function DocumentsView({
   const [query, setQuery] = useState('');
   const [start, setStart] = useState<TemplateMeta | null>(null);
   const [tz] = useState('Asia/Kamchatka');
+  const router = useRouter();
+  const shell = useContext(DocsShellContext);
+  // удаление: окно подтверждения и режим «Выбрать» (несколько черновиков сразу)
+  const [confirm, setConfirm] = useState<string[] | null>(null);
+  const [select, setSelect] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -75,6 +85,53 @@ export function DocumentsView({
       .then((d) => setDocs(d.documents))
       .catch(() => undefined);
   }, [activeId]);
+
+  // Список перечитывается после «Отменить» в уведомлении и после отзыва
+  const lastRefresh = useRef(shell.refresh);
+  useEffect(() => {
+    if (lastRefresh.current === shell.refresh) return;
+    lastRefresh.current = shell.refresh;
+    void api<{ documents: DocumentSummary[] }>('/api/documents')
+      .then((d) => setDocs(d.documents))
+      .catch(() => undefined);
+  }, [shell.refresh]);
+
+  const drafts = useMemo(() => (docs ?? []).filter((d) => d.status === 'draft'), [docs]);
+
+  const leaveSelect = () => {
+    setSelect(false);
+    setPicked(new Set());
+  };
+  const toggle = (id: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /** Черновики удалены: список без них, уведомление с «Отменить» на 8 секунд */
+  const deleted = (ids: string[]) => {
+    setConfirm(null);
+    leaveSelect();
+    setDocs((cur) => (cur ? cur.filter((d) => !ids.includes(d.id)) : cur));
+    if (activeId && ids.includes(activeId)) router.push('/documents', { scroll: false });
+    shell.notify(ids.length > 1 ? `Черновики удалены: ${ids.length}` : 'Черновик удалён', () => restoreDrafts(ids));
+  };
+
+  const withdraw = async (id: string) => {
+    setBusyId(id);
+    try {
+      await api(`/api/documents/${id}/withdraw`, { body: {} });
+      shell.notify('Документ отозван');
+      const d = await api<{ documents: DocumentSummary[] }>('/api/documents');
+      setDocs(d.documents);
+    } catch (e) {
+      shell.notify(errorText(e, 'Не удалось отозвать. Повторите.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -217,16 +274,55 @@ export function DocumentsView({
               </p>
             </div>
           ) : (
-            <ul className="req-list" aria-label="Мои документы">
+            <>
+              {drafts.length > 0 ? (
+                <div className="sel-bar" role="group" aria-label="Выбор черновиков">
+                  {select ? (
+                    <>
+                      <span className="sel-count" data-testid="sel-count" aria-live="polite">
+                        Выбрано: {picked.size}
+                      </span>
+                      <button
+                        type="button"
+                        className="act danger"
+                        data-action="delete-selected"
+                        disabled={picked.size === 0}
+                        onClick={() => setConfirm([...picked])}
+                      >
+                        Удалить выбранные
+                      </button>
+                      <button type="button" className="act ghost" data-action="select-done" onClick={leaveSelect}>
+                        Готово
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" className="act ghost" data-action="select" onClick={() => setSelect(true)}>
+                      Выбрать
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              <ul className="req-list" aria-label="Мои документы">
               {docs.map((d) => (
                 <li
                   key={d.id}
                   className={`req${d.id === activeId ? ' on' : ''}`}
                   data-testid="doc-item"
                   data-doc={d.id}
+                  data-status={d.status}
                   aria-current={d.id === activeId ? 'true' : undefined}
                 >
                   <div className="req-head">
+                    {select && d.status === 'draft' ? (
+                      <label className="req-pick">
+                        <input
+                          type="checkbox"
+                          aria-label={`Выбрать: ${d.title}`}
+                          checked={picked.has(d.id)}
+                          onChange={() => toggle(d.id)}
+                        />
+                      </label>
+                    ) : null}
                     <h2>{d.title}</h2>
                     <StatusChip status={d.status} />
                   </div>
@@ -242,14 +338,37 @@ export function DocumentsView({
                     <Link className="act" data-action="open" href={`/documents/${d.id}`} prefetch={false} scroll={false}>
                       Открыть
                     </Link>
+                    {d.status === 'draft' ? (
+                      <button
+                        type="button"
+                        className="act ghost"
+                        data-action="delete"
+                        onClick={() => setConfirm([d.id])}
+                      >
+                        Удалить
+                      </button>
+                    ) : null}
+                    {d.status === 'review' ? (
+                      <button
+                        type="button"
+                        className="act ghost"
+                        data-action="withdraw"
+                        disabled={busyId === d.id}
+                        onClick={() => void withdraw(d.id)}
+                      >
+                        Отозвать
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               ))}
-            </ul>
+              </ul>
+            </>
           )}
         </section>
       ) : null}
 
+      {confirm ? <ConfirmDelete ids={confirm} onClose={() => setConfirm(null)} onDeleted={deleted} /> : null}
       {start && catalog ? (
         <StartDocument
           template={start}

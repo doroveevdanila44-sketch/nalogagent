@@ -124,6 +124,6 @@ describe('текст и время', () => {
     expect(formatLoadedAt(iso, 'Asia/Kamchatka')).toBe('10 октября 2026, 18:00');
     const src = sourceRef({ id: 'demo-1c', kind: 'demo_1c', title: 'Выгрузка из 1С (демо)', isDemo: true, loadedAt: new Date(iso) });
     expect(src.loadedAt).toBe(iso);
-    expect(plain(sourceLine(src, 'Asia/Kamchatka'))).toBe('Выгрузка из 1С (демо), загружена 10 октября 2026, 18:00');
+    expect(plain(sourceLine(src, 'Asia/Kamchatka'))).toBe('Выгрузка из 1С, загружена 10 октября 2026, 18:00');
   });
 });

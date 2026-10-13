@@ -20,6 +20,8 @@ export class ApiError extends Error {
 }
 
 export const LOCKED_EVENT = 'pva:locked';
+/** Экран PIN снят: страницы перечитывают данные, обучение повторяет подготовку шага */
+export const UNLOCKED_EVENT = 'pva:unlocked';
 
 export async function api<T = Record<string, unknown>>(
   path: string,

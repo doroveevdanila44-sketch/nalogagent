@@ -103,9 +103,9 @@ describe('строка происхождения', () => {
   it('формат: источник · обновлено · основа; юрлицо и период только по запросу', async () => {
     const [snap] = runQueries(await data(), [feb], { at: NOW, tz: TZ });
     const line = lineFromSnapshots([snap!]);
-    expect(sourceLineText(line)).toBe('1С (демо) · обновлено 10.10, 18:00 · факт');
+    expect(sourceLineText(line)).toBe('Выгрузка из 1С · обновлено 10.10, 18:00 · факт');
     expect(sourceLineText(line, { scope: true, period: true })).toBe(
-      '1С (демо) · ООО «Альфа» · февраль 2026 · обновлено 10.10, 18:00 · факт',
+      'Выгрузка из 1С · ООО «Альфа» · февраль 2026 · обновлено 10.10, 18:00 · факт',
     );
     // метки «Демо-данные» в строке нет: она один раз в шапке приложения
     expect(sourceLineText(line)).not.toContain('Демо-данные');
@@ -118,7 +118,7 @@ describe('строка происхождения', () => {
     const at = Date.UTC(2025, 11, 31, 6, 0, 0);
     expect(stampShort(at, TZ, 2025)).toBe('31.12, 18:00');
     expect(stampShort(at, TZ, 2026)).toBe('31.12.2025, 18:00');
-    expect(shortSource('Выгрузка из 1С (демо)')).toBe('1С (демо)');
+    expect(shortSource('Выгрузка из 1С (демо)')).toBe('Выгрузка из 1С');
     expect(shortSource('Ручной ввод')).toBe('Ручной ввод');
   });
 
@@ -166,7 +166,7 @@ describe('строка происхождения', () => {
     expect(Object.keys(p.banners).sort()).toEqual(['profit', 'revenue', 'vat', 'vatForecast']);
     expect(p.year).toBe(2026);
     for (const l of Object.values(p.banners)) {
-      expect(l.source).toBe('Выгрузка из 1С (демо)');
+      expect(l.source).toBe('Выгрузка из 1С');
       expect(l.updated).toBe('10.10.2026 18:00');
     }
     expect(p.banners.revenue.period).toBe('с начала года');
@@ -254,7 +254,7 @@ describe('чек-лист «Проверить самому»', () => {
     expect(text).toContain('Шаг\tЮрлицо\tФормула\tРезультат, ₽\tКак считается');
     expect(text).toContain('s1\tООО «Альфа»\t1988000');
     expect(text).toContain('s2\tООО «Альфа»\ts1 * 5 / 105\t94666.67');
-    expect(text).toContain('Демо-данные');
+    expect(text.toLowerCase()).not.toContain('демо');
   });
 });
 
@@ -422,7 +422,7 @@ describe('чат: расчёты ответа сохраняются снимк�
     const out = await handleChat(db, { userId, question: 'НДС по Альфе за февраль', nowMs: NOW });
     expect(out.agent.fromCalc).toBe(true);
     expect(out.agent.provenance).not.toBeNull();
-    expect(sourceLineText(out.agent.provenance!.line)).toBe('1С (демо) · обновлено 10.10, 18:00 · факт');
+    expect(sourceLineText(out.agent.provenance!.line)).toBe('Выгрузка из 1С · обновлено 10.10, 18:00 · факт');
     expect(out.agent.provenance!.count).toBe(1);
 
     const [row] = await db.select().from(chatMessages).where(eq(chatMessages.id, out.agent.id));

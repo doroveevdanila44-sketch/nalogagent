@@ -8,6 +8,12 @@ import type { DashboardInput, EntityInput, Selections } from '@/lib/calc/types';
 import type { Db } from './client';
 import { dataSources, legalEntities, rateChoices, revenueMonthly, rules, seasonality } from './schema';
 
+/** Описание юрлица без слова «демо»: метка «Демо-данные» одна, в шапке. Заведённое прежним сидом заменяется. */
+function cleanDescription(raw: string | null): string {
+  const text = raw ?? '';
+  return /демо/i.test(text) ? 'Условное юрлицо на ОСНО' : text;
+}
+
 /**
  * Снимок данных для расчётного сервиса: юрлица, веса, правила, помесячная выручка всех лет,
  * выбранные ставки по годам и источник. Единственное место, где строки numeric превращаются
@@ -32,7 +38,7 @@ export async function loadCalcData(db: Db, today: Moment): Promise<CalcData> {
     annualRevenue: dec(r.annualRevenue),
     inputVatShare: dec(r.inputVatShare),
     color: r.color,
-    description: r.description ?? '',
+    description: cleanDescription(r.description),
     taxRegime:
       r.taxRegime === 'osno' || r.taxRegime === 'usn_income_expense' ? r.taxRegime : 'usn_income',
     usnRate: r.usnRate === null ? null : dec(r.usnRate),

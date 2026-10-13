@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { errorText } from '@/components/provenance/client';
 import type { DocumentDetail } from '@/lib/documents/detail';
 import { SheetActionBar } from './ActionBar';
+import { ConfirmDelete, restoreDrafts } from './ConfirmDelete';
 import { DocCheck } from './DocCheck';
 import { DocComments } from './DocComments';
 import { DocHistory } from './DocHistory';
@@ -107,6 +109,8 @@ export function DocumentSheet({ id }: { id: string }) {
   const [shown, setShown] = useState<number | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const counterId = useId();
   const sheetRef = useRef<HTMLElement>(null);
@@ -264,6 +268,10 @@ export function DocumentSheet({ id }: { id: string }) {
     { key: 'check', label: 'Проверить самому', onSelect: () => setPanel('check') },
     { key: 'history', label: 'История версий', onSelect: () => setPanel('history') },
     { key: 'comments', label: 'Комментарии', badge: unresolved, onSelect: () => setPanel('comments') },
+    // удалить можно только черновик и только нынешнюю версию
+    ...(doc.status === 'draft' && !doc.readOnly
+      ? [{ key: 'delete', label: 'Удалить', danger: true, onSelect: () => setConfirmDelete(true) }]
+      : []),
   ];
 
   const ctx: SheetCtx = {
@@ -339,7 +347,6 @@ export function DocumentSheet({ id }: { id: string }) {
       {doc.can.simulate ? (
         <section className="demo-reply" aria-labelledby="h-demo" data-testid="demo-reply">
           <h2 id="h-demo">Имитировать ответ бухгалтера</h2>
-          <p className="calc-note">Демо: ответ добавляется с пометкой «Демо», настоящего ответа не будет.</p>
           <div className="acts" role="group" aria-label="Имитация ответа">
             {(
               [
@@ -358,7 +365,11 @@ export function DocumentSheet({ id }: { id: string }) {
                   void act(
                     `sim-${kind}`,
                     () => api(`/api/documents/${doc.id}/simulate`, { body: { kind } }).then(() => undefined),
-                    kind === 'approve' ? 'Демо: документ согласован' : kind === 'remark' ? 'Демо: получено замечание' : 'Демо: получен комментарий',
+                    kind === 'approve'
+                      ? 'Документ согласован (имитация)'
+                      : kind === 'remark'
+                        ? 'Получено замечание (имитация)'
+                        : 'Получен комментарий (имитация)',
                   )
                 }
               >
@@ -434,6 +445,17 @@ export function DocumentSheet({ id }: { id: string }) {
             setPanel(null);
             setShown(null);
             void load(null);
+          }}
+        />
+      ) : null}
+      {confirmDelete ? (
+        <ConfirmDelete
+          ids={[doc.id]}
+          onClose={() => setConfirmDelete(false)}
+          onDeleted={(ids) => {
+            setConfirmDelete(false);
+            shell.notify('Черновик удалён', () => restoreDrafts(ids));
+            router.replace('/documents', { scroll: false });
           }}
         />
       ) : null}

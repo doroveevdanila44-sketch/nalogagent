@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { PeriodError, formatPeriod, type Period } from '@/lib/calc/period';
 import { CalcInputError } from '@/lib/calc/service';
 import { momentFromEpoch } from '@/lib/calc/time';
@@ -87,6 +87,16 @@ async function getTemplate(db: Db, key: string): Promise<TemplateDef> {
   return toTemplate(row);
 }
 
+/** Реквизиты без пометок «(демо)»: значения попадают в текст документа, метка «Демо-данные» одна, в шапке. */
+function cleanRequisites(r: EntityRequisites | null): EntityRequisites | null {
+  if (!r) return r;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(r)) {
+    out[k] = typeof v === 'string' ? v.replace(/\s*\((?:вымышленные,\s*)?демо\)/gi, '').trim() : v;
+  }
+  return out as unknown as EntityRequisites;
+}
+
 async function loadEntity(db: Db, id: string): Promise<EntityData> {
   const [row] = await db.select().from(legalEntities).where(eq(legalEntities.id, id)).limit(1);
   if (!row) throw new DocError(404, 'entity', 'Юрлицо не найдено');
@@ -94,7 +104,7 @@ async function loadEntity(db: Db, id: string): Promise<EntityData> {
     id: row.id,
     name: row.name,
     form: row.form,
-    requisites: (row.requisites as EntityRequisites | null) ?? null,
+    requisites: cleanRequisites((row.requisites as EntityRequisites | null) ?? null),
   };
 }
 
@@ -186,10 +196,79 @@ async function ownDocument(db: Db, userId: string, id: string) {
   const [doc] = await db
     .select()
     .from(documents)
-    .where(and(eq(documents.id, id), eq(documents.createdBy, userId)))
+    .where(and(eq(documents.id, id), eq(documents.createdBy, userId), isNull(documents.deletedAt)))
     .limit(1);
   if (!doc) throw new DocError(404, 'not_found', 'Документ не найден');
   return doc;
+}
+
+/** Сколько после мягкого удаления черновик можно вернуть; потом он стирается окончательно. */
+export const RESTORE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Окончательно удаляет черновики, которые лежат в удалённых больше суток. Версии, комментарии и
+ * лента событий уходят вместе с документом (внешние ключи с каскадом). Фоновых задач в приложении
+ * нет, поэтому очистка идёт при каждом чтении списка и при удалении: просроченное исчезает при
+ * ближайшем обращении, а на экране удалённых документов и так не видно.
+ */
+export async function purgeDeleted(db: Db, nowMs: number): Promise<number> {
+  const cutoff = new Date(nowMs - RESTORE_WINDOW_MS);
+  const gone = await db
+    .delete(documents)
+    .where(and(isNotNull(documents.deletedAt), lt(documents.deletedAt, cutoff)))
+    .returning({ id: documents.id });
+  return gone.length;
+}
+
+/**
+ * Удаляет черновики (мягко: поле deleted_at). Документы на проверке, с замечаниями, согласованные
+ * и отозванные не удаляются: проверка идёт по всем сразу, при первом неподходящем ничего не меняется.
+ */
+export async function deleteDocuments(
+  db: Db,
+  args: { userId: string; ids: string[]; nowMs: number },
+): Promise<string[]> {
+  const ids = [...new Set(args.ids)];
+  const rows = [];
+  for (const id of ids) rows.push(await ownDocument(db, args.userId, id));
+  const bad = rows.find((d) => d.status !== 'draft');
+  if (bad) {
+    const word = bad.status === 'review' ? 'Документ на проверке: сначала отзовите его' : 'Удалить можно только черновик';
+    throw new DocError(409, 'not_draft', word, { id: bad.id, status: bad.status });
+  }
+  if (ids.length > 0) {
+    await db
+      .update(documents)
+      .set({ deletedAt: new Date(args.nowMs) })
+      .where(and(inArray(documents.id, ids), eq(documents.createdBy, args.userId)));
+  }
+  await purgeDeleted(db, args.nowMs);
+  return ids;
+}
+
+/** Возвращает удалённые черновики, пока не прошли сутки («Отменить» в уведомлении). */
+export async function restoreDocuments(
+  db: Db,
+  args: { userId: string; ids: string[]; nowMs: number },
+): Promise<string[]> {
+  const ids = [...new Set(args.ids)];
+  if (ids.length === 0) return [];
+  const cutoff = new Date(args.nowMs - RESTORE_WINDOW_MS);
+  const back = await db
+    .update(documents)
+    .set({ deletedAt: null })
+    .where(
+      and(
+        inArray(documents.id, ids),
+        eq(documents.createdBy, args.userId),
+        isNotNull(documents.deletedAt),
+        // удалённый позже границы ещё не стёрт
+        sql`${documents.deletedAt} >= ${cutoff}`,
+      ),
+    )
+    .returning({ id: documents.id });
+  if (back.length === 0) throw new DocError(404, 'not_found', 'Документ не найден');
+  return back.map((r) => r.id);
 }
 
 async function versionRow(db: Db, documentId: string, n: number) {
@@ -559,7 +638,7 @@ export async function simulateReply(
       kind,
       body,
       authorPersonId: person?.id ?? null,
-      authorName: `${who} (демо)`,
+      authorName: `${who} (имитация)`,
       isDemo: true,
       createdAt: when,
     });
@@ -570,7 +649,7 @@ export async function simulateReply(
       documentId: doc.id,
       kind: kind === 'approval' ? 'approval' : kind === 'remark' ? 'remark' : 'comment',
       versionN: doc.currentVersion,
-      actor: `${who} (демо)`,
+      actor: `${who} (имитация)`,
       data: { text: body, field: fieldKey, demo: true },
       createdAt: when,
     });
@@ -587,20 +666,22 @@ function toComment(r: typeof documentComments.$inferSelect): CommentInfo {
     fieldKey: r.fieldKey,
     kind: r.kind as CommentInfo['kind'],
     body: r.body,
-    authorName: r.authorName,
+    // ответы, записанные прежней версией, подписаны «(демо)»: на экране «(имитация)»
+    authorName: r.authorName.replace(/\(демо\)/gi, '(имитация)'),
     isDemo: r.isDemo,
     resolved: r.resolved,
     createdAt: r.createdAt.toISOString(),
   };
 }
 
-export async function listDocuments(db: Db, userId: string): Promise<DocumentSummary[]> {
+export async function listDocuments(db: Db, userId: string, nowMs: number = Date.now()): Promise<DocumentSummary[]> {
+  await purgeDeleted(db, nowMs);
   const rows = await db
     .select({ d: documents, t: documentTemplates, e: legalEntities })
     .from(documents)
     .innerJoin(documentTemplates, eq(documentTemplates.key, documents.templateKey))
     .leftJoin(legalEntities, eq(legalEntities.id, documents.entityId))
-    .where(eq(documents.createdBy, userId))
+    .where(and(eq(documents.createdBy, userId), isNull(documents.deletedAt)))
     .orderBy(desc(documents.updatedAt), desc(documents.id))
     .limit(200);
   const out: DocumentSummary[] = [];
@@ -636,7 +717,7 @@ function sourceTexts(
     const v = values[f.key];
     if (!v) continue;
     if (v.source === 'entity') {
-      out[f.key] = `Реквизиты юрлица: ${entity?.name ?? 'справочник'}${entity?.requisites?.demo ? ' (вымышленные, демо)' : ''}`;
+      out[f.key] = `Реквизиты юрлица: ${entity?.name ?? 'справочник'}`;
     } else if (v.source === 'calc') {
       const s = v.calc ? snaps[v.calc.index] : undefined;
       const step = v.calc?.step ? s?.steps.find((x) => x.id === v.calc!.step) : undefined;
@@ -714,7 +795,7 @@ export async function getDocument(
         id: r.id,
         kind: r.kind,
         versionN: r.versionN,
-        actor: r.actor,
+        actor: r.actor.replace(/\(демо\)/gi, '(имитация)'),
         data: r.data as Record<string, unknown>,
         createdAt: r.createdAt.toISOString(),
       }),

@@ -14,8 +14,8 @@ const EVENT_TEXT: Record<string, (e: EventInfo) => string> = {
   submitted: (e) => `Отправлен на проверку: ${String(e.data.recipient ?? '')}`,
   withdrawn: () => 'Документ отозван',
   comment: (e) => `Комментарий: ${String(e.data.text ?? '')}`,
-  remark: (e) => `Замечание (демо): ${String(e.data.text ?? '')}`,
-  approval: (e) => `Согласовано (демо): ${String(e.data.text ?? '')}`,
+  remark: (e) => `Замечание (имитация): ${String(e.data.text ?? '')}`,
+  approval: (e) => `Согласовано (имитация): ${String(e.data.text ?? '')}`,
   resolved: () => 'Комментарий отмечен решённым',
 };
 

@@ -11,6 +11,8 @@
  * пропусками или создаётся пример); null это там, где человек сейчас.
  * prepare: что показать на странице перед подсветкой (пример ответа в чате, окно расчёта).
  * menu: на шаге открыто меню из трёх точек.
+ * mode: 'show' (показ: нажатия вне карточки блокируются) или 'try' («попробуйте»: разрешено
+ * только нажатие по подсвеченному элементу, остальное страница не принимает).
  *
  * Файл без импортов времени выполнения: его читают и тесты.
  */
@@ -64,6 +66,8 @@ export type TourPath = '/agent' | '/dashboard' | '/documents' | 'document' | nul
 
 export type Prepare = 'chat-example' | 'calc-profit';
 
+export type StepMode = 'show' | 'try';
+
 export interface TourStep {
   id: string;
   chapter: ChapterId;
@@ -79,6 +83,8 @@ export interface TourStep {
   pick?: 'first' | 'last';
   prepare?: Prepare;
   menu?: boolean;
+  /** По умолчанию 'show' */
+  mode?: StepMode;
 }
 
 /** Метки строк карточки по порядку. */
@@ -182,6 +188,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'нажмите на баннер, чтобы увидеть выручку по каждому юрлицу.',
     path: '/dashboard',
     targets: ['[data-tour="banner-revenue"]'],
+    mode: 'try',
   },
   {
     id: 'banner-vat',
@@ -195,6 +202,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'откройте баннер и посмотрите, кто сколько должен.',
     path: '/dashboard',
     targets: ['[data-tour="banner-vat"]'],
+    mode: 'try',
   },
   {
     id: 'banner-vat-forecast',
@@ -208,6 +216,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'сравните с «НДС начислен»: разница это то, что ещё предстоит.',
     path: '/dashboard',
     targets: ['[data-tour="banner-vat-forecast"]'],
+    mode: 'try',
   },
   {
     id: 'banner-profit',
@@ -223,6 +232,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'нажмите и посмотрите по юрлицам и месяцам. Авансы платятся 28 апреля, июля и октября.',
     path: '/dashboard',
     targets: ['[data-tour="banner-profit"]'],
+    mode: 'try',
   },
   {
     id: 'warnings',
@@ -237,6 +247,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'нажмите на строку: там пояснение и что делать.',
     path: '/dashboard',
     targets: ['[data-tour="warning-first"]', '[data-tour="warnings-head"]'],
+    mode: 'try',
   },
   {
     id: 'chart',
@@ -250,6 +261,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     todo: 'нажмите на цвет, чтобы увидеть юрлицо за месяц, на месяц внизу, чтобы увидеть весь столбец.',
     path: '/dashboard',
     targets: ['[data-tour="chart"]'],
+    mode: 'try',
   },
   {
     id: 'entity',
@@ -292,6 +304,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     path: '/dashboard',
     targets: ['[data-tour="tax-switch"]'],
     prepare: 'calc-profit',
+    mode: 'try',
   },
   {
     id: 'actions',
