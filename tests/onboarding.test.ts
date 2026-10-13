@@ -113,13 +113,28 @@ describe('обучение: шаги', () => {
     expect(ids('documents')).toEqual([
       'doc-catalog',
       'doc-fill',
-      'doc-sheet',
       'doc-bar',
       'doc-menu',
       'doc-send',
       'doc-status',
     ]);
-    expect(ids('menu')).toEqual(['menu-lock', 'menu-pin', 'menu-tour']);
+    expect(ids('menu')).toEqual(['menu-lock', 'menu-pin']);
+  });
+
+  it('25 шагов; последний это «Сменить PIN», в нём сказано, где найти обучение; удалённые шаги не упоминаются', () => {
+    expect(TOUR_STEPS.length).toBe(25);
+    const last = TOUR_STEPS[TOUR_STEPS.length - 1]!;
+    expect(last.id).toBe('menu-pin');
+    expect(stepLines(last, n)[2]!.text).toContain('Обучение всегда в меню из трёх точек.');
+    const ids = TOUR_STEPS.map((s) => s.id);
+    expect(ids).not.toContain('doc-sheet');
+    expect(ids).not.toContain('menu-tour');
+    // соседние шаги главы «Документы» не ссылаются на лист документа и жёлтые поля
+    for (const id of ['doc-fill', 'doc-bar', 'doc-menu', 'doc-send', 'doc-status']) {
+      const step = TOUR_STEPS.find((s) => s.id === id)!;
+      const text = stepLines(step, n).map((l) => l.text).join(' ');
+      expect(text, id).not.toMatch(/жёлт|как лист|Страница документа/);
+    }
   });
 });
 

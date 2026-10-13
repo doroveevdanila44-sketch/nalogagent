@@ -348,7 +348,8 @@ for (const width of [390, 1440]) {
       } else if (i > idx('tax-switch')) {
         await expect(page.getByTestId('overlay-drawer'), `${label}: окно расчёта закрыто`).toHaveCount(0);
       }
-      if (step.id === 'doc-sheet') {
+      if (step.id === 'doc-bar') {
+        // первый шаг на странице документа: тур открыл её и взял один пример
         await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/documents\/[0-9a-f-]{36}$/);
         const docs = await sql<{ n: number }>('select count(*)::int as n from documents');
         expect(docs[0]!.n, 'пример документа один').toBe(1);
@@ -359,7 +360,7 @@ for (const width of [390, 1440]) {
       } else {
         await expect(page.getByRole('dialog', { name: 'Меню', exact: true }), label).toHaveCount(0);
       }
-      if (i === 0 || step.id === 'banner-vat-forecast' || step.id === 'doc-sheet' || step.id === 'menu-lock') {
+      if (i === 0 || step.id === 'banner-vat-forecast' || step.id === 'doc-bar' || step.id === 'menu-lock') {
         await page.screenshot({ path: `${SHOTS}/tour-${step.id}-${width}.png` });
       }
 
@@ -470,8 +471,8 @@ for (const width of [390, 1440]) {
     await expectHoleOnStep(page, ['[data-tour="menu-lock"]']);
     await next(page).click();
     await expectHoleOnStep(page, ['[data-tour="menu-pin"]']);
-    await next(page).click();
-    await expectHoleOnStep(page, ['[data-tour="menu-tour"]']);
+    await expect(count(page)).toHaveText(`Шаг ${TOTAL} из ${TOTAL}`);
+    await expect(card(page)).toContainText('Обучение всегда в меню из трёх точек.');
     await expect(next(page)).toHaveText('Готово');
     await next(page).click();
     await expect(tour(page)).toHaveCount(0);
