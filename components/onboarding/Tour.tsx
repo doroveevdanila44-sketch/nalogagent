@@ -154,11 +154,15 @@ function inView(el: HTMLElement): boolean {
   return r.top >= v.top - 1 && r.bottom <= v.bottom + 1 && r.left >= v.left - 1 && r.right <= v.right + 1;
 }
 
-/** Вырез с зазором поместится в окно: элемент не выше области и не шире окна. */
+/**
+ * Вырез поместится в окно: элемент не выше области и не шире окна. Зазор по ширине не требуется:
+ * вырез у края окна обрезается по окну (measure), поэтому нижний лист меню на всю ширину телефона
+ * подсвечивается, а не уходит в запасной вид.
+ */
 function fitsWindow(el: HTMLElement): boolean {
   const r = el.getBoundingClientRect();
   const v = viewOf(el);
-  return r.height + PAD * 2 <= v.bottom - v.top && r.width + PAD * 2 <= window.innerWidth;
+  return r.height + PAD * 2 <= v.bottom - v.top && r.width <= window.innerWidth + 0.5;
 }
 
 /** Карточке высотой need хватает места под элементом или над ним (не закрывая его). */

@@ -313,7 +313,12 @@ for (const mode of ['short', 'full'] as const) {
       const lines = await expectThreeLines(page, label);
 
       // подсвечен существующий элемент шага (метка data-tour есть в интерфейсе)
-      await expectHoleOnStep(page, step.targets);
+      try {
+        await expectHoleOnStep(page, step.targets);
+      } catch (e) {
+        const phase = await tour(page).getAttribute('data-phase');
+        throw new Error(`${label}: вырез не встал на элемент, фаза ${phase}: ${(e as Error).message.split('\n')[0]}`);
+      }
 
       // карточка целиком в окне; у небольших элементов не накрывает подсвеченное
       const geo = await page.evaluate(() => {
@@ -763,6 +768,8 @@ test('Доступность: карточка обучения без нару�
   await firstLogin(page, PIN);
   await expect(tour(page)).toBeVisible();
   const scan = async (label: string) => {
+    // карточка появляется за 220 мс (полупрозрачная в начале): сканируем, когда она встала
+    await page.waitForTimeout(450);
     const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
     expect(
       res.violations.map((v) => `${label}: ${v.id} ${v.nodes.map((n) => `${n.target.join(' ')} ${n.any.map((a) => a.message).join(';')}`).join(' | ')}`),

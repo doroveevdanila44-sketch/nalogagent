@@ -174,3 +174,53 @@ test('Время и даты: «Сверено» с поясом «(Камчат
   await expect(meta).toContainText('Сверено');
   await expect(meta).toContainText(/\d{2}\.\d{2}\.\d{4} \d{2}:\d{2} \(Камчатка\)/);
 });
+
+for (const width of [360, 390]) {
+  test(`Полоса над шапкой на ${width} px с вырезом 47 px: шапка, html и body одного цвета, на входе и PIN бордо`, async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width, height: 800 });
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 47, bottom: 34, left: 0, right: 0 } });
+    const paint = () =>
+      page.evaluate((w) => {
+        const color = (el: Element | null) => {
+          for (let e = el; e; e = e.parentElement) {
+            const bg = getComputedStyle(e).backgroundColor;
+            if (bg !== 'rgba(0, 0, 0, 0)') return bg;
+          }
+          return 'none';
+        };
+        const header = document.querySelector('header.top');
+        return {
+          html: getComputedStyle(document.documentElement).backgroundColor,
+          body: getComputedStyle(document.body).backgroundColor,
+          header: header ? getComputedStyle(header).backgroundColor : null,
+          headerPad: header ? getComputedStyle(header).paddingTop : null,
+          top: color(document.elementFromPoint(w / 2, 4)),
+          theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
+        };
+      }, width);
+    const LAKE = 'rgb(160, 210, 168)';
+    const WINE = 'rgb(120, 66, 68)';
+
+    // вход: бордо целиком, theme-color бордо
+    await page.goto('/login');
+    await expect(page.locator('.auth-screen')).toBeVisible();
+    expect(await paint()).toMatchObject({ html: WINE, body: WINE, top: WINE, theme: '#784244' });
+
+    // приложение: цвет шапки под вырезом и за краем оболочки, theme-color озеро
+    await firstLogin(page, PIN);
+    await expect.poll(async () => (await paint()).header).toBe(LAKE);
+    expect(await paint()).toMatchObject({
+      html: LAKE,
+      body: LAKE,
+      header: LAKE,
+      headerPad: '47px',
+      top: LAKE,
+      theme: '#A0D2A8',
+    });
+
+  });
+}

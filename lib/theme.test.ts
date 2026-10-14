@@ -154,6 +154,14 @@ describe('полоса под часами и шапка', () => {
     expect(rule('.app-shell')).toMatch(/background:\s*var\(--color-page\)/);
   });
 
+  it('режим отображения не влияет на цвета: в стилях нет правил для display-mode (установленное приложение красится так же)', () => {
+    expect(css).not.toMatch(/display-mode/);
+    // манифест просит именно установленное приложение, а цвет шапки в нём тот же, что у страницы
+    const manifest = JSON.parse(read('public/manifest.webmanifest')) as Record<string, string>;
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.theme_color).toBe(PALETTE.lake);
+  });
+
   it('theme-color по маршруту: приложение цвет шапки, вход бордо; манифест цвет шапки', () => {
     const app = read('app/(app)/layout.tsx');
     const login = read('app/(public)/login/page.tsx');

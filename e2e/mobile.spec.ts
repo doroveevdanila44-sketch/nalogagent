@@ -415,7 +415,7 @@ test('Телефон 390: подсказки не раскрываются ни 
 
   // новый ответ агента на вопрос из поля: блок по-прежнему свёрнут
   await field(page).fill('Что с порогами?');
-  await page.getByRole('button', { name: 'Отправить' }).tap();
+  await page.getByRole('button', { name: 'Отправить', exact: true }).tap();
   await expect(page.locator('.typing')).toHaveCount(0);
   await expect(handle).toHaveAttribute('aria-expanded', 'false');
   await expect.poll(panelHeight).toBeLessThan(1);
@@ -460,7 +460,7 @@ test.describe('Компьютер', () => {
     await expect(page.locator('.typing')).toHaveCount(0);
     await expect(page.locator('.msg:not(.me)').last()).toBeVisible();
 
-    const chip = page.locator('#chat-suggestions .sug button').nth(1);
+    const chip = page.locator('#chat-suggestions .sug button:not(.sug-whatif)').nth(1);
     await page.mouse.move(2, 2);
     await page.waitForTimeout(250);
     const bg = () => chip.evaluate((e) => getComputedStyle(e).backgroundColor);
