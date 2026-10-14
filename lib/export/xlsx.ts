@@ -7,6 +7,14 @@ import type { FormulaStep } from '@/lib/calc/provenance';
 import type { CalcResult, EntityResult } from '@/lib/calc/service';
 import { PALETTE } from '@/lib/theme';
 import { KIND_LABEL, preciseDateTime, shortDateTime } from '@/lib/provenance/line';
+import {
+  incomeTaxTitle,
+  limitLine,
+  thresholdLine,
+  unifiedLine,
+  verdictLine,
+  type WhatIfSnapshot,
+} from '@/lib/provenance/whatif';
 import { leavesOf, parseExpression, printExcel, signatureOf, type ExprNode, type Leaf } from './excel-formula';
 
 /**
@@ -25,6 +33,7 @@ export const SHEET_TOTAL = 'Итог';
 export const SHEET_MONTHS = 'По месяцам';
 export const SHEET_CALC = 'Расчёт';
 export const SHEET_SOURCE = 'Источник';
+export const SHEET_WHATIF = 'Сценарий';
 
 const argb = (hex: string) => `FF${hex.replace('#', '').toUpperCase()}`;
 const FILL_HEAD: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.lake) } };
@@ -145,6 +154,22 @@ function shapeOf(sig: string, text: string, leafCount: number): Shape {
         title: 'Налог месяца: доля налога года по выручке',
         slots: ['Налог за год, ₽', 'Выручка месяца, ₽', 'Выручка года, ₽'],
       };
+    case 'N*N+N':
+      return {
+        title: 'Выручка по сценарию: прогноз месяца на рост плюс добавочная выручка',
+        slots: ['Прогноз месяца, ₽', 'Коэффициент роста', 'Добавочная выручка, ₽'],
+      };
+    case 'N*N-N':
+      return {
+        title: 'Выручка по сценарию: прогноз месяца на рост минус снижение',
+        slots: ['Прогноз месяца, ₽', 'Коэффициент роста', 'Снижение выручки, ₽'],
+      };
+    case '(N*N+N)*N/N':
+    case '(N*N-N)*N/N':
+      return {
+        title: 'Выручка по сценарию, месяц не целиком',
+        slots: ['Прогноз месяца, ₽', 'Коэффициент роста', 'Добавка или снижение, ₽', 'Дней в периоде', 'Дней в месяце'],
+      };
     default:
       if (/^N(\+N)+$/.test(sig) && leafCount === 12) {
         return { title: 'Выручка года по месяцам', slots: MONTH_TITLES.slice() };
@@ -256,7 +281,9 @@ function numFmt(v: number): string {
 function titleOf(result: CalcResult): string {
   // у прогноза следующего года три расчёта одного налога и периода: различаются ставкой
   const forecast = result.scenario ? (result.rate !== null ? `, прогноз по ставке ${result.rate}%` : ', прогноз') : '';
-  return `${result.taxName}: ${result.periodLabel}${forecast}`;
+  // сценарий «что если»: расчёт по данным и тот же расчёт при условии сценария
+  const what = result.whatIf ? (result.whatIf.role === 'scenario' ? ', по сценарию' : ', сейчас') : '';
+  return `${result.taxName}: ${result.periodLabel}${forecast}${what}`;
 }
 
 // ===== Книга =====
@@ -267,6 +294,8 @@ export interface WorkbookMeta {
   tz: string;
   /** Заголовок листа «Итог» над блоками; по умолчанию из результатов */
   title?: string;
+  /** Сценарий «что если»: на лист «Сценарий» выводится сравнение «сейчас и по сценарию» */
+  whatIf?: WhatIfSnapshot | null;
 }
 
 /** Лист «Итог», «По месяцам», «Расчёт» и «Источник» в уже созданной книге (после листов вызывающего). */
@@ -309,9 +338,124 @@ export function newWorkbook(meta: WorkbookMeta, title: string): ExcelJS.Workbook
 export async function buildWorkbook(results: CalcResult[], meta: WorkbookMeta): Promise<Buffer> {
   if (results.length === 0) throw new Error('Нечего выгружать: нет результатов расчёта');
   const wb = newWorkbook(meta, meta.title ?? results.map(titleOf).join('; '));
+  // сравнение «сейчас и по сценарию» идёт первым листом: его читают раньше формул
+  if (meta.whatIf) addWhatIfSheet(wb, meta.whatIf, meta);
   addCalcSheets(wb, results, meta);
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out as ArrayBuffer);
+}
+
+/**
+ * Лист «Сценарий»: показатели по юрлицам сейчас и по сценарию, разница формулой, итог по юрлицам
+ * сценария суммой. Ниже порог освобождения, доля лимита ставки 5%, признаки единого бизнеса и
+ * допущения. Числа из WhatIfSnapshot, то есть те же, что в ответе агента и в панели расчёта.
+ */
+function addWhatIfSheet(wb: ExcelJS.Workbook, w: WhatIfSnapshot, meta: WorkbookMeta): void {
+  const ws = wb.addWorksheet(SHEET_WHATIF);
+  sheetIntro(
+    ws,
+    `Сценарий: ${w.title}, ${w.monthsLabel || `${w.year} год`}`,
+    meta,
+    'Сценарий, а не прогноз. Данные дашборда не менялись. Разница это формула: по сценарию минус сейчас.',
+  );
+  [38, 20, 20, 20].forEach((width, i) => (ws.getColumn(i + 1).width = width));
+  const money = (v: string | null): number | string => (v === null ? 'нет данных' : Number(v));
+
+  let row = 5;
+  const head = ws.getRow(row);
+  ['Показатель', 'Сейчас, ₽', 'По сценарию, ₽', 'Разница, ₽'].forEach((h, i) => (head.getCell(i + 1).value = h));
+  styleHeader(head, 1, 4);
+  row += 1;
+
+  const block = (name: string, rows: { label: string; base: string | null; scenario: string | null }[]): number[] => {
+    const nameCell = ws.getCell(row, 1);
+    nameCell.value = name;
+    nameCell.font = { bold: true, color: { argb: argb(PALETTE.accent) } };
+    row += 1;
+    const lines: number[] = [];
+    for (const r of rows) {
+      const x = ws.getRow(row);
+      x.getCell(1).value = r.label;
+      x.getCell(2).value = money(r.base);
+      x.getCell(3).value = money(r.scenario);
+      if (r.base !== null && r.scenario !== null) {
+        x.getCell(4).value = {
+          formula: `${addr(3, row)}-${addr(2, row)}`,
+          result: Number(r.scenario) - Number(r.base),
+        };
+      } else {
+        x.getCell(4).value = 'нет данных';
+      }
+      for (let c = 2; c <= 4; c++) x.getCell(c).numFmt = MONEY;
+      for (let c = 1; c <= 4; c++) x.getCell(c).border = BORDER;
+      lines.push(row);
+      row += 1;
+    }
+    return lines;
+  };
+
+  const taxTitle = (kind: 'usn' | 'profit') => incomeTaxTitle([{ incomeTaxKind: kind }]);
+  const perEntity = w.rows.map((r) =>
+    block(r.name, [
+      { label: 'Выручка за год', ...r.revenue },
+      { label: 'НДС за год', ...r.vat },
+      { label: taxTitle(r.incomeTaxKind), ...r.incomeTax },
+      { label: 'Налоги за год', ...r.taxes },
+    ]),
+  );
+
+  if (w.rows.length > 1) {
+    row += 1;
+    const t = w.totals;
+    const lines = block('Итого по юрлицам сценария', [
+      { label: 'Выручка за год', ...t.revenue },
+      { label: 'НДС за год', ...t.vat },
+      { label: incomeTaxTitle(w.rows), ...t.incomeTax },
+      { label: 'Налоги за год', ...t.taxes },
+    ]);
+    // итоги суммой строк юрлиц выше
+    lines.forEach((line, k) => {
+      for (const col of [2, 3]) {
+        const parts = perEntity.map((p) => addr(col, p[k]!));
+        const sum = parts.reduce((a, c) => a + (typeof ws.getCell(c).value === 'number' ? Number(ws.getCell(c).value) : 0), 0);
+        ws.getCell(line, col).value = { formula: `SUM(${parts.join(',')})`, result: sum };
+        ws.getCell(line, col).numFmt = MONEY;
+      }
+      ws.getCell(line, 1).font = { bold: true };
+    });
+  }
+
+  row += 1;
+  const notes: string[] = [];
+  for (const r of w.rows) {
+    const line = thresholdLine(r, w.year);
+    if (line) notes.push(line);
+  }
+  const limit = limitLine(w.rows);
+  if (limit) notes.push(limit);
+  const verdict = verdictLine(w);
+  if (verdict) notes.push(verdict);
+  const unified = unifiedLine(w);
+  if (unified) notes.push(unified);
+  for (const n of notes) {
+    ws.getCell(row, 1).value = n;
+    ws.getCell(row, 1).alignment = { wrapText: true, vertical: 'top' };
+    ws.mergeCells(row, 1, row, 4);
+    ws.getRow(row).height = n.length > 100 ? 32 : 18;
+    row += 1;
+  }
+
+  row += 1;
+  ws.getCell(row, 1).value = 'Допущения';
+  ws.getCell(row, 1).font = { bold: true };
+  row += 1;
+  for (const a of w.assumptions) {
+    ws.getCell(row, 1).value = a;
+    ws.getCell(row, 1).alignment = { wrapText: true, vertical: 'top' };
+    ws.mergeCells(row, 1, row, 4);
+    ws.getRow(row).height = a.length > 100 ? 32 : 18;
+    row += 1;
+  }
 }
 
 function sheetIntro(ws: ExcelJS.Worksheet, title: string, meta: WorkbookMeta, note: string): void {

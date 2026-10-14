@@ -2,7 +2,8 @@ import { dec, type Dec } from '@/lib/calc/decimal';
 import type { MonthStatus, Period, PeriodKind } from '@/lib/calc/period';
 import type { FormulaStep, RuleRef, SourceRef } from '@/lib/calc/provenance';
 import type { CalcResult, CalcWarning, ScenarioInfo, TaxKind } from '@/lib/calc/service';
-import type { TaxRegime, VatStatus } from '@/lib/calc/types';
+import type { TaxRegime, VatStatus, WhatIfLabel } from '@/lib/calc/types';
+import type { WhatIfSnapshot } from './whatif';
 
 /**
  * Снимок результата расчёта для передачи по сети и хранения в базе: те же поля, что у CalcResult,
@@ -86,6 +87,10 @@ export interface CalcSnapshot {
   assumptions?: string[];
   /** Сценарий прогноза; у расчёта по данным null или поля нет */
   scenario?: ScenarioInfo | null;
+  /** Сценарий «что если»: расчёт «сейчас» или «по сценарию»; у остальных расчётов поля нет */
+  whatIf?: WhatIfLabel | null;
+  /** Сравнение «сейчас и по сценарию»: хранится у одного расчёта набора */
+  comparison?: WhatIfSnapshot | null;
   /** Момент, на который посчитано, мс UTC. На экране в этот момент стояли те же цифры */
   at: number;
   /** Часовой пояс приложения: время загрузки источника и момент расчёта показываются в нём */
@@ -98,7 +103,7 @@ const s = (v: Dec | null): string | null => (v === null ? null : v.toString());
 
 export function toSnapshot(
   r: CalcResult,
-  meta: { at: number; tz: string; scope: string[] | 'all' },
+  meta: { at: number; tz: string; scope: string[] | 'all'; comparison?: WhatIfSnapshot | null },
 ): CalcSnapshot {
   return {
     v: 1,
@@ -166,6 +171,8 @@ export function toSnapshot(
     warnings: r.warnings,
     assumptions: r.assumptions,
     scenario: r.scenario,
+    ...(r.whatIf ? { whatIf: r.whatIf } : {}),
+    ...(meta.comparison ? { comparison: meta.comparison } : {}),
     at: meta.at,
     tz: meta.tz,
     scope: meta.scope,
@@ -242,5 +249,6 @@ export function fromSnapshot(snap: CalcSnapshot): CalcResult {
     warnings: snap.warnings,
     assumptions: snap.assumptions ?? [],
     scenario: snap.scenario ?? null,
+    whatIf: snap.whatIf ?? null,
   };
 }

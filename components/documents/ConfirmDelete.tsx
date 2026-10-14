@@ -6,12 +6,13 @@ import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
 
 /** Сколько секунд на экране уведомление «Черновик удалён» с кнопкой «Отменить» */
-export const UNDO_SECONDS = 8;
+export const UNDO_SECONDS = 6;
 
 /**
- * Окно подтверждения внутри страницы: «Удалить черновик? Восстановить нельзя», кнопки «Удалить»
- * (красная) и «Отмена». Для нескольких черновиков в заголовке их число. Само удаление выполняет
- * этот компонент (POST /api/documents/delete), результат отдаёт вызывающему.
+ * Окно подтверждения внутри страницы: «Удалить черновик? Черновик будет удалён. Отменить можно в
+ * течение 6 секунд», кнопки «Удалить» (красная) и «Отмена». Для нескольких черновиков в заголовке их
+ * число. Само удаление выполняет этот компонент (POST /api/documents/delete), результат отдаёт
+ * вызывающему; «Отменить» в уведомлении после удаления возвращает черновики.
  */
 export function ConfirmDelete({
   ids,
@@ -44,7 +45,9 @@ export function ConfirmDelete({
     <Overlay kind="modal" label={title} onClose={onClose}>
       <OverlayHead title={title} onClose={onClose} />
       <div className="ov-scroll">
-        <p data-testid="confirm-text">Восстановить нельзя</p>
+        <p data-testid="confirm-text">
+          {`${many ? 'Черновики будут удалены' : 'Черновик будет удалён'}. Отменить можно в течение ${UNDO_SECONDS} секунд`}
+        </p>
         {error ? (
           <p className="form-error" role="alert">
             {error}

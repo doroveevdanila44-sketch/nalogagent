@@ -103,7 +103,8 @@ const pluralWarnings = (n: number) => {
   return `${n} ${word}`;
 };
 
-export const TOUR_STEPS: readonly TourStep[] = [
+/** Все подсказки по порядку: полный тур по кнопке «Показать подсказки заново» в меню. */
+const ALL_STEPS: readonly TourStep[] = [
   // ===== Агент =====
   {
     id: 'ask',
@@ -119,8 +120,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: 'suggestions',
     chapter: 'agent',
     title: 'Подсказки',
-    what: 'готовые вопросы, которые задают чаще всего.',
-    read: 'нажатие сразу отправляет вопрос агенту.',
+    what: 'готовые вопросы. Янтарные «Что если» пересчитывают год при другом условии: купим машины, вырастет выручка.',
+    read: 'в ответе пометка «Сценарий, а не прогноз», допущения и таблица «сейчас и по сценарию».',
     todo: 'нажмите подсказку, если не знаете, с чего начать.',
     path: '/agent',
     targets: ['[data-tour="suggestions"]', '[data-tour="suggestions-handle"]'],
@@ -167,7 +168,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'answer-specialist',
     chapter: 'agent',
-    title: 'Передать специалисту',
+    title: 'Отправить на проверку',
     what: 'кнопка под ответом: отправляет этот расчёт на проверку.',
     read: 'бухгалтер или финансовый директор получит цифры и допущения из ответа.',
     todo: 'нажмите кнопку, выберите человека и при желании напишите комментарий.',
@@ -311,7 +312,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     chapter: 'dashboard',
     title: 'Кнопки под цифрой',
     what: 'четыре действия с расчётом.',
-    read: '«Показать расчёт» формулы по шагам, «Выгрузить в Excel» файл с формулами. «Проверить самому» чеклист для сверки, «Передать специалисту» отправка на проверку.',
+    read: '«Показать расчёт» формулы по шагам, «Выгрузить в Excel» файл с формулами. «Проверить самому» чеклист для сверки, «Отправить на проверку» отправка бухгалтеру или финансовому директору.',
     todo: 'нажмите «Показать расчёт», чтобы увидеть, откуда цифра.',
     path: '/dashboard',
     targets: ['[data-tour="actions"]'],
@@ -319,10 +320,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'specialist',
     chapter: 'dashboard',
-    title: 'Передать специалисту',
+    title: 'Отправить на проверку',
     what: 'отправка расчёта бухгалтеру или финансовому директору на проверку.',
     read: 'запрос уйдёт выбранному человеку, он ответит комментарием или согласованием.',
-    todo: 'нажмите кнопку и выберите человека. Статус виден в меню, в «Статусах проверок».',
+    todo: 'нажмите кнопку и выберите человека. Статус виден в меню, в разделе «Что проверено».',
     path: '/dashboard',
     targets: ['[data-tour="act-send"]'],
   },
@@ -407,12 +408,51 @@ export const TOUR_STEPS: readonly TourStep[] = [
     title: 'Смена PIN',
     what: 'PIN из четырёх цифр открывает приложение на этом устройстве.',
     read: 'на каждом устройстве свой PIN, после пяти ошибок вход только по паролю.',
-    todo: 'нажмите «Сменить PIN», если его мог узнать посторонний. Обучение всегда в меню из трёх точек.',
+    todo: 'нажмите «Сменить PIN», если его мог узнать посторонний. Все подсказки снова: меню, «Показать подсказки заново».',
     path: null,
     targets: ['[data-tour="menu-pin"]'],
     menu: true,
   },
 ];
+
+/**
+ * Первый показ: восемь шагов, по два-три на раздел и один про меню. Остальные подсказки доступны
+ * по кнопке «Показать подсказки заново» в меню (полный тур, все шаги выше).
+ */
+const MENU_STEP: TourStep = {
+  id: 'menu',
+  chapter: 'menu',
+  title: 'Меню',
+  what: 'три точки справа вверху: блокировка, смена PIN, «Что проверено» и подсказки.',
+  read: '«Заблокировать» закрывает экран до PIN, «Сменить PIN» меняет код на этом устройстве.',
+  todo: 'нужны остальные подсказки? Меню, «Показать подсказки заново».',
+  path: null,
+  targets: ['[data-tour="menu-sheet"]'],
+  menu: true,
+};
+
+const SHORT_IDS = [
+  'ask',
+  'suggestions',
+  'banner-vat-forecast',
+  'warnings',
+  'actions',
+  'doc-catalog',
+  'doc-fill',
+  'menu',
+] as const;
+
+export const TOUR_STEPS: readonly TourStep[] = SHORT_IDS.map(
+  (id) => (id === 'menu' ? MENU_STEP : ALL_STEPS.find((s) => s.id === id)!),
+);
+
+/** Все подсказки для полного тура из меню. */
+export const FULL_TOUR_STEPS: readonly TourStep[] = ALL_STEPS;
+
+/** short: первый показ из восьми шагов; full: все подсказки по кнопке в меню. */
+export type TourMode = 'short' | 'full';
+
+export const stepsFor = (mode: TourMode): readonly TourStep[] => (mode === 'full' ? FULL_TOUR_STEPS : TOUR_STEPS);
 
 /** Заголовок шага для числа. */
 export function stepTitle(step: TourStep, n: TourNumbers | null): string {
@@ -434,7 +474,7 @@ export function stepLines(
 /** Селекторы data-tour, на которые ссылаются шаги: по ним тест проверяет, что элементы есть. */
 export function tourAttributes(): string[] {
   const out = new Set<string>();
-  for (const s of TOUR_STEPS) {
+  for (const s of [...FULL_TOUR_STEPS, ...TOUR_STEPS]) {
     for (const t of s.targets) {
       const m = /\[data-tour="([^"]+)"\]/.exec(t);
       if (m) out.add(m[1]!);

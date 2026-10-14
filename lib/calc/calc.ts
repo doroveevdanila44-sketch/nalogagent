@@ -31,12 +31,17 @@ export function frac(weights: Dec[], m: Moment): Dec {
   return acc.plus(weights[m.month]!.times(past).div(daysInMonth(m.year, m.month)));
 }
 
-/** Выручка месяца: факт (если есть и месяц уже прошёл) или годовой прогноз × вес. */
+/**
+ * Выручка месяца: факт (если есть и месяц уже прошёл) или годовой прогноз × вес. В сценарии «что
+ * если» (e.whatIf) выручка идущего и будущих месяцев: прогноз месяца × рост + добавка.
+ */
 export function monthAmount(e: EntityInput, ctx: Pick<CalcCtx, 'weights'>, month: number, now: Moment): Dec {
   if (month < now.month && e.monthly) {
     const f = e.monthly.find((x) => x.month === month && x.isFact);
     if (f) return f.amount;
   }
+  const part = month >= now.month ? e.whatIf?.parts[month] : undefined;
+  if (part) return part.base.times(part.factor).plus(part.extra);
   return e.annualRevenue.times(ctx.weights[month]!);
 }
 
@@ -45,7 +50,7 @@ export function ytd(e: EntityInput, ctx: CalcCtx, now: Moment): Dec {
   let acc = ZERO;
   for (let i = 0; i < now.month; i++) acc = acc.plus(monthAmount(e, ctx, i, now));
   const past = dec(now.day - 1).plus(dec(now.secondsOfDay).div(86400));
-  const cur = e.annualRevenue.times(ctx.weights[now.month]!).times(past).div(daysInMonth(now.year, now.month));
+  const cur = monthAmount(e, ctx, now.month, now).times(past).div(daysInMonth(now.year, now.month));
   return acc.plus(cur);
 }
 

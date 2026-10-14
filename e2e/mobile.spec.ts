@@ -137,7 +137,7 @@ test('Телефон 390: поле чата растёт до шести стр�
   expect(await page.locator('.msg.me').first().evaluate((e) => (e.textContent ?? '').split('строка').length - 1)).toBe(12);
 });
 
-test('Телефон 390: подсказки свёрнуты, раскрываются нажатием на ручку, рядами высотой 36 с зазором 8, без горизонтальной прокрутки', async ({
+test('Телефон 390: в пустом чате подсказки открыты, после выбора свёрнуты и раскрываются нажатием на ручку, рядами высотой 36 с зазором 8, без горизонтальной прокрутки', async ({
   page,
 }) => {
   await resetChat();
@@ -180,25 +180,39 @@ test('Телефон 390: подсказки свёрнуты, раскрыва�
       };
     }, selector);
 
-  // пустая история: подсказок по центру списка нет, блок свёрнут до узкой ручки
+  // пустая история: подсказок по центру списка нет, панель открыта по умолчанию, ручка остаётся
   await expect(page.locator('.chat-empty')).toHaveCount(0);
   await expect(handle).toBeVisible();
   await expect(handle).toHaveText('Подсказки');
-  await expect(handle).toHaveAttribute('aria-expanded', 'false');
-  expect((await handle.boundingBox())!.height).toBe(28);
-  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeLessThan(1);
-  expect(await panel.locator(':scope > div').evaluate((e) => e.hasAttribute('inert'))).toBe(true);
-
-  // нажатие на ручку раскрывает: подсказки рядами по 36 px, зазор 8, внутри экрана
-  await handle.tap();
   await expect(handle).toHaveAttribute('aria-expanded', 'true');
+  expect((await handle.boundingBox())!.height).toBe(28);
   await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(70);
+  expect(await panel.locator(':scope > div').evaluate((e) => e.hasAttribute('inert'))).toBe(false);
+
+  // первыми две «Что если» на светлом янтарном фоне, остальные бордовые
+  const chips = await page.locator('#chat-suggestions .sug button').evaluateAll((els) =>
+    els.map((e) => ({ text: e.textContent, bg: getComputedStyle(e).backgroundColor, color: getComputedStyle(e).color })),
+  );
+  expect(chips.map((c) => c.text)).toEqual([
+    'Что если купим 5 машин?',
+    'Что если выручка вырастет на 20%?',
+    'Какая ставка выгоднее?',
+    'Сколько платить за квартал?',
+    'Что с порогами?',
+    'Налог на прибыль за год?',
+  ]);
+  expect(chips[0]!.bg).toBe('rgb(255, 230, 168)'); // #FFE6A8
+  expect(chips[1]!.bg).toBe('rgb(255, 230, 168)');
+  expect(chips[0]!.color).toBe('rgb(42, 43, 20)'); // #2A2B14
+  for (const c of chips.slice(2)) expect(c.bg).toBe('rgb(120, 66, 68)'); // #784244
+
+  // подсказки рядами по 36 px, зазор 8, внутри экрана
   const first = await measure('#chat-suggestions .sug');
-  expect(first.count).toBe(4);
+  expect(first.count).toBe(6);
   expect(first.flexWrap).toBe('wrap');
   expect(first.overflowX).toBe('visible');
   expect(first.scrolls).toBe(false);
-  expect(first.heights).toEqual([36, 36, 36, 36]);
+  expect(first.heights).toEqual([36, 36, 36, 36, 36, 36]);
   expect(first.clipped).toBe(false);
   expect(first.inside).toBe(true);
   expect(first.pageScrollX).toBeLessThanOrEqual(0);
@@ -219,10 +233,10 @@ test('Телефон 390: подсказки свёрнуты, раскрыва�
   await expect(handle).toHaveAttribute('aria-expanded', 'true');
   await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(70);
   const docked = await measure('.composer-wrap .sug');
-  expect(docked.count).toBe(4);
+  expect(docked.count).toBe(6);
   expect(docked.flexWrap).toBe('wrap');
   expect(docked.scrolls).toBe(false);
-  expect(docked.heights).toEqual([36, 36, 36, 36]);
+  expect(docked.heights).toEqual([36, 36, 36, 36, 36, 36]);
   expect(docked.clipped).toBe(false);
   expect(docked.inside).toBe(true);
   expect(docked.pageScrollX).toBeLessThanOrEqual(0);
@@ -248,7 +262,8 @@ test('Телефон 390: подсказки не раскрываются ни 
 
   // несколько ответов, чтобы список прокручивался; подсказки выбираются через ручку
   for (const q of ['Что с порогами?', 'Какая ставка выгоднее?', 'Налог на прибыль за год?']) {
-    await handle.tap();
+    // в пустом чате панель открыта по умолчанию, после первого ответа свёрнута
+    if ((await handle.getAttribute('aria-expanded')) !== 'true') await handle.tap();
     await expect(handle).toHaveAttribute('aria-expanded', 'true');
     await page.getByRole('button', { name: q }).first().tap();
     await expect(page.locator('.typing')).toHaveCount(0);
@@ -302,7 +317,7 @@ test('Телефон 390: подсказки не раскрываются ни 
   expect((await handle.boundingBox())!.height).toBe(28);
   await handle.tap();
   await expect.poll(panelHeight).toBeGreaterThan(70);
-  const chip = await page.locator('#chat-suggestions .sug button').first().evaluate((e) => {
+  const chip = await page.locator('#chat-suggestions .sug button:not(.sug-whatif)').first().evaluate((e) => {
     const c = getComputedStyle(e);
     return {
       bg: c.backgroundColor,

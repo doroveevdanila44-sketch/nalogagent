@@ -35,7 +35,17 @@ import { seedDatabase } from '@/lib/db/seed';
 import { createTestDb } from '@/lib/db/testing';
 import { buildDashboardProvenance, bannerQueries, entityQueries } from './dashboard';
 import { buildChecklist, formulasText } from './checklist';
-import { KIND_LABEL, lineFromSnapshots, shortDateTime, shortSource, sourceLineText, stampShort } from './line';
+import {
+  KIND_LABEL,
+  dateTimeWithZone,
+  isoToDots,
+  lineFromSnapshots,
+  shortDateTime,
+  shortSource,
+  sourceLineText,
+  stampShort,
+  zoneLabel,
+} from './line';
 import { exportFileName, requestTitle, subjectOf, type CalcQuery } from './query';
 import { runQueries } from './schemas';
 import { fromSnapshot, toSnapshot } from './snapshot';
@@ -158,6 +168,20 @@ describe('строка происхождения', () => {
   it('время в поясе приложения', () => {
     expect(shortDateTime(Date.UTC(2026, 9, 10, 6, 0, 0), 'Asia/Kamchatka')).toBe('10.10.2026 18:00');
     expect(shortDateTime(Date.UTC(2026, 9, 10, 6, 0, 0), 'UTC')).toBe('10.10.2026 06:00');
+  });
+
+  it('один хелпер времени с подписью пояса: «Сверено» и время документов «(Камчатка)»', () => {
+    expect(dateTimeWithZone(Date.UTC(2026, 9, 10, 6, 0, 0), 'Asia/Kamchatka')).toBe('10.10.2026 18:00 (Камчатка)');
+    expect(dateTimeWithZone(Date.UTC(2026, 9, 10, 6, 0, 0), 'Europe/Moscow')).toBe('10.10.2026 09:00 (Москва)');
+    expect(zoneLabel('Asia/Vladivostok')).toBe('Vladivostok');
+    expect(zoneLabel('America/New_York')).toBe('New York');
+  });
+
+  it('даты норм в «Проверить самому»: 01.01.2026 вместо 2026-01-01', () => {
+    expect(isoToDots('2026-01-01')).toBe('01.01.2026');
+    expect(isoToDots('2026-12-31')).toBe('31.12.2026');
+    // не дата остаётся как есть
+    expect(isoToDots('нет')).toBe('нет');
   });
 
   it('данные дашборда: у каждого баннера и блока карточки своя строка из calcTax', async () => {

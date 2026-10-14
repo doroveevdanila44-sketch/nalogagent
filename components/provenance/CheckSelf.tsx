@@ -5,7 +5,7 @@ import { dec } from '@/lib/calc/decimal';
 import { rub2 } from '@/lib/calc/format';
 import { api } from '@/lib/client/api';
 import { buildChecklist, formulasText, type CheckSection } from '@/lib/provenance/checklist';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone, isoToDots } from '@/lib/provenance/line';
 import { subjectOf } from '@/lib/provenance/query';
 import type { CheckMark } from '@/lib/provenance/types';
 import type { TargetBody } from './client';
@@ -76,7 +76,7 @@ function Item({
       </label>
       {mark ? (
         <p className="chk-meta">
-          Сверено {shortDateTime(Date.parse(mark.checkedAt), tz)}
+          Сверено {dateTimeWithZone(Date.parse(mark.checkedAt), tz)}
           {mark.amount !== null ? `, на сумму ${rub2(dec(mark.amount))}` : ''}
           {stale ? '. С тех пор расчёт изменился, сверьте ещё раз.' : ''}
         </p>
@@ -168,8 +168,8 @@ function Section({
                     ) : (
                       'Норма не указана'
                     )}
-                    {` · действует с ${r.from}`}
-                    {r.to ? ` по ${r.to}` : ''}
+                    {` · действует с ${isoToDots(r.from)}`}
+                    {r.to ? ` по ${isoToDots(r.to)}` : ''}
                   </small>
                 </li>
               ))}

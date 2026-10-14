@@ -194,7 +194,7 @@ test('Отступы: первый заголовок каждого экран�
 
   // статусы из меню (без перезагрузки: она закрыла бы сессию экраном PIN)
   await page.getByRole('button', { name: 'Меню' }).click();
-  await page.getByRole('button', { name: 'Статусы проверок' }).click();
+  await page.getByRole('button', { name: 'Что проверено' }).click();
   await expect(page.locator('#h-statuses')).toBeVisible();
   const st = await gap('#h-statuses');
   expect(st.gap, 'статусы').toBeGreaterThanOrEqual(24);

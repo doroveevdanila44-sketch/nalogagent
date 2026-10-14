@@ -8,13 +8,14 @@ import { askAgent } from '@/lib/client/ask';
 import type { DashboardResponse } from '@/lib/provenance/dashboard';
 import type { Catalog } from '@/components/documents/api';
 import type { DocumentSummary } from '@/lib/documents/types';
-import { CHAPTER_TITLE, TOUR_STEPS, stepLines, stepTitle, type TourStep } from './chapters';
+import { CHAPTER_TITLE, stepsFor, stepLines, stepTitle, type TourMode, type TourStep } from './chapters';
 import { tourNumbers } from './numbers';
 
 /**
  * Обучение: главы и шаги поверх приложения (chapters.ts). Затемнение с вырезом вокруг нужного
  * элемента, карточка с заголовком, тремя строками «Что это», «Как читать», «Что делать», счётчиком
- * «Шаг 6 из 25» и кнопками «Назад», «Дальше», «Пропустить обучение»; на последнем шаге «Готово».
+ * «Шаг 3 из 8» и кнопками «Назад», «Дальше», «Пропустить обучение»; на последнем шаге «Готово».
+ * Первый показ это восемь шагов, по кнопке меню «Показать подсказки заново» идут все подсказки.
  *
  * Числа в строках берутся из расчётного сервиса (тот же вход, что у дашборда), на момент шага.
  * Шагам, которым нужен пример, тур готовит его сам: открывает окно расчёта, задаёт агенту вопрос
@@ -330,7 +331,7 @@ async function openProfitCalc(alive: () => boolean): Promise<() => void> {
 
 /**
  * Шагам про ответ агента нужен ответ с тем, что они подсвечивают: карточка «Понял так», кнопки
- * уточнений, «Передать специалисту». Если такого элемента в истории нет, тур задаёт вопрос с
+ * уточнений, «Отправить на проверку». Если такого элемента в истории нет, тур задаёт вопрос с
  * прогнозом сам (в его ответе есть всё перечисленное), тем же путём, что кнопка «Отправить», и
  * дальше ждёт ответ. Возвращает true, если вопрос задан.
  */
@@ -382,18 +383,30 @@ interface Model {
 
 export function Tour({
   open,
+  mode = 'short',
   onClose,
   onMenu,
 }: {
   open: boolean;
+  /** short: восемь шагов первого показа, full: все подсказки по кнопке меню */
+  mode?: TourMode;
   onClose: () => void;
   /** Открыть или закрыть меню из трёх точек: на шагах главы «Меню» оно открыто */
   onMenu?: (open: boolean) => void;
 }) {
-  return open ? <TourRun onClose={onClose} onMenu={onMenu} /> : null;
+  return open ? <TourRun key={mode} mode={mode} onClose={onClose} onMenu={onMenu} /> : null;
 }
 
-function TourRun({ onClose, onMenu }: { onClose: () => void; onMenu?: (open: boolean) => void }) {
+function TourRun({
+  mode,
+  onClose,
+  onMenu,
+}: {
+  mode: TourMode;
+  onClose: () => void;
+  onMenu?: (open: boolean) => void;
+}) {
+  const steps = stepsFor(mode);
   const router = useRouter();
   const pathname = usePathname();
   const titleId = useId();
@@ -428,10 +441,10 @@ function TourRun({ onClose, onMenu }: { onClose: () => void; onMenu?: (open: boo
   }, []);
   const targetRef = useRef<HTMLElement | null>(null);
 
-  const step = TOUR_STEPS[index]!;
+  const step = steps[index]!;
   const stepRef = useRef(step);
   stepRef.current = step;
-  const last = index === TOUR_STEPS.length - 1;
+  const last = index === steps.length - 1;
   const tryMode = step.mode === 'try';
   const cardWidth = view.w < 760 ? view.w - MARGIN * 2 : 360;
 
@@ -475,8 +488,8 @@ function TourRun({ onClose, onMenu }: { onClose: () => void; onMenu?: (open: boo
   }, [onClose, router]);
   const next = useCallback(() => {
     if (last) finish();
-    else setIndex((i) => Math.min(i + 1, TOUR_STEPS.length - 1));
-  }, [finish, last]);
+    else setIndex((i) => Math.min(i + 1, steps.length - 1));
+  }, [finish, last, steps.length]);
   const back = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
   const latest = useRef({ finish, next, back });
@@ -787,7 +800,7 @@ function TourRun({ onClose, onMenu }: { onClose: () => void; onMenu?: (open: boo
       >
         <p className="tour-count">
           <span data-testid="tour-count">
-            Шаг {index + 1} из {TOUR_STEPS.length}
+            Шаг {index + 1} из {steps.length}
           </span>
           <span className="tour-chapter" data-testid="tour-chapter">
             {CHAPTER_TITLE[step.chapter]}

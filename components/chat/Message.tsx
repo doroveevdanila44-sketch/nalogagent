@@ -5,12 +5,29 @@ import { MakeDocument } from '@/components/documents/MakeDocument';
 import { QuickReplies } from './QuickReplies';
 import { Understood } from './Understood';
 
+/**
+ * Первая колонка с переводом строки в ячейке: название юрлица первой строкой, режим и прочее
+ * мелким серым текстом второй. Без перевода строки ячейка как была.
+ */
+function FirstCell({ cell, strong }: { cell: string; strong: boolean }) {
+  const [name, ...rest] = cell.split('\n');
+  if (rest.length === 0) return strong ? <b>{cell}</b> : <>{cell}</>;
+  return (
+    <>
+      <span className="t-name">{strong ? <b>{name}</b> : name}</span>
+      <small className="t-sub">{rest.join(' ')}</small>
+    </>
+  );
+}
+
 function TableView({ table }: { table: Table }) {
   const best = new Set((table.best ?? []).map(([r, c]) => `${r}:${c}`));
   const last = table.rows.length - 1;
+  // колонка названий шире остальных, если в ней есть вторая строка (режим): она не дробится на пять
+  const wide = table.rows.some((row) => row[0]?.includes('\n'));
   return (
     <div className="tscroll">
-    <table>
+    <table className={[wide ? 'has-sub' : '', table.dense ? 'dense' : ''].filter(Boolean).join(' ') || undefined}>
       <thead>
         <tr>
           {table.head.map((h, i) => (
@@ -27,7 +44,13 @@ function TableView({ table }: { table: Table }) {
               const strong = (table.totalRow && r === last) || best.has(`${r}:${c}`);
               return (
                 <td key={c} className={`${c ? 'n' : ''} ${best.has(`${r}:${c}`) ? 'best' : ''}`.trim() || undefined}>
-                  {strong && !best.has(`${r}:${c}`) ? <b>{cell}</b> : cell}
+                  {c === 0 ? (
+                    <FirstCell cell={cell} strong={strong} />
+                  ) : strong && !best.has(`${r}:${c}`) ? (
+                    <b>{cell}</b>
+                  ) : (
+                    cell
+                  )}
                 </td>
               );
             })}
@@ -37,6 +60,42 @@ function TableView({ table }: { table: Table }) {
     </table>
     </div>
   );
+}
+
+const BULLET = '• ';
+const SCENARIO_MARK = 'Сценарий, а не прогноз:';
+
+/**
+ * Абзац ответа. Строки с «• » это список (допущения сценария), пометка «Сценарий, а не прогноз:»
+ * в начале ответа выделена. Остальное обычный текст.
+ */
+function Paragraph({ text }: { text: string }) {
+  const lines = text.split('\n');
+  if (lines.length > 1 && lines.some((l) => l.startsWith(BULLET))) {
+    const head = lines.filter((l) => !l.startsWith(BULLET)).join(' ');
+    const items = lines.filter((l) => l.startsWith(BULLET)).map((l) => l.slice(BULLET.length));
+    return (
+      <>
+        {head ? <p className="msg-head">{head}</p> : null}
+        <ul className="msg-list">
+          {items.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+  if (text.startsWith(SCENARIO_MARK)) {
+    return (
+      <p>
+        <b className="msg-mark" data-testid="scenario-mark">
+          {SCENARIO_MARK}
+        </b>
+        {text.slice(SCENARIO_MARK.length)}
+      </p>
+    );
+  }
+  return <p>{text}</p>;
 }
 
 /**
@@ -64,7 +123,7 @@ export function Message({
         <Understood card={turn.understood} change={turn.change} onPick={pick} disabled={disabled || !onPick} />
       ) : null}
       {paragraphs.map((p, i) => (
-        <p key={i}>{p}</p>
+        <Paragraph key={i} text={p} />
       ))}
       {turn.tables.map((t, i) => (
         <TableView key={i} table={t} />

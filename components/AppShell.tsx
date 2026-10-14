@@ -30,8 +30,10 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
-  // Обучение: открывается один раз после первого входа и по кнопке «Пересмотреть обучение» в меню
+  // Обучение: открывается один раз после первого входа и по кнопке «Показать подсказки заново» в меню
   const [tourOpen, setTourOpen] = useState(false);
+  // первый показ идёт восемью шагами, «Показать подсказки заново» из меню открывает все подсказки
+  const [tourMode, setTourMode] = useState<'short' | 'full'>('short');
   const onboardingChecked = useRef(false);
   // Полоса под часами: бордо на экране блокировки и смены PIN, озеро на остальных
   useThemeColor(locked || sheet === 'changePin' ? THEME_AUTH : THEME_APP);
@@ -208,7 +210,10 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
       .then((p) => {
         if (cancelled) return;
         onboardingChecked.current = true;
-        if (p.onboardingSeenAt === null) setTourOpen(true);
+        if (p.onboardingSeenAt === null) {
+          setTourMode('short');
+          setTourOpen(true);
+        }
       })
       .catch(() => {
         // не удалось узнать: обучение не показываем, при следующем запуске спросим снова
@@ -346,7 +351,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
         <div id="overlay-root" />
 
         {/* При блокировке на PIN обучение прячется вместе со страницей и возвращается после ввода PIN */}
-        <Tour open={tourOpen} onClose={closeTour} onMenu={toggleMenuForTour} />
+        <Tour open={tourOpen} mode={tourMode} onClose={closeTour} onMenu={toggleMenuForTour} />
       </div>
 
       {sheet === 'menu' && !locked && (
@@ -356,6 +361,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             role="dialog"
             aria-modal="true"
             aria-label="Меню"
+            data-tour="menu-sheet"
             ref={menuRef}
             onClick={(e) => e.stopPropagation()}
           >
@@ -370,7 +376,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
                 router.push('/statuses');
               }}
             >
-              Статусы проверок
+              Что проверено
             </button>
             <button type="button" className="row" data-tour="menu-pin" onClick={() => setSheet('changePin')}>
               Сменить PIN
@@ -382,10 +388,11 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
               data-tour="menu-tour"
               onClick={() => {
                 setSheet('none');
+                setTourMode('full');
                 setTourOpen(true);
               }}
             >
-              Пересмотреть обучение
+              Показать подсказки заново
             </button>
             <button type="button" className="row danger" onClick={logout}>
               Выйти

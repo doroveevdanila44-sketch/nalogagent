@@ -12,3 +12,4 @@ export * from './dashboard';
 export * from './period';
 export * from './provenance';
 export * from './service';
+export * from './whatif';

@@ -454,7 +454,7 @@ export function DocumentSheet({ id }: { id: string }) {
           onClose={() => setConfirmDelete(false)}
           onDeleted={(ids) => {
             setConfirmDelete(false);
-            shell.notify('Черновик удалён', () => restoreDrafts(ids));
+            shell.notify('Черновик удалён', () => restoreDrafts(ids), '/documents');
             router.replace('/documents', { scroll: false });
           }}
         />

@@ -3,12 +3,23 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { E2E_DB_URL } from '../playwright.config';
-import { CHAPTER_TITLE, LINE_LABELS, TOUR_STEPS, type TourStep } from '../components/onboarding/chapters';
+import {
+  CHAPTER_TITLE,
+  FULL_TOUR_STEPS,
+  LINE_LABELS,
+  TOUR_STEPS,
+  type TourStep,
+} from '../components/onboarding/chapters';
 import { firstLogin, resetChat, typePin } from './helpers';
 
 const PIN = '8246';
 const SHOTS = '.data/shots';
+/** Первый показ: восемь шагов. Все подсказки (25 шагов) открываются кнопкой меню «Показать подсказки заново». */
 const TOTAL = TOUR_STEPS.length;
+const FULL_TOTAL = FULL_TOUR_STEPS.length;
+type Mode = 'short' | 'full';
+const stepsOf = (mode: Mode) => (mode === 'full' ? FULL_TOUR_STEPS : TOUR_STEPS);
+const totalOf = (mode: Mode) => stepsOf(mode).length;
 
 test.describe.configure({ mode: 'serial' });
 
@@ -103,7 +114,7 @@ async function expectThreeLines(page: Page, label: string): Promise<string[]> {
   return texts;
 }
 
-const stepByIndex = (i: number): TourStep => TOUR_STEPS[i]!;
+const stepByIndex = (i: number, mode: Mode = 'short'): TourStep => stepsOf(mode)[i]!;
 
 /**
  * В окружении тестов сессия блокируется после 15 секунд без обращений к серверу (PIN_IDLE_MINUTES
@@ -181,12 +192,13 @@ async function expectInWindow(page: Page, label: string): Promise<void> {
  * верный, подсвечен существующий элемент или карточка стоит по центру, нажатие на затемнение
  * ничего не закрывает.
  */
-async function walkAll(page: Page, label: string): Promise<void> {
-  for (let i = 0; i < TOTAL; i += 1) {
-    const step = stepByIndex(i);
+async function walkAll(page: Page, label: string, mode: Mode = 'full'): Promise<void> {
+  const total = totalOf(mode);
+  for (let i = 0; i < total; i += 1) {
+    const step = stepByIndex(i, mode);
     const at = `${label}, шаг ${i + 1} (${step.id})`;
     await cardReady(page, at);
-    await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+    await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${total}`);
     // подсвечен элемент шага (запасного вида «карточка по центру» на этом пути быть не должно)
     try {
       await expectHoleOnStep(page, step.targets, 20_000);
@@ -212,9 +224,9 @@ async function walkAll(page: Page, label: string): Promise<void> {
     if (spot) {
       await page.mouse.click(spot.x, spot.y);
       await expect(tour(page), `${at}: затемнение не закрывает тур`).toBeVisible();
-      await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+      await expect(count(page), at).toHaveText(`Шаг ${i + 1} из ${total}`);
     }
-    if (i < TOTAL - 1) await next(page).click();
+    if (i < total - 1) await next(page).click();
   }
 }
 
@@ -222,17 +234,25 @@ async function walkAll(page: Page, label: string): Promise<void> {
 const FIRST_TARGET = ['[data-tour="chat-input"]'];
 
 /** Идёт по шагам кнопкой «Дальше» с нынешнего шага, пока счётчик не покажет нужный. */
-async function goTo(page: Page, index: number): Promise<void> {
+async function goTo(page: Page, index: number, mode: Mode = 'short'): Promise<void> {
+  const total = totalOf(mode);
   const current = async () => Number(/Шаг (\d+) из/.exec((await count(page).textContent()) ?? '')![1]) - 1;
   for (let i = await current(); i < index; i += 1) {
-    await expect(count(page)).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+    await expect(count(page)).toHaveText(`Шаг ${i + 1} из ${total}`);
     await cardReady(page, `переход к шагу ${index + 1}, шаг ${i + 1}`);
     await next(page).click();
   }
-  await expect(count(page)).toHaveText(`Шаг ${index + 1} из ${TOTAL}`);
+  await expect(count(page)).toHaveText(`Шаг ${index + 1} из ${total}`);
 }
 
-const idx = (id: string) => TOUR_STEPS.findIndex((s) => s.id === id);
+const idx = (id: string, mode: Mode = 'short') => stepsOf(mode).findIndex((s) => s.id === id);
+
+/** Открыть полный тур из меню: кнопка «Показать подсказки заново». */
+async function openFullTour(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Меню' }).click();
+  await page.getByRole('button', { name: 'Показать подсказки заново' }).click();
+  await expect(tour(page)).toBeVisible();
+}
 
 /** Число из строки «198,42 млн» в миллионах */
 const mlnOf = (text: string): number => {
@@ -241,23 +261,36 @@ const mlnOf = (text: string): number => {
   return Number(m[1]!.replace(/ /g, '').replace(',', '.'));
 };
 
-for (const width of [390, 1440]) {
-  test(`Обучение: один раз после первого входа, ${TOTAL} шагов, три вопроса на шаг, подсветка, ${width} px`, async ({ page }) => {
+for (const mode of ['short', 'full'] as const) {
+  const total = totalOf(mode);
+  const first = mode === 'short';
+  for (const width of [390, 1440]) {
+  test(
+    first
+      ? `Обучение: один раз после первого входа, ${total} шагов, три вопроса на шаг, подсветка, ${width} px`
+      : `Обучение из меню: все подсказки (${total} шагов), три вопроса на шаг, подсветка, ${width} px`,
+    async ({ page }) => {
     test.setTimeout(300_000);
     fs.mkdirSync(SHOTS, { recursive: true });
-    await setSeen(null);
+    // первый показ: отметки нет, тур открывается сам; полный тур: отметка есть, тур открывается из меню
+    await setSeen(first ? null : new Date('2026-10-01T09:00:00Z'));
     await resetChat();
-    // на телефоне документов нет совсем: тур создаст пример; на компьютере он уже есть и берётся тот же
+    // на телефоне документов нет совсем: полный тур создаст пример; на компьютере он уже есть и берётся тот же
     if (width === 390) await sql('delete from documents');
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await firstLogin(page, PIN);
+    if (!first) {
+      await page.waitForTimeout(300);
+      await expect(tour(page)).toHaveCount(0);
+      await openFullTour(page);
+    }
 
-    // тур открылся сам, на первом шаге
+    // тур открылся, на первом шаге
     await expect(tour(page)).toBeVisible();
     await expect(card(page)).toBeVisible();
     await expect(card(page)).toHaveAttribute('role', 'dialog');
     await expect(card(page)).toHaveAttribute('aria-modal', 'true');
-    await expect(count(page)).toHaveText(`Шаг 1 из ${TOTAL}`);
+    await expect(count(page)).toHaveText(`Шаг 1 из ${total}`);
     await expect(card(page).getByRole('button', { name: 'Назад' })).toBeDisabled();
     await expect(card(page).getByRole('button', { name: 'Пропустить обучение' })).toBeVisible();
     await watchInvariant(page);
@@ -268,12 +301,12 @@ for (const width of [390, 1440]) {
     }
 
     const titles: string[] = [];
-    for (let i = 0; i < TOTAL; i += 1) {
-      const step = stepByIndex(i);
+    for (let i = 0; i < total; i += 1) {
+      const step = stepByIndex(i, mode);
       const label = `шаг ${i + 1} (${step.id})`;
       // карточка показывается, когда элемент найден и стоит на месте: до этого она скрыта
       await cardReady(page, label);
-      await expect(count(page), label).toHaveText(`Шаг ${i + 1} из ${TOTAL}`);
+      await expect(count(page), label).toHaveText(`Шаг ${i + 1} из ${total}`);
       await expect(page.getByTestId('tour-chapter'), label).toHaveText(CHAPTER_TITLE[step.chapter]);
       if (typeof step.title === 'string') await expect(page.getByTestId('tour-title'), label).toHaveText(step.title);
       titles.push(await page.getByTestId('tour-title').innerText());
@@ -310,7 +343,7 @@ for (const width of [390, 1440]) {
         await expect(page.locator('[data-tour="quick"]').last().locator('.qreply').first()).toBeVisible();
       }
       if (step.id === 'answer-specialist') {
-        await expect(page.locator('[data-tour="act-send"]').last()).toHaveText('Передать специалисту');
+        await expect(page.locator('[data-tour="act-send"]').last()).toHaveText('Отправить на проверку');
       }
       if (step.id === 'banner-revenue') {
         const banner = await page.locator('[data-tour="banner-revenue"] .sum-value').innerText();
@@ -345,7 +378,7 @@ for (const width of [390, 1440]) {
         expect(names[0]).toMatch(/^Налог на прибыль/);
         expect(names[1]).toMatch(/^Налог по УСН/);
         await page.screenshot({ path: `${SHOTS}/tour-tax-switch-${width}.png` });
-      } else if (i > idx('tax-switch')) {
+      } else if (mode === 'full' && i > idx('tax-switch', mode)) {
         await expect(page.getByTestId('overlay-drawer'), `${label}: окно расчёта закрыто`).toHaveCount(0);
       }
       if (step.id === 'doc-bar') {
@@ -364,7 +397,7 @@ for (const width of [390, 1440]) {
         await page.screenshot({ path: `${SHOTS}/tour-${step.id}-${width}.png` });
       }
 
-      if (i === TOTAL - 1) {
+      if (i === total - 1) {
         await expect(next(page)).toHaveText('Готово');
       } else {
         await expect(next(page), label).toHaveText('Дальше');
@@ -372,12 +405,12 @@ for (const width of [390, 1440]) {
       }
     }
     expect(await violations(page), 'затемнения без карточки не было').toEqual([]);
-    expect(titles.length).toBe(TOTAL);
-    expect(new Set(titles).size, 'заголовки шагов разные').toBeGreaterThan(TOTAL - 3);
+    expect(titles.length).toBe(total);
+    expect(new Set(titles).size, 'заголовки шагов разные').toBeGreaterThan(total - 3);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 
     // «Готово»: тур закрыт, человек там, откуда начал; меню и окна закрыты; отметка в базе
-    expect(await seenAt()).toBeNull();
+    if (first) expect(await seenAt()).toBeNull();
     await next(page).click();
     await expect(tour(page)).toHaveCount(0);
     await expect.poll(() => new URL(page.url()).pathname).toBe('/agent');
@@ -387,6 +420,8 @@ for (const width of [390, 1440]) {
       await expect(page.locator(sel)).not.toHaveAttribute('inert', /.*/);
     }
     await expect.poll(seenAt).not.toBeNull();
+    // время первого закрытия при пересмотре из меню не сдвигается
+    if (!first) expect(await seenAt()).toBe('2026-10-01T09:00:00.000Z');
 
     // второй запуск (полная загрузка и PIN): обучение уже не показывается
     const prefs = page.waitForResponse((r) => r.url().endsWith('/api/prefs') && r.request().method() === 'GET');
@@ -398,7 +433,9 @@ for (const width of [390, 1440]) {
     await expect(page.getByLabel('Вопрос агенту')).toBeVisible();
     await page.waitForTimeout(500);
     await expect(tour(page)).toHaveCount(0);
-  });
+    },
+  );
+  }
 }
 
 test('Пример ответа: если «Понял так» уже есть в истории, тур вопрос не задаёт; пример документа берётся готовый', async ({ page }) => {
@@ -407,7 +444,7 @@ test('Пример ответа: если «Понял так» уже есть 
   await resetChat();
   await firstLogin(page, PIN);
   const input = page.getByLabel('Вопрос агенту');
-  // ответ на этот вопрос уже несёт всё, что подсвечивает глава: «Понял так», уточнения, «Передать специалисту»
+  // ответ на этот вопрос уже несёт всё, что подсвечивает глава: «Понял так», уточнения, «Отправить на проверку»
   await input.fill('какую ставку выбрать на 2027 год');
   await input.press('Enter');
   await expect(page.locator('.typing')).toHaveCount(0);
@@ -416,14 +453,12 @@ test('Пример ответа: если «Понял так» уже есть 
   const before = (await sql<{ n: number }>('select count(*)::int as n from chat_messages'))[0]!.n;
   const docsBefore = (await sql<{ n: number }>('select count(*)::int as n from documents'))[0]!.n;
 
-  await page.getByRole('button', { name: 'Меню' }).click();
-  await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
-  await expect(tour(page)).toBeVisible();
-  await goTo(page, idx('forecast'));
+  await openFullTour(page);
+  await goTo(page, idx('forecast', 'full'), 'full');
   const lines = await expectThreeLines(page, 'forecast');
   expect(lines[2]).not.toContain('за вас');
   await expectHoleOnStep(page, ['[data-tour="understood"]']);
-  await goTo(page, idx('answer-specialist'));
+  await goTo(page, idx('answer-specialist', 'full'), 'full');
   await expectHoleOnStep(page, ['[data-tour="act-send"]']);
   await page.waitForTimeout(600);
   expect((await sql<{ n: number }>('select count(*)::int as n from chat_messages'))[0]!.n).toBe(before);
@@ -434,7 +469,7 @@ test('Пример ответа: если «Понял так» уже есть 
 });
 
 for (const width of [390, 1440]) {
-  test(`Обучение из меню: «Пересмотреть обучение» рядом с «Заблокировать», «Сменить PIN», «Выйти», ${width} px`, async ({ page }) => {
+  test(`Меню: «Показать подсказки заново» рядом с «Заблокировать», «Сменить PIN», «Выйти», ${width} px`, async ({ page }) => {
     await setSeen(new Date('2026-10-01T09:00:00Z'));
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await firstLogin(page, PIN);
@@ -444,16 +479,21 @@ for (const width of [390, 1440]) {
     await page.getByRole('button', { name: 'Меню' }).click();
     const menu = page.getByRole('dialog', { name: 'Меню', exact: true });
     const names = await menu.getByRole('button').allInnerTexts();
-    expect(names).toEqual(expect.arrayContaining(['Заблокировать', 'Сменить PIN', 'Пересмотреть обучение', 'Выйти']));
+    expect(names).toEqual(
+      expect.arrayContaining(['Заблокировать', 'Что проверено', 'Сменить PIN', 'Показать подсказки заново', 'Выйти']),
+    );
+    expect(names).not.toContain('Пересмотреть обучение');
+    expect(names).not.toContain('Статусы проверок');
     const at = (n: string) => names.indexOf(n);
-    expect(at('Пересмотреть обучение')).toBeGreaterThan(at('Сменить PIN'));
-    expect(at('Пересмотреть обучение')).toBeLessThan(at('Выйти'));
+    expect(at('Показать подсказки заново')).toBeGreaterThan(at('Сменить PIN'));
+    expect(at('Показать подсказки заново')).toBeLessThan(at('Выйти'));
     await page.screenshot({ path: `${SHOTS}/tour-menu-${width}.png` });
 
-    await menu.getByRole('button', { name: 'Пересмотреть обучение' }).click();
+    await menu.getByRole('button', { name: 'Показать подсказки заново' }).click();
     await expect(menu).toHaveCount(0);
     await expect(tour(page)).toBeVisible();
-    await expect(count(page)).toHaveText(`Шаг 1 из ${TOTAL}`);
+    // все подсказки: полный тур, а не восемь шагов первого показа
+    await expect(count(page)).toHaveText(`Шаг 1 из ${FULL_TOTAL}`);
 
     // Escape тур не закрывает; кнопка «Пропустить обучение» закрывает; время первого показа не сдвигается
     await page.keyboard.press('Escape');
@@ -463,16 +503,14 @@ for (const width of [390, 1440]) {
     expect(await seenAt()).toBe('2026-10-01T09:00:00.000Z');
 
     // и снова из меню: листается, на последнем шаге «Готово», меню на шагах главы «Меню» открыто
-    await page.getByRole('button', { name: 'Меню' }).click();
-    await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
-    await expect(tour(page)).toBeVisible();
-    await goTo(page, idx('menu-lock'));
+    await openFullTour(page);
+    await goTo(page, idx('menu-lock', 'full'), 'full');
     await expect(page.getByRole('dialog', { name: 'Меню', exact: true })).toBeVisible();
     await expectHoleOnStep(page, ['[data-tour="menu-lock"]']);
     await next(page).click();
     await expectHoleOnStep(page, ['[data-tour="menu-pin"]']);
-    await expect(count(page)).toHaveText(`Шаг ${TOTAL} из ${TOTAL}`);
-    await expect(card(page)).toContainText('Обучение всегда в меню из трёх точек.');
+    await expect(count(page)).toHaveText(`Шаг ${FULL_TOTAL} из ${FULL_TOTAL}`);
+    await expect(card(page)).toContainText('Показать подсказки заново');
     await expect(next(page)).toHaveText('Готово');
     await next(page).click();
     await expect(tour(page)).toHaveCount(0);
@@ -499,12 +537,12 @@ test('Закрывается только кнопкой: Escape, затемне
   await page.mouse.dblclick(900, 450);
   await expect(tour(page)).toBeVisible();
   // кнопка «назад» браузера тур не закрывает: тур остаётся и возвращает на страницу шага
-  await goTo(page, idx('banner-revenue'));
+  await goTo(page, idx('banner-vat-forecast'));
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
   await page.goBack();
   await expect(tour(page)).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
-  await expect(count(page)).toHaveText(`Шаг ${idx('banner-revenue') + 1} из ${TOTAL}`);
+  await expect(count(page)).toHaveText(`Шаг ${idx('banner-vat-forecast') + 1} из ${TOTAL}`);
   expect(await seenAt()).toBeNull();
   // единственный способ закрыть: «Пропустить обучение»
   await skip(page);
@@ -520,11 +558,11 @@ test('«Показ»: нажатие по подсвеченному ничег�
   await page.setViewportSize({ width: 1440, height: 900 });
   await firstLogin(page, PIN);
   await expect(tour(page)).toBeVisible();
-  // шаг «попробуйте»: баннер «Выручка с начала года»
-  await goTo(page, idx('banner-revenue'));
+  // шаг «попробуйте»: баннер «НДС за год, прогноз»
+  await goTo(page, idx('banner-vat-forecast'));
   await expect(tour(page)).toHaveAttribute('data-mode', 'try');
-  await expectHoleOnStep(page, ['[data-tour="banner-revenue"]']);
-  const banner = page.locator('[data-tour="banner-revenue"]');
+  await expectHoleOnStep(page, ['[data-tour="banner-vat-forecast"]']);
+  const banner = page.locator('[data-tour="banner-vat-forecast"]');
   await expect(banner).toHaveAttribute('aria-expanded', 'false');
   // нажатие мимо выреза (на соседний баннер) ничего не раскрывает
   const other = (await page.locator('[data-tour="banner-vat"]').boundingBox())!;
@@ -536,10 +574,10 @@ test('«Показ»: нажатие по подсвеченному ничег�
   await page.mouse.click(hole.x + hole.width / 2, hole.y + hole.height / 2);
   await expect(banner).toHaveAttribute('aria-expanded', 'true');
   await expect(tour(page)).toBeVisible();
-  await expect(count(page)).toHaveText(`Шаг ${idx('banner-revenue') + 1} из ${TOTAL}`);
+  await expect(count(page)).toHaveText(`Шаг ${idx('banner-vat-forecast') + 1} из ${TOTAL}`);
   // следующий шаг: раскрытое сворачивается само
   await next(page).click();
-  await expect(count(page)).toHaveText(`Шаг ${idx('banner-vat') + 1} из ${TOTAL}`);
+  await expect(count(page)).toHaveText(`Шаг ${idx('warnings') + 1} из ${TOTAL}`);
   await expect(banner).toHaveAttribute('aria-expanded', 'false');
 
   // шаг «показ»: кнопка «Показать расчёт» подсвечена, но не нажимается
@@ -563,11 +601,9 @@ for (const width of [390, 1440]) {
     for (let run = 1; run <= 5; run += 1) {
       const lock = page.getByRole('dialog', { name: 'Ввод PIN' });
       if (await lock.isVisible().catch(() => false)) await typePin(page, PIN);
-      await page.getByRole('button', { name: 'Меню' }).click();
-      await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
-      await expect(tour(page)).toBeVisible();
+      await openFullTour(page);
       await watchInvariant(page);
-      await walkAll(page, `проход ${run}`);
+      await walkAll(page, `проход ${run}`, 'full');
       await expect(next(page)).toHaveText('Готово');
       await next(page).click();
       await expect(tour(page)).toHaveCount(0);
@@ -591,7 +627,7 @@ test('«Пропустить» закрывает обучение с шага �
   await expect(page.getByTestId('tour-title')).toHaveText('Подсказки');
 
   // со страницы дашборда: тур уводит туда и возвращает назад
-  await goTo(page, idx('banner-vat'));
+  await goTo(page, idx('banner-vat-forecast'));
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
   await card(page).getByRole('button', { name: 'Пропустить' }).click();
   await expect(tour(page)).toHaveCount(0);
@@ -654,16 +690,14 @@ test('prefers-reduced-motion: вырез и карточка без анимац
 
   // без reduce вырез переезжает плавно
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.getByRole('button', { name: 'Меню' }).click();
-  await page.getByRole('button', { name: 'Пересмотреть обучение' }).click();
-  await expect(tour(page)).toBeVisible();
+  await openFullTour(page);
   await expect(page.getByTestId('tour-hole')).toBeVisible();
   const smooth = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="tour-hole"]')!).transitionDuration) * 1000);
   expect(smooth).toBeGreaterThanOrEqual(200);
   await skip(page);
 });
 
-test('Планшет 768 px: первые восемь шагов, карточка в окне и подсвеченное не закрыто', async ({ page }) => {
+test('Планшет 768 px: восемь шагов первого показа, карточка в окне и подсвеченное не закрыто', async ({ page }) => {
   test.setTimeout(120_000);
   await setSeen(null);
   await resetChat();
@@ -736,18 +770,18 @@ test('Доступность: карточка обучения без нару�
   };
   await scan('шаг 1, телефон');
   // шаг на дашборде: страница и вырез на месте
-  await goTo(page, idx('banner-revenue'));
+  await goTo(page, idx('banner-vat-forecast'));
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
   await expect(page).toHaveTitle(/.+/);
-  await expectHoleOnStep(page, stepByIndex(idx('banner-revenue')).targets);
+  await expectHoleOnStep(page, stepByIndex(idx('banner-vat-forecast')).targets);
   await scan('баннер, телефон');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(300);
   await scan('баннер, компьютер');
-  // окно расчёта под картой шага
-  await goTo(page, idx('tax-switch'));
-  await expectHoleOnStep(page, ['[data-tour="tax-switch"]']);
-  await scan('выбор налога, компьютер');
+  // меню одним шагом: подсвечено всё меню
+  await goTo(page, idx('menu'));
+  await expectHoleOnStep(page, ['[data-tour="menu-sheet"]']);
+  await scan('меню, компьютер');
   await skip(page);
   await expect(tour(page)).toHaveCount(0);
 });

@@ -10,6 +10,7 @@ import type { CalcSnapshot } from '@/lib/provenance/snapshot';
 import type { TargetBody } from './client';
 import { Overlay, OverlayHead } from './Overlay';
 import { useSnapshots } from './useSnapshots';
+import { WhatIfTable } from './WhatIfTable';
 
 const money = (v: string | null) => (v === null ? 'нет данных' : rub2(dec(v)));
 
@@ -240,6 +241,8 @@ export function CalcDrawer({
   const state = useSnapshots(target, attempt);
   const items = state.status === 'ready' ? state.items : [];
   const current = items[Math.min(tab, Math.max(items.length - 1, 0))];
+  // сценарий «что если»: сравнение хранится у одного из расчётов набора и стоит над вкладками
+  const comparison = items.find((s) => s.comparison)?.comparison ?? null;
 
   return (
     <Overlay kind="drawer" label="Расчёт" onClose={onClose}>
@@ -260,6 +263,7 @@ export function CalcDrawer({
             </button>
           </div>
         ) : null}
+        {comparison ? <WhatIfTable data={comparison} /> : null}
         {items.length > 1 ? (
           <div className="calc-tabs" role="tablist" aria-label="Расчёты" data-tour="tax-switch">
             {items.map((s, i) => (

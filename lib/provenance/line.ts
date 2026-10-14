@@ -40,6 +40,32 @@ export function shortDateTime(epochMs: number, tz: string): string {
   return `${p(m.day)}.${p(m.month + 1)}.${m.year} ${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}`;
 }
 
+/** Часовой пояс приложения словами для людей: «Камчатка». Неизвестный пояс: название города из IANA. */
+const ZONE_LABEL: Record<string, string> = {
+  'Asia/Kamchatka': 'Камчатка',
+  'Europe/Moscow': 'Москва',
+  UTC: 'UTC',
+};
+
+export function zoneLabel(tz: string): string {
+  return ZONE_LABEL[tz] ?? tz.split('/').pop()!.replace(/_/g, ' ');
+}
+
+/**
+ * «10.10.2026 18:00 (Камчатка)»: время с подписью часового пояса. Единый хелпер для времени в
+ * интерфейсе: «Сверено», комментарии, версии и список документов, статусы проверок. Подпись нужна,
+ * потому что владелец и бухгалтер могут быть в разных поясах.
+ */
+export function dateTimeWithZone(epochMs: number, tz: string): string {
+  return `${shortDateTime(epochMs, tz)} (${zoneLabel(tz)})`;
+}
+
+/** «01.01.2026» из «2026-01-01»: даты норм и правил в интерфейсе. Строка не даты возвращается как есть. */
+export function isoToDots(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
 /** «10.10, 18:00»; год добавляется, только если он отличается от года расчёта. */
 export function stampShort(epochMs: number, tz: string, currentYear: number): string {
   const m = momentFromEpoch(epochMs, tz);
@@ -152,9 +178,13 @@ export function lineFromSnapshots(snaps: CalcSnapshot[], opts: { note?: string }
  * Название расчёта: «НДС, февраль 2026». У прогноза следующего года три расчёта одного налога и
  * периода, поэтому добавляется ставка: «НДС, 2027 год, прогноз по ставке 5%».
  */
-export function snapshotTitle(s: Pick<CalcSnapshot, 'taxName' | 'periodLabel' | 'scenario' | 'rate'>): string {
+export function snapshotTitle(
+  s: Pick<CalcSnapshot, 'taxName' | 'periodLabel' | 'scenario' | 'rate'> & { whatIf?: CalcSnapshot['whatIf'] },
+): string {
   const forecast = s.scenario && s.rate !== null ? `, прогноз по ставке ${s.rate}%` : s.scenario ? ', прогноз' : '';
-  return `${s.taxName}, ${s.periodLabel}${forecast}`;
+  // сценарий «что если»: рядом лежат расчёт по данным и тот же расчёт при условии сценария
+  const what = s.whatIf ? (s.whatIf.role === 'scenario' ? ', по сценарию' : ', сейчас') : '';
+  return `${s.taxName}, ${s.periodLabel}${forecast}${what}`;
 }
 
 /**

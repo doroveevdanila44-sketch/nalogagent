@@ -1,4 +1,6 @@
 import {
+  WhatIfError,
+  compareWhatIf,
   dataKind,
   formatPeriod,
   type CalcData,
@@ -34,6 +36,7 @@ import {
   greetingFor,
 } from './templates';
 import { buildForecastAnswer } from './forecast-2027';
+import { buildWhatIfAnswer } from './whatif-answer';
 import { buildTaxAnswer, paymentLines } from './tax-answer';
 import { checkNumbers, normalize } from './text';
 import { canDoLine, explainUnsupported, type ExplainContext } from './unsupported';
@@ -237,6 +240,7 @@ export async function runPipeline(p: PipelineInput): Promise<AgentReply> {
   if (interp.forecast) return forecastReply(p, interp, ectx);
 
   const kind = answerKind(interp);
+  if (kind === 'whatif') return whatIfReply(p, interp);
   if (kind === 'amount') return amountReply(p, interp, ectx);
   if (kind === 'payment') return paymentReply(p, interp, ectx);
   return legacyReply(p, interp, kind);
@@ -353,6 +357,80 @@ async function amountReply(p: PipelineInput, interp: Interpretation, ectx: Expla
     change: changeOptions(p.entities, p.now),
     interp,
     intent: 'amount',
+    calcs: answer.calcs,
+  });
+}
+
+// ===== «Что если»: пересчёт текущего года =====
+
+/** Вопрос, на который агент ждёт ответ: юрлицо сценария. */
+const WHATIF_ASK_ENTITY = 'Для какого юрлица?';
+
+/**
+ * Сценарий «что если купим N машин», «что если выручка вырастет на X%». Юрлицо не названо: один
+ * вопрос с кнопками юрлиц. Расчёт делает compareWhatIf, слова вокруг него whatif-answer.ts.
+ * Сценарий данные не меняет: ответ хранит снимки расчётов, дашборд читает то, что читал.
+ */
+async function whatIfReply(p: PipelineInput, interp: Interpretation): Promise<AgentReply> {
+  const req = interp.whatIf!;
+  const named = interp.entityMode === 'named' ? interp.entities : [];
+
+  // машины и заданная сумма относятся к одному юрлицу; процент можно и по группе
+  const single = named.length === 1 ? named[0]! : null;
+  let scope: string[] | 'all' | null = null;
+  if (req.kind === 'growth') {
+    if (interp.entityMode === 'group') scope = 'all';
+    else if (named.length > 0) scope = named;
+  } else if (single) {
+    scope = [single];
+  }
+
+  if (scope === null) {
+    return text('A', WHATIF_ASK_ENTITY, {
+      quick: narrowChoices(p.entities),
+      awaiting: ['entity'],
+      interp,
+      intent: 'whatif',
+    });
+  }
+
+  let comparison;
+  try {
+    comparison = compareWhatIf(p.data, { request: req, entityIds: scope });
+  } catch (e) {
+    if (e instanceof WhatIfError) {
+      if (e.reason === 'no_car_revenue') {
+        return text(
+          'A',
+          `${e.message}. Добавьте выручку на машину в справочник юрлица, и я посчитаю.`,
+          { interp, intent: 'whatif' },
+        );
+      }
+      return text('A', `Не могу посчитать сценарий: ${e.message.replace(/\.$/, '')}.`, {
+        interp,
+        intent: 'whatif',
+      });
+    }
+    return text('A', FAILURE_FALLBACK, { failure: 'calc' });
+  }
+
+  let answer;
+  try {
+    answer = buildWhatIfAnswer(
+      { data: p.data, input: p.input, now: p.now, tz: p.tz ?? 'Asia/Kamchatka', canDo: '' },
+      comparison,
+      p.entities,
+    );
+  } catch {
+    return text('A', FAILURE_FALLBACK, { failure: 'calc' });
+  }
+
+  return finish(p, answer.result, {
+    understood: answer.card,
+    quick: answer.quick,
+    change: { entity: changeOptions(p.entities, p.now).entity, tax: [], period: [] },
+    interp: { ...interp, entities: scope === 'all' ? [] : scope, entityMode: scope === 'all' ? 'group' : 'named' },
+    intent: 'whatif',
     calcs: answer.calcs,
   });
 }

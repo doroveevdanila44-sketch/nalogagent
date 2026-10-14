@@ -18,30 +18,35 @@ export const SEED_ENTITIES: EntityInput[] = [
     annualRevenue: dec(28_400_000), inputVatShare: dec('0.82'), color: ENTITY_COLORS.alfa!,
     description: 'Аренда без экипажа: люкс и внедорожники',
     taxRegime: 'usn_income', usnRate: dec('0.06'), annualExpenses: dec(0),
+    revenuePerCarMonthly: dec(180_000), activity: 'rent_no_crew',
   },
   {
     id: 'beta', name: 'ИП Бета', form: 'ИП', ownerLabel: 'Собственник 1', status: 'payer',
     annualRevenue: dec(22_000_000), inputVatShare: dec('0.34'), color: ENTITY_COLORS.beta!,
     description: 'Аренда без экипажа: комфорт и внедорожники',
     taxRegime: 'usn_income_expense', usnRate: dec('0.15'), annualExpenses: dec(15_400_000),
+    revenuePerCarMonthly: dec(150_000), activity: 'rent_no_crew',
   },
   {
     id: 'delta', name: 'ИП Дельта', form: 'ИП', ownerLabel: 'Собственник 2', status: 'exempt',
     annualRevenue: dec(20_900_000), inputVatShare: dec('0.18'), color: ENTITY_COLORS.delta!,
     description: 'Аренда без экипажа: комфорт',
     taxRegime: 'usn_income', usnRate: dec('0.06'), annualExpenses: dec(0),
+    revenuePerCarMonthly: dec(130_000), activity: 'rent_no_crew',
   },
   {
     id: 'gamma', name: 'ООО «Гамма»', form: 'ООО', ownerLabel: 'Собственник 2', status: 'exempt',
     annualRevenue: dec(6_400_000), inputVatShare: dec('0.80'), color: ENTITY_COLORS.gamma!,
     description: 'Аренда с экипажем и трансферы',
     taxRegime: 'usn_income_expense', usnRate: dec('0.15'), annualExpenses: dec(5_200_000),
+    revenuePerCarMonthly: dec(160_000), activity: 'rent_with_crew',
   },
   {
     id: 'epsilon', name: 'ООО «Эпсилон»', form: 'ООО', ownerLabel: 'Собственник 1', status: 'payer',
     annualRevenue: dec(74_000_000), inputVatShare: dec('0.55'), color: ENTITY_COLORS.epsilon!,
     description: 'Условное юрлицо на ОСНО',
     taxRegime: 'osno', usnRate: null, annualExpenses: dec(44_000_000),
+    revenuePerCarMonthly: dec(170_000), activity: 'other',
   },
 ];
 

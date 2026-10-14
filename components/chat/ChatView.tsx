@@ -18,11 +18,17 @@ import { useMediaQuery } from '@/lib/client/media';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { Message } from './Message';
 
-const SUGGESTIONS = [
-  'Какая ставка выгоднее?',
-  'Сколько платить за квартал?',
-  'Что с порогами?',
-  'Налог на прибыль за год?',
+/**
+ * Подсказки панели. Первыми две «Что если»: пересчёт года при условии, которого в данных нет. Они
+ * отличаются светлым янтарным фоном (класс sug-whatif); остальные в цвете экрана PIN.
+ */
+const SUGGESTIONS: { text: string; whatIf?: boolean }[] = [
+  { text: 'Что если купим 5 машин?', whatIf: true },
+  { text: 'Что если выручка вырастет на 20%?', whatIf: true },
+  { text: 'Какая ставка выгоднее?' },
+  { text: 'Сколько платить за квартал?' },
+  { text: 'Что с порогами?' },
+  { text: 'Налог на прибыль за год?' },
 ];
 
 type Pending = { key: number; text: string };
@@ -73,10 +79,10 @@ export function ChatView() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [kbOpen, setKbOpen] = useState(false);
   const [chipsOpen, setChipsOpen] = useState(true);
-  // телефон: своё состояние, управляется только ручкой и выбором подсказки
+  // телефон: своё состояние, управляется только ручкой и выбором подсказки. Пока человек его не
+  // трогал (null), в пустом чате панель открыта по умолчанию, в чате с историей свёрнута
   const phone = useMediaQuery(PHONE_QUERY);
-  const [phoneOpen, setPhoneOpen] = useState(false);
-  const suggestionsOpen = phone ? phoneOpen : chipsOpen;
+  const [phoneChoice, setPhoneChoice] = useState<boolean | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const hadFocus = useRef(false);
@@ -272,6 +278,8 @@ export function ChatView() {
   }, []);
 
   const empty = turns !== null && turns.length === 0 && !sending;
+  const phoneOpen = phoneChoice ?? empty;
+  const suggestionsOpen = phone ? phoneOpen : chipsOpen;
 
   /** Кнопки под полем: если поле было в фокусе, оно остаётся в нём и клавиатура не закрывается */
   const down = (e: PointerEvent | MouseEvent) => {
@@ -280,7 +288,7 @@ export function ChatView() {
   };
   const press = (text: string) => {
     void send(text);
-    if (phone) setPhoneOpen(false);
+    if (phone) setPhoneChoice(false);
     if (hadFocus.current) fieldRef.current?.focus();
     hadFocus.current = false;
   };
@@ -309,16 +317,18 @@ export function ChatView() {
     if (isCoarse() && e.target !== fieldRef.current) e.preventDefault();
   };
 
-  const suggestionButton = (s: string, disabled = false) => (
+  const suggestionButton = (s: { text: string; whatIf?: boolean }, disabled = false) => (
     <button
-      key={s}
+      key={s.text}
       type="button"
+      className={s.whatIf ? 'sug-whatif' : undefined}
+      data-whatif={s.whatIf ? 'true' : undefined}
       onPointerDown={down}
       onMouseDown={down}
-      onClick={() => press(s)}
+      onClick={() => press(s.text)}
       disabled={disabled}
     >
-      {s}
+      {s.text}
     </button>
   );
 
@@ -389,7 +399,7 @@ export function ChatView() {
               aria-controls="chat-suggestions"
               onPointerDown={down}
               onMouseDown={down}
-              onClick={() => (phone ? setPhoneOpen((v) => !v) : setChipsOpen((v) => !v))}
+              onClick={() => (phone ? setPhoneChoice(!phoneOpen) : setChipsOpen((v) => !v))}
             >
               Подсказки
               <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">
@@ -421,6 +431,8 @@ export function ChatView() {
               // На телефоне фокус в поле это открытая клавиатура: подсказки сворачиваются сразу,
               // не дожидаясь, пока вьюпорт успеет измениться
               if (isCoarse()) setKbOpen(true);
+              // человек начал печатать сам: открытая по умолчанию панель в пустом чате не нужна
+              if (phone && phoneChoice === null) setPhoneChoice(false);
             }}
             onBlur={() => setKbOpen(false)}
             placeholder="Например: какая ставка выгоднее?"

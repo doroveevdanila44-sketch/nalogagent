@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/client/api';
 import type { DocumentDetail } from '@/lib/documents/detail';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone } from '@/lib/provenance/line';
 import type { CheckMark } from '@/lib/provenance/types';
 import { CalcActions } from '@/components/provenance/CalcActions';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
@@ -138,7 +138,7 @@ export function DocCheck({ doc, onClose }: { doc: DocumentDetail; onClose: () =>
                   </div>
                 ) : null}
                 {mark ? (
-                  <p className="chk-meta">Сверено {shortDateTime(Date.parse(mark.checkedAt), doc.tz)}</p>
+                  <p className="chk-meta">Сверено {dateTimeWithZone(Date.parse(mark.checkedAt), doc.tz)}</p>
                 ) : null}
               </li>
             );

@@ -40,6 +40,7 @@ import {
   type TaxRegime,
   type VatStatus,
   type WarningLevel,
+  type WhatIfLabel,
 } from './types';
 
 /**
@@ -240,6 +241,11 @@ export interface CalcResult {
   assumptions: string[];
   /** Сценарий, по которому посчитано; null у расчёта по данным */
   scenario: ScenarioInfo | null;
+  /**
+   * Пометка расчёта в сценарии «что если» (lib/calc/whatif.ts): «сейчас» или «по сценарию». Её
+   * ставит модуль сценария, calcTax поля не заполняет.
+   */
+  whatIf?: WhatIfLabel | null;
 }
 
 /**
@@ -364,7 +370,7 @@ interface ExemptInfo {
   fromPriorYear?: boolean;
 }
 
-function pickEntities(ids: string[] | 'all', data: CalcData): EntityInput[] {
+export function pickEntities(ids: string[] | 'all', data: CalcData): EntityInput[] {
   if (ids === 'all') return data.entities;
   if (ids.length === 0) throw new CalcInputError('Не выбрано ни одного юрлица');
   const known = new Set(data.entities.map((e) => e.id));
@@ -518,6 +524,28 @@ function revenueStep(run: Run, e: EntityInput, b: MonthBasis): FormulaStep {
   }
   const w = run.data.weights[rm.month - 1]!;
   const sc = run.scenario;
+  // сценарий «что если»: выручка идущего и будущих месяцев это прогноз месяца × рост + добавка
+  const whatIf = rm.year === run.today.year && rm.month - 1 >= run.today.month ? e.whatIf?.parts[rm.month - 1] : undefined;
+  if (whatIf) {
+    const grown = whatIf.factor.eq(1) ? '' : ` × ${numText(whatIf.factor)}`;
+    const added = whatIf.extra.isZero()
+      ? ''
+      : whatIf.extra.gt(0)
+        ? ` + добавочная выручка ${moneyText(whatIf.extra)}`
+        : ` − снижение ${moneyText(whatIf.extra.abs())}`;
+    const parts = grown === '' && added === '' ? ', без изменений' : '';
+    const expr = `${lit(whatIf.base)} * ${lit(whatIf.factor)} ${whatIf.extra.isNegative() ? '-' : '+'} ${lit(whatIf.extra.abs())}`;
+    return run.log.add({
+      label,
+      text:
+        `по сценарию: прогноз месяца ${moneyText(whatIf.base)}${grown}${added}${parts}${part}` +
+        ` = ${moneyText(result)}`,
+      expression: partial ? `(${expr})${partExpr}` : expr,
+      result,
+      entityId: e.id,
+      month: rm.key,
+    });
+  }
   if (sc && rm.year === sc.spec.year) {
     const base = sc.base.get(e.id)!;
     const grown = sc.spec.growth === 0 ? '' : ` × ${numText(sc.factor)} (рост ${numText(sc.spec.growth)}%)`;

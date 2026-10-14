@@ -3,7 +3,7 @@
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import type { DocumentDetail } from '@/lib/documents/detail';
 import { STATUS_LABEL, type EventInfo } from '@/lib/documents/types';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone } from '@/lib/provenance/line';
 
 const EVENT_TEXT: Record<string, (e: EventInfo) => string> = {
   created: () => 'Документ создан из шаблона',
@@ -48,7 +48,7 @@ export function DocHistory({
                   {v.n === doc.version ? <span className="ver-now">нынешняя</span> : null}
                 </div>
                 <small>
-                  {v.authorName}, {shortDateTime(Date.parse(v.createdAt), doc.tz)}
+                  {v.authorName}, {dateTimeWithZone(Date.parse(v.createdAt), doc.tz)}
                 </small>
                 {changes.length > 0 ? (
                   <ul className="ver-changes">
@@ -82,7 +82,7 @@ export function DocHistory({
         <ol className="ev-list" data-testid="events">
           {doc.events.map((e) => (
             <li key={e.id} data-event={e.kind}>
-              <small>{shortDateTime(Date.parse(e.createdAt), doc.tz)}</small>
+              <small>{dateTimeWithZone(Date.parse(e.createdAt), doc.tz)}</small>
               <span>
                 <b>{e.actor}</b>: {(EVENT_TEXT[e.kind] ?? (() => e.kind))(e)}
                 {e.kind === 'version' && e.data.toStatus

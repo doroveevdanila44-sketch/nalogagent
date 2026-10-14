@@ -124,6 +124,8 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
     const s = await strip(page);
     expect(s, label).toMatchObject({
       html: LAKE,
+      // body в приложении того же цвета, что шапка: за краем оболочки не белое
+      body: LAKE,
       header: LAKE,
       headerTop: 0,
       headerPad: '47px',
@@ -171,13 +173,17 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   await db.end();
 });
 
-test('Шапка стоит у верха без отрыва: свой padding-top под safe-area, фон html цвета шапки, не fixed и не sticky', async ({ page }) => {
+test('Шапка стоит у верха без отрыва: свой padding-top под safe-area, фон html и body цвета шапки, не fixed и не sticky', async ({
+  page,
+  context,
+}) => {
   await resetChat();
+  // как на iPhone с вырезом: env(safe-area-inset-top) равен 47 px (Chrome DevTools Protocol)
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 47, bottom: 34, left: 0, right: 0 } });
   await firstLogin(page, PIN);
 
   const check = async (label: string) => {
-    // как на iPhone с вырезом: безопасная зона сверху 47 px
-    await page.evaluate(() => document.documentElement.style.setProperty('--safe-top', '47px'));
     const m = await page.evaluate(() => {
       const top = document.querySelector('.top') as HTMLElement;
       const c = getComputedStyle(top);
@@ -190,6 +196,8 @@ test('Шапка стоит у верха без отрыва: свой padding-
         height: top.getBoundingClientRect().height,
         bg: c.backgroundColor,
         htmlBg: getComputedStyle(document.documentElement).backgroundColor,
+        bodyBg: body.backgroundColor,
+        shellBg: getComputedStyle(document.querySelector('.app-shell')!).backgroundColor,
         overscroll: body.overscrollBehaviorY,
         htmlOverscroll: getComputedStyle(document.documentElement).overscrollBehaviorY,
       };
@@ -201,6 +209,9 @@ test('Шапка стоит у верха без отрыва: свой padding-
     expect(m.height, label).toBe(47 + 54); // отступ учтён один раз: 47 + 54, а не 47 + 47 + 54
     expect(m.bg, label).toBe(LAKE);
     expect(m.htmlBg, label).toBe(LAKE);
+    // body в приложении того же цвета, что шапка; белая только оболочка
+    expect(m.bodyBg, label).toBe(LAKE);
+    expect(m.shellBg, label).toBe('rgb(255, 255, 255)');
     expect(m.overscroll, label).toBe('none');
     expect(m.htmlOverscroll, label).toBe('none');
 

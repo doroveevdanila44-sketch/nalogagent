@@ -6,6 +6,7 @@ import { seedInput } from '@/lib/calc/demo-data';
 import { groupMetrics } from '@/components/dashboard/group-metrics';
 import {
   CHAPTER_TITLE,
+  FULL_TOUR_STEPS,
   LINE_LABELS,
   TOUR_STEPS,
   stepLines,
@@ -40,10 +41,13 @@ function sources(dir: string): string {
   return out.join('\n');
 }
 
+/** Единственный шаг первого показа, которого нет в полном туре: меню одним шагом */
+const MENU_SHORT = TOUR_STEPS.find((s) => s.id === 'menu')!;
+
 describe('обучение: шаги', () => {
   it('в каждом шаге три строки с метками «Что это», «Как читать», «Что делать»', () => {
     expect(LINE_LABELS.map((l) => l.label)).toEqual(['Что это', 'Как читать', 'Что делать']);
-    for (const step of TOUR_STEPS) {
+    for (const step of [...FULL_TOUR_STEPS, ...TOUR_STEPS]) {
       for (const numbers of [null, n]) {
         const lines = stepLines(step, numbers, { asked: false });
         expect(lines.map((l) => l.label), step.id).toEqual(['Что это', 'Как читать', 'Что делать']);
@@ -58,7 +62,7 @@ describe('обучение: шаги', () => {
 
   it('заголовок короткий, тексты без длинных тире, идентификаторы разные', () => {
     const ids = new Set<string>();
-    for (const step of TOUR_STEPS) {
+    for (const step of [...FULL_TOUR_STEPS, MENU_SHORT]) {
       expect(ids.has(step.id), `повтор ${step.id}`).toBe(false);
       ids.add(step.id);
       const title = stepTitle(step, n);
@@ -69,14 +73,16 @@ describe('обучение: шаги', () => {
   });
 
   it('главы идут подряд: Агент, Дашборд, Документы, Меню', () => {
-    const order: ChapterId[] = [];
-    for (const s of TOUR_STEPS) if (order[order.length - 1] !== s.chapter) order.push(s.chapter);
-    expect(order).toEqual(['agent', 'dashboard', 'documents', 'menu']);
+    for (const steps of [TOUR_STEPS, FULL_TOUR_STEPS]) {
+      const order: ChapterId[] = [];
+      for (const s of steps) if (order[order.length - 1] !== s.chapter) order.push(s.chapter);
+      expect(order).toEqual(['agent', 'dashboard', 'documents', 'menu']);
+    }
     expect(Object.values(CHAPTER_TITLE)).toEqual(['Агент', 'Дашборд', 'Документы', 'Меню']);
   });
 
-  it('есть шаги про выбор налога и про «Передать специалисту» (на дашборде и в ответе агента)', () => {
-    const byId = (id: string) => TOUR_STEPS.find((s) => s.id === id)!;
+  it('в полном туре есть шаги про выбор налога и про «Отправить на проверку» (на дашборде и в ответе агента)', () => {
+    const byId = (id: string) => FULL_TOUR_STEPS.find((s) => s.id === id)!;
     const sw = stepLines(byId('tax-switch'), n);
     expect(sw[2]!.text).toContain('«Налог на прибыль»');
     expect(sw[2]!.text).toContain('«Налог по УСН»');
@@ -84,18 +90,19 @@ describe('обучение: шаги', () => {
 
     const sp = byId('specialist');
     expect(sp.chapter).toBe('dashboard');
-    expect(stepTitle(sp, n)).toBe('Передать специалисту');
+    expect(stepTitle(sp, n)).toBe('Отправить на проверку');
+    expect(stepLines(sp, n).map((l) => l.text).join(' ')).toContain('«Что проверено»');
     expect(stepLines(sp, n).map((l) => l.text).join(' ')).toMatch(/комментарием или согласованием/);
     expect(byId('answer-specialist').chapter).toBe('agent');
 
     const act = stepLines(byId('actions'), n)[1]!.text;
-    for (const b of ['Показать расчёт', 'Выгрузить в Excel', 'Проверить самому', 'Передать специалисту']) {
+    for (const b of ['Показать расчёт', 'Выгрузить в Excel', 'Проверить самому', 'Отправить на проверку']) {
       expect(act).toContain(`«${b}»`);
     }
   });
 
-  it('главы содержат нужные шаги', () => {
-    const ids = (c: ChapterId) => TOUR_STEPS.filter((s) => s.chapter === c).map((s) => s.id);
+  it('полный тур: главы содержат нужные шаги', () => {
+    const ids = (c: ChapterId) => FULL_TOUR_STEPS.filter((s) => s.chapter === c).map((s) => s.id);
     expect(ids('dashboard')).toEqual([
       'banner-revenue',
       'banner-vat',
@@ -121,19 +128,58 @@ describe('обучение: шаги', () => {
     expect(ids('menu')).toEqual(['menu-lock', 'menu-pin']);
   });
 
-  it('25 шагов; последний это «Сменить PIN», в нём сказано, где найти обучение; удалённые шаги не упоминаются', () => {
-    expect(TOUR_STEPS.length).toBe(25);
-    const last = TOUR_STEPS[TOUR_STEPS.length - 1]!;
+  it('первый показ: восемь шагов, по два-три на раздел и один про меню', () => {
+    expect(TOUR_STEPS.length).toBe(8);
+    const ids = (c: ChapterId) => TOUR_STEPS.filter((s) => s.chapter === c).map((s) => s.id);
+    expect(ids('agent')).toEqual(['ask', 'suggestions']);
+    expect(ids('dashboard')).toEqual(['banner-vat-forecast', 'warnings', 'actions']);
+    expect(ids('documents')).toEqual(['doc-catalog', 'doc-fill']);
+    expect(ids('menu')).toEqual(['menu']);
+    // по два-три шага на каждый из трёх разделов
+    for (const c of ['agent', 'dashboard', 'documents'] as const) {
+      expect(ids(c).length, c).toBeGreaterThanOrEqual(2);
+      expect(ids(c).length, c).toBeLessThanOrEqual(3);
+    }
+    // шаги первого показа те же, что в полном туре, кроме меню (оно одним шагом)
+    for (const s of TOUR_STEPS.filter((x) => x.id !== 'menu')) {
+      expect(FULL_TOUR_STEPS.find((x) => x.id === s.id), s.id).toBe(s);
+    }
+  });
+
+  it('шаг про меню называет «Показать подсказки заново»: остальные подсказки по кнопке', () => {
+    const menu = stepLines(MENU_SHORT, n).map((l) => l.text).join(' ');
+    expect(menu).toContain('«Показать подсказки заново»');
+    expect(MENU_SHORT.targets).toEqual(['[data-tour="menu-sheet"]']);
+    expect(MENU_SHORT.menu).toBe(true);
+  });
+
+  it('подсказки «Что если» названы в шаге про подсказки', () => {
+    const step = FULL_TOUR_STEPS.find((s) => s.id === 'suggestions')!;
+    const text = stepLines(step, n).map((l) => l.text).join(' ');
+    expect(text).toContain('«Что если»');
+    expect(text).toContain('«Сценарий, а не прогноз»');
+  });
+
+  it('полный тур: 25 шагов, последний «Сменить PIN» с отсылкой к «Показать подсказки заново»', () => {
+    expect(FULL_TOUR_STEPS.length).toBe(25);
+    const last = FULL_TOUR_STEPS[FULL_TOUR_STEPS.length - 1]!;
     expect(last.id).toBe('menu-pin');
-    expect(stepLines(last, n)[2]!.text).toContain('Обучение всегда в меню из трёх точек.');
-    const ids = TOUR_STEPS.map((s) => s.id);
+    expect(stepLines(last, n)[2]!.text).toContain('«Показать подсказки заново»');
+    const ids = FULL_TOUR_STEPS.map((s) => s.id);
     expect(ids).not.toContain('doc-sheet');
     expect(ids).not.toContain('menu-tour');
     // соседние шаги главы «Документы» не ссылаются на лист документа и жёлтые поля
     for (const id of ['doc-fill', 'doc-bar', 'doc-menu', 'doc-send', 'doc-status']) {
-      const step = TOUR_STEPS.find((s) => s.id === id)!;
+      const step = FULL_TOUR_STEPS.find((s) => s.id === id)!;
       const text = stepLines(step, n).map((l) => l.text).join(' ');
       expect(text, id).not.toMatch(/жёлт|как лист|Страница документа/);
+    }
+  });
+
+  it('прежних названий нет: «Передать специалисту», «Статусы проверок», «Пересмотреть обучение»', () => {
+    for (const step of [...FULL_TOUR_STEPS, ...TOUR_STEPS]) {
+      const all = [stepTitle(step, n), ...stepLines(step, n).map((l) => l.text)].join(' ');
+      expect(all, step.id).not.toMatch(/Передать специалисту|Статус\w* проверок|Пересмотреть обучение/);
     }
   });
 });
@@ -152,7 +198,7 @@ describe('обучение: живые числа из расчёта', () => {
   });
 
   it('число встаёт в строку шага, а без расчёта строка читается без числа', () => {
-    const step = (id: string) => TOUR_STEPS.find((s) => s.id === id)!;
+    const step = (id: string) => FULL_TOUR_STEPS.find((s) => s.id === id)!;
     expect(stepLines(step('banner-revenue'), n)[0]!.text).toContain(n.revenue);
     expect(stepLines(step('banner-revenue'), null)[0]!.text).not.toContain('млн');
     expect(stepLines(step('banner-vat'), n)[0]!.text).toContain(n.vatAccrued);
@@ -175,14 +221,14 @@ describe('обучение: живые числа из расчёта', () => {
     expect(plain(n.exempt!.limit)).toBe('20 млн');
     expect(n.rates?.name).toBe('Альфа');
     expect(n.rates?.items.map((r) => r.rate)).toEqual([5, 7, 22]);
-    const rates = stepLines(TOUR_STEPS.find((s) => s.id === 'rates')!, n)[2]!.text;
+    const rates = stepLines(FULL_TOUR_STEPS.find((s) => s.id === 'rates')!, n)[2]!.text;
     for (const r of n.rates!.items) expect(rates).toContain(`${r.rate}% ${r.sum}`);
     expect(stat.warnings.length).toBe(n.warningsTotal);
     expect(n.bestMonth).not.toBeNull();
   });
 
   it('строка про пример ответа агента зависит от того, задал ли вопрос тур', () => {
-    const forecast = TOUR_STEPS.find((s) => s.id === 'forecast')!;
+    const forecast = FULL_TOUR_STEPS.find((s) => s.id === 'forecast')!;
     expect(stepLines(forecast, n, { asked: true })[2]!.text).toContain('мы задали этот вопрос за вас');
     expect(stepLines(forecast, n, { asked: false })[2]!.text).not.toContain('за вас');
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useSelectedLayoutSegment } from 'next/navigation';
+import { usePathname, useSelectedLayoutSegment } from 'next/navigation';
 import { createContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { appScroller } from '@/lib/client/scroller';
 import { DocumentsView } from './DocumentsView';
@@ -9,8 +9,13 @@ import { UNDO_SECONDS } from './ConfirmDelete';
 export interface DocsShell {
   wide: boolean;
   toggleWide: () => void;
-  /** Короткое уведомление; с undo у него кнопка «Отменить» на UNDO_SECONDS секунд */
-  notify: (message: string, undo?: () => Promise<void>) => void;
+  /**
+   * Короткое уведомление; с undo у него кнопка «Отменить» на UNDO_SECONDS секунд. screen: на каком
+   * экране оно живёт (по умолчанию на текущем); при смене экрана уведомление закрывается. Если
+   * действие само уводит на другой экран (удаление со страницы документа), назовите тот, куда
+   * уйдёт: уведомление дождётся его.
+   */
+  notify: (message: string, undo?: () => Promise<void>, screen?: string) => void;
   /** Растёт, когда список документов нужно перечитать (после «Отменить», удаления, отзыва) */
   refresh: number;
   reload: () => void;
@@ -27,6 +32,23 @@ export const DocsShellContext = createContext<DocsShell>({
 const WIDE_KEY = 'pva:doc-wide';
 
 /**
+ * Высота закреплённых снизу панелей (нижняя панель вкладок на телефоне, панель действий листа
+ * документа), которые уведомление не должно перекрывать: от нижнего края окна до верха самой
+ * высокой из них. Боковая панель компьютера не считается: она не у нижнего края и не на всю ширину.
+ */
+function bottomClearance(): number {
+  let clear = 0;
+  for (const el of document.querySelectorAll<HTMLElement>('nav.tabs, .sheet-actions')) {
+    if (getComputedStyle(el).display === 'none') continue;
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || r.width < window.innerWidth * 0.5) continue;
+    if (r.bottom < window.innerHeight - 8) continue;
+    clear = Math.max(clear, window.innerHeight - r.top);
+  }
+  return Math.ceil(clear);
+}
+
+/**
  * Раздел «Документы»: каталог и список (DocumentsView) живут здесь, поэтому не пересоздаются при
  * открытии документа. Открытый документ (страница /documents/[id]) стоит справа от каталога на
  * компьютере от 1100 px (можно развернуть на всю ширину) и занимает весь экран на телефоне и
@@ -38,9 +60,21 @@ export function DocumentsShell({ children }: { children: ReactNode }) {
   const open = segment !== null;
   const [wide, setWide] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const [note, setNote] = useState<{ key: number; message: string; undo?: () => Promise<void> } | null>(null);
+  const [note, setNote] = useState<{
+    key: number;
+    message: string;
+    undo?: () => Promise<void>;
+    /** Экран, на котором уведомление живёт */
+    screen: string;
+  } | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [clear, setClear] = useState(0);
   const noteTimer = useRef<number | null>(null);
+  const pathname = usePathname();
+  const pathNow = useRef(pathname);
+  pathNow.current = pathname;
+  // дошёл ли показ до своего экрана: до этого смена пути это переход к нему, а не уход с него
+  const onScreen = useRef(false);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const dismiss = useCallback(() => {
     if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
@@ -48,15 +82,37 @@ export function DocumentsShell({ children }: { children: ReactNode }) {
     setNote(null);
   }, []);
   const notify = useCallback(
-    (message: string, undo?: () => Promise<void>) => {
+    (message: string, undo?: () => Promise<void>, screen?: string) => {
       if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
       setUndoing(false);
-      setNote({ key: Date.now(), message, undo });
-      // с кнопкой «Отменить» уведомление живёт 8 секунд, без неё чуть меньше
+      const where = screen ?? pathNow.current;
+      onScreen.current = pathNow.current === where;
+      setNote({ key: Date.now(), message, undo, screen: where });
+      // с кнопкой «Отменить» уведомление живёт UNDO_SECONDS секунд, без неё чуть меньше
       noteTimer.current = window.setTimeout(() => setNote(null), (undo ? UNDO_SECONDS : 4) * 1000);
     },
     [],
   );
+
+  // смена экрана закрывает уведомление
+  useEffect(() => {
+    if (!note) return;
+    if (pathname === note.screen) onScreen.current = true;
+    else if (onScreen.current) dismiss();
+  }, [pathname, note, dismiss]);
+
+  // отступ снизу равен высоте закреплённых панелей: уведомление стоит над ними, а не поверх
+  useEffect(() => {
+    if (!note) return;
+    const measure = () => setClear(bottomClearance());
+    measure();
+    const timer = window.setInterval(measure, 200);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('resize', measure);
+    };
+  }, [note]);
   useEffect(
     () => () => {
       if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
@@ -151,7 +207,13 @@ export function DocumentsShell({ children }: { children: ReactNode }) {
         {open ? <div className="docs-pane">{children}</div> : null}
       </div>
       {note ? (
-        <div className="toast" role="status" data-testid="toast" key={note.key}>
+        <div
+          className="toast"
+          role="status"
+          data-testid="toast"
+          key={note.key}
+          style={clear > 0 ? ({ '--toast-clear': `${clear}px` } as React.CSSProperties) : undefined}
+        >
           <span>{note.message}</span>
           {note.undo ? (
             <button

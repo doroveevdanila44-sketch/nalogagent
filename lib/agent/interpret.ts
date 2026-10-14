@@ -1,4 +1,12 @@
-import { resolvePeriod, type Moment, type Period } from '@/lib/calc';
+import {
+  WHATIF_MAX_CARS,
+  WHATIF_PERCENT_MAX,
+  WHATIF_PERCENT_MIN,
+  resolvePeriod,
+  type Moment,
+  type Period,
+  type WhatIfRequest,
+} from '@/lib/calc';
 import { mentionedEntities, mentionsGroup, unknownEntityNames } from './entities';
 import { cyr } from './regex';
 import { normalize } from './text';
@@ -55,6 +63,13 @@ export interface RawFields {
   limits: boolean;
   /** Короткая реплика без своего вопроса: только юрлицо, налог или период («а за март?») */
   fragment: boolean;
+  /**
+   * «Что если»: что именно изменится (машины, процент, сумма) в текущем году. null, если вопрос не
+   * про сценарий. Юрлицо берётся из `entities`.
+   */
+  whatIf: WhatIfRequest | null;
+  /** «Что если …» с начала фразы: самостоятельный вопрос, он не продолжает прежний сценарий */
+  newTopic: boolean;
 }
 
 export interface InterpretContext {
@@ -535,6 +550,40 @@ const GROWTH_DOWN = cyr(
 /** Число со знаком и процентом без слова: «а если +15%?» */
 const GROWTH_SIGNED = /(?<![0-9a-zа-я])([+−-])\s*(\d+(?:[.,]\d+)?)\s*%/;
 const GROWTH_NONE = cyr('без роста|рост\\w* не буд\\w+|нулев\\w+ рост\\w*');
+/** Условие в вопросе: «что если», «а если», «допустим». Без него «купим 3 машины» это прежний раздел. */
+const CONDITION = cyr(
+  '\\b(?:что (?:будет|получится),? если|что если|а если|если|допустим|предположим|представим|вдруг)\\b',
+);
+/** «Что если …» с начала фразы: самостоятельный новый вопрос. */
+const NEW_TOPIC = /^что если(?![а-я])/;
+/**
+ * Изменение выручки суммой: «вырастет на 3 млн», «упадёт на 500 тыс», «плюс 1,5 млн». Вырезается
+ * раньше процента: «3» в «на 3 млн» не процент.
+ */
+const AMOUNT_CHANGE = cyr(
+  '(вырастет|вырастут|вырастем|увеличит\\w*|увеличим|прибавит\\w*|прибавим|добавит\\w*|добавим|упадет|упадут|упадем|снизит\\w*|снизим|сократит\\w*|уменьшит\\w*|плюс|минус)' +
+    '\\s+(?:выручк\\w*\\s+)?(?:на\\s+)?(\\d{1,3}(?: \\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)\\s*(млн|миллион\\w*|тыс\\w*|руб\\w*|₽|р\\b)',
+);
+const AMOUNT_NEGATIVE = /^(?:упад|снизи|сократи|уменьши|минус)/;
+/** Число машин: «5 машин», «три автомобиля». */
+const CAR_DIGITS = cyr('(\\d+)\\s*(?:машин\\w*|авто\\w*|автомобил\\w*)');
+const CAR_WORDS = cyr(
+  '\\b(одну|одна|один|две|два|три|четыре|пять|шесть|семь|восемь|девять|десять)\\s+(?:машин\\w*|авто\\w*|автомобил\\w*)',
+);
+const CAR_WORD_NUMBER: Record<string, number> = {
+  одну: 1, одна: 1, один: 1, две: 2, два: 2, три: 3, четыре: 4, пять: 5, шесть: 6, семь: 7, восемь: 8,
+  девять: 9, десять: 10,
+};
+/** Цена в вопросе про машины: с ней это прежний раздел (покупка, доля закупок, налог по 22%). */
+const PRICE_MENTION = cyr('\\d+(?:[.,]\\d+)?\\s*(?:млн|миллион\\w*|тыс\\w*|руб\\w*|₽)|\\bм\\b');
+
+function carCount(t: string): number | null {
+  const d = CAR_DIGITS.exec(t);
+  if (d) return Number(d[1]);
+  const w = CAR_WORDS.exec(t);
+  return w ? (CAR_WORD_NUMBER[w[1]!] ?? null) : null;
+}
+
 /** Вопрос о лимитах и порогах: прогноз на следующий год без утверждённого дефлятора их не называет. */
 const LIMITS = cyr('лимит\\w*|дефлятор\\w*|предел\\w*|верхн\\w+ границ\\w*|границ\\w+ ставк\\w*');
 
@@ -570,9 +619,24 @@ function blank(t: string, re: RegExp): string {
 export function extractFields(text: string, ctx: Pick<InterpretContext, 'entities' | 'today'>): RawFields {
   const normalized = normalize(text).replace(/[‐-―−]/g, '-');
 
-  // рост выручки вырезается первым: «рост 5%» не ставка НДС, «+10%» не часть периода
+  // изменение выручки суммой вырезается раньше процента: «3 млн» не процент
   let t = normalized;
+  let amount: number | null = null;
+  const am = AMOUNT_CHANGE.exec(t);
+  if (am) {
+    const unit = am[3]!;
+    const mult = /^(?:млн|миллион)/.test(unit) ? 1_000_000 : /^тыс/.test(unit) ? 1_000 : 1;
+    const value = Number(am[2]!.replace(/ /g, '').replace(',', '.')) * mult;
+    if (Number.isFinite(value) && value > 0) {
+      amount = AMOUNT_NEGATIVE.test(am[1]!) ? -value : value;
+      t = blank(t, AMOUNT_CHANGE);
+    }
+  }
+
+  // рост выручки вырезается первым: «рост 5%» не ставка НДС, «+10%» не часть периода
   let growth: number | null = null;
+  /** Число процентов названо явно («на 20%»), а не «без роста» */
+  let growthStated = false;
   const num = (s: string) => Number(s.replace(',', '.'));
   const up = GROWTH_UP.exec(t);
   const down = GROWTH_DOWN.exec(t);
@@ -582,12 +646,15 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
     t = blank(t, GROWTH_NONE);
   } else if (up) {
     growth = num(up[1]!);
+    growthStated = true;
     t = blank(t, GROWTH_UP);
   } else if (down) {
     growth = -num(down[1]!);
+    growthStated = true;
     t = blank(t, GROWTH_DOWN);
   } else if (signed) {
     growth = (signed[1] === '+' ? 1 : -1) * num(signed[2]!);
+    growthStated = true;
     t = blank(t, GROWTH_SIGNED);
   }
 
@@ -618,9 +685,21 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
   const legal = LEGAL.test(t);
   const limits = LIMITS.test(t);
 
+  // «что если»: условие и что именно меняется. Машины с ценой это прежний раздел; рост выручки на
+  // следующий год (период 2027) считает прогноз, а не этот сценарий
+  let whatIf: WhatIfRequest | null = null;
+  if (CONDITION.test(normalized)) {
+    const cars = carCount(normalized);
+    const thisYear = mentions.every((m) => m.period.kind === 'year' && m.period.year === ctx.today.year);
+    if (amount !== null && thisYear) whatIf = { kind: 'amount', amount };
+    else if (cars !== null && !PRICE_MENTION.test(normalized)) whatIf = { kind: 'cars', cars };
+    else if (growth !== null && growthStated && thisYear) whatIf = { kind: 'growth', percent: growth };
+  }
+
   // сценарий: порядок как у прежних разделов агента
   let scenario: Scenario | null = null;
-  if (CARS.test(rest)) scenario = 'cars';
+  if (whatIf) scenario = 'whatif';
+  else if (CARS.test(rest)) scenario = 'cars';
   else if (THRESHOLD.test(rest)) scenario = 'threshold';
   else if (FRAGMENTATION.test(rest)) scenario = 'fragmentation';
   else if (DEDUCT.test(rest)) scenario = 'deduct';
@@ -661,6 +740,8 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
     growth,
     limits,
     fragment,
+    whatIf,
+    newTopic: NEW_TOPIC.test(normalized),
   };
 }
 
@@ -673,7 +754,7 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
   const ids = new Set(ctx.entities.map((e) => e.id));
   const taxes = (raw.taxes ?? []).filter((x): x is TaxKind => x === 'vat' || x === 'usn' || x === 'profit');
   const scenarios: Scenario[] = [
-    'rate', 'compare_rates', 'forecast', 'threshold', 'payment', 'deduct', 'fragmentation', 'cars',
+    'rate', 'compare_rates', 'forecast', 'threshold', 'payment', 'deduct', 'fragmentation', 'cars', 'whatif',
   ];
   const periods: PeriodMention[] = [];
   for (const m of raw.periods ?? []) {
@@ -689,6 +770,22 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
     typeof raw.growth === 'number' && Number.isFinite(raw.growth) && raw.growth >= -90 && raw.growth <= 500
       ? raw.growth
       : null;
+  const w = raw.whatIf;
+  let whatIf: WhatIfRequest | null = null;
+  if (w && typeof w === 'object') {
+    if (w.kind === 'cars' && Number.isInteger(w.cars) && w.cars >= 1 && w.cars <= WHATIF_MAX_CARS) {
+      whatIf = { kind: 'cars', cars: w.cars };
+    } else if (
+      w.kind === 'growth' &&
+      Number.isFinite(w.percent) &&
+      w.percent >= WHATIF_PERCENT_MIN &&
+      w.percent <= WHATIF_PERCENT_MAX
+    ) {
+      whatIf = { kind: 'growth', percent: w.percent };
+    } else if (w.kind === 'amount' && Number.isFinite(w.amount) && w.amount !== 0 && Math.abs(w.amount) <= 1e12) {
+      whatIf = { kind: 'amount', amount: w.amount };
+    }
+  }
   return {
     entities: [...new Set((raw.entities ?? []).filter((id) => ids.has(id)))],
     all: Boolean(raw.all),
@@ -696,12 +793,21 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
     taxes: [...new Set(taxes)],
     otherTaxes: (raw.otherTaxes ?? []).filter((s) => typeof s === 'string' && s.length > 0).slice(0, 3),
     periods: periods.slice(0, 4),
-    scenario: scenarios.includes(raw.scenario as Scenario) ? (raw.scenario as Scenario) : null,
+    scenario:
+      raw.scenario === 'whatif'
+        ? whatIf
+          ? 'whatif'
+          : null
+        : scenarios.includes(raw.scenario as Scenario)
+          ? (raw.scenario as Scenario)
+          : null,
     rate,
     legal: Boolean(raw.legal),
     growth,
     limits: Boolean(raw.limits),
     fragment: Boolean(raw.fragment),
+    whatIf,
+    newTopic: Boolean(raw.newTopic),
   };
 }
 
@@ -753,12 +859,18 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     raw.taxes.length > 0 ||
     raw.periods.length > 0 ||
     raw.rate !== null ||
-    raw.growth !== null;
+    raw.growth !== null ||
+    raw.whatIf !== null;
   const fillsAwaited =
     (ctx.awaiting.includes('tax') && raw.taxes.length > 0) ||
     (ctx.awaiting.includes('period') && raw.periods.length > 0) ||
     (ctx.awaiting.includes('entity') && (raw.all || raw.entities.length > 0));
-  const ownTopic = raw.scenario !== null && raw.scenario !== prev?.scenario;
+  // «а если рост 20%?» после прогноза на следующий год продолжает прогноз; «Что если …» с начала
+  // фразы это самостоятельный сценарий текущего года
+  const whatIfReq: WhatIfRequest | null =
+    raw.whatIf && raw.whatIf.kind === 'growth' && prev?.forecast && !raw.newTopic ? null : raw.whatIf;
+  const rawScenario: Scenario | null = raw.scenario === 'whatif' && whatIfReq === null ? null : raw.scenario;
+  const ownTopic = rawScenario !== null && rawScenario !== prev?.scenario;
   // «налог на прибыль за год»: налог и период названы, это целый вопрос, а не уточнение
   const complete = raw.taxes.length === 1 && raw.periods.length > 0;
 
@@ -769,6 +881,8 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     else if (raw.fragment && hasSlot && !complete) merge = true;
     // «а если рост 10%?» после прогноза: тот же вопрос с другим ростом
     else if (raw.growth !== null && prev.forecast) merge = true;
+    // «а если 10 машин» после ответа про сценарий: то же юрлицо, другое условие
+    else if (whatIfReq && prev.scenario === 'whatif' && !raw.newTopic) merge = true;
   }
 
   // слоты из этого сообщения, затем недостающее из прежнего
@@ -792,7 +906,7 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     if (periodMentions.length === 0 && prev.period) periodMentions = [{ period: prev.period }];
   }
 
-  let scenario = raw.scenario;
+  let scenario = rawScenario;
   let rate = raw.rate;
   if (merge && prev) {
     if (scenario === null) {
@@ -909,17 +1023,22 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
   if (scenario !== null) confidence += 0.2;
   if (unsupported) confidence = Math.min(confidence, 0.3);
 
+  // что именно изменится в сценарии: из этого вопроса или из прежнего, если реплика его продолжает
+  const whatIfOut: WhatIfRequest | null =
+    scenario === 'whatif' ? (whatIfReq ?? (merge && prev?.whatIf ? prev.whatIf : null)) : null;
+
   return {
     entities,
     entityMode,
     tax,
     period,
-    scenario,
+    scenario: scenario === 'whatif' && whatIfOut === null ? null : scenario,
     rate,
     confidence: Math.min(1, Math.round(confidence * 100) / 100),
     ambiguities,
     unsupported,
     forecast,
+    whatIf: whatIfOut,
   };
 }
 
@@ -934,12 +1053,22 @@ export function blockingSlots(i: Interpretation): Slot[] {
 }
 
 /** Какой ответ строить по понятому вопросу. */
-export type AnswerKind = 'amount' | 'rates' | 'warnings' | 'fragmentation' | 'deduct' | 'cars' | 'payment';
+export type AnswerKind =
+  | 'amount'
+  | 'rates'
+  | 'warnings'
+  | 'fragmentation'
+  | 'deduct'
+  | 'cars'
+  | 'payment'
+  | 'whatif';
 
 export function answerKind(i: Interpretation): AnswerKind {
   switch (i.scenario) {
     case 'cars':
       return 'cars';
+    case 'whatif':
+      return 'whatif';
     case 'threshold':
       return 'warnings';
     case 'fragmentation':

@@ -5,6 +5,8 @@ import { useMemo, useState } from 'react';
 import type { Period } from '@/lib/calc/period';
 import { api } from '@/lib/client/api';
 import { MONTH_NAMES } from '@/lib/calc/period';
+import { defaultEntityId, templateWarning } from '@/lib/documents/activity';
+import { shortName } from '@/lib/provenance/query';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import { errorText } from '@/components/provenance/client';
 import { PERIOD_KIND_LABEL, buildPeriod, type EntityOption, type PeriodKind, type TemplateMeta } from './api';
@@ -32,7 +34,11 @@ export function StartDocument({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [entityId, setEntityId] = useState<string>(initialEntityId ?? entities[0]?.id ?? '');
+  // юрлицо по умолчанию: названное в вопросе, иначе подходящее шаблону по виду деятельности
+  const [entityId, setEntityId] = useState<string>(
+    initialEntityId ?? defaultEntityId(template.key, entities),
+  );
+  const warning = template.scope === 'entity' ? templateWarning(template.key, entities, entityId, shortName) : null;
   const seed = initialPeriod;
   const [kind, setKind] = useState<PeriodKind>(
     seed && seed.kind !== 'range' ? seed.kind : template.needsPeriod ? 'quarter' : 'ytd',
@@ -89,6 +95,11 @@ export function StartDocument({
                 </option>
               ))}
             </select>
+            {warning ? (
+              <small className="fld-warn" role="note" data-testid="template-warning">
+                {warning}
+              </small>
+            ) : null}
           </label>
         ) : (
           <p className="calc-note">Документ по всей группе: юрлицо выбирать не нужно.</p>

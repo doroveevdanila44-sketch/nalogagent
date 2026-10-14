@@ -20,6 +20,9 @@
   --color-soft: #fff8d6; /* светлая подложка */
   --color-mint: #eef6ef; /* подложка сообщений агента и меток */
   --color-warn-ink: #4a3f00; /* текст метки «Внимание» */
+  --color-amber: #ffe6a8; /* подсказки «Что если» в чате: светлый янтарный фон */
+  --color-amber-hover: #ffd986; /* то же при наведении и нажатии */
+  --color-amber-line: #e6b04a; /* обводка подсказок «Что если» */
   --color-on-ink: #ffffff; /* текст на тёмных кнопках и подложках */
 
   /* Состояния: зелёная и красная карточки ставок, красная метка «Срочно» */
@@ -52,6 +55,9 @@
   /* единая длительность и кривая переходов на наведение, нажатие и фокус */
   --t: 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
+  /* Цвет шапки и всего, что рядом с ней: полоса под часами (safe area), фон html и body в приложении.
+     Одна переменная на всех: шапка и полоса не могут разойтись по цвету. */
+  --bar: var(--color-lake);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* высота нижней панели вкладок под содержимым: на телефоне панель внизу, от 760 px она боковая */
   --tabs-h: calc(var(--nav-h) + var(--safe-bottom));
@@ -81,10 +87,11 @@
 }
 
 @layer base {
-  /* Фон html цвета шапки: под часами и при оттягивании сверху виден цвет шапки, а не белое. Страница
-     (body) белая и занимает всю высоту окна. Экраны входа ниже перекрашивают html в бордо. */
+  /* Фон html и body цвета шапки (--bar): под часами, при оттягивании сверху и за краем оболочки
+     виден цвет шапки, а не белое. Белое это оболочка приложения (.app-shell), она занимает всю высоту
+     окна. Экраны входа и PIN ниже перекрашивают html и body в бордо. */
   html {
-    background: var(--color-lake);
+    background: var(--bar);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overscroll-behavior-y: none;
@@ -94,7 +101,7 @@
     margin: 0;
     min-height: 100%;
     overscroll-behavior-y: none;
-    background: var(--color-page);
+    background: var(--bar);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 16px;
@@ -221,6 +228,8 @@
     height: 100%;
     height: calc(100dvh - var(--kb, 0px));
     overflow: hidden;
+    /* страница приложения белая; html и body за ней цвета шапки */
+    background: var(--color-page);
   }
   .app-body {
     flex: 1 1 auto;
@@ -249,13 +258,14 @@
     flex: none;
   }
 
+  /* Шапка: свой фон (--bar) и отступ под вырез и часы, поэтому цвет идёт под статус-бар */
   .top {
     position: relative;
     flex: none;
     z-index: 30;
-    background: var(--color-lake);
+    background: var(--bar);
     color: var(--color-ink);
-    padding-top: var(--safe-top);
+    padding-top: env(safe-area-inset-top, 0px);
   }
   /* Знак по центру окна, кнопка меню у правого края окна (а не центрального контейнера): шапка на
      всю ширину, кнопка позиционируется от неё. Отступ --menu-right: 16 px (на телефоне 12 px) плюс
@@ -1659,6 +1669,79 @@
   .msg td.n {
     text-align: right;
   }
+  /* Первая колонка с режимом: название одной строкой, режим мелким серым текстом под ним. Колонке
+     названий дана ширина, чтобы она не дробилась на несколько строк по слову. */
+  .msg table.has-sub th,
+  .msg table.has-sub td {
+    padding-right: 8px;
+  }
+  .msg table.has-sub th:first-child,
+  .msg table.has-sub td:first-child {
+    min-width: 112px;
+    white-space: normal;
+    vertical-align: top;
+  }
+  /* заголовки остальных колонок переносятся по словам: «Ближайший платёж» не растягивает таблицу */
+  .msg .tscroll table.has-sub th:not(:first-child) {
+    white-space: normal;
+  }
+  /* Узкая таблица на несколько числовых столбцов (сценарий «что если»): плотные поля, названия строк
+     переносятся по словам, числа в одну строку. На 390 px помещается без прокрутки. */
+  .msg table.dense th,
+  .msg table.dense td {
+    padding-right: 8px;
+    font-size: 13px;
+  }
+  .msg table.dense th {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+  .msg table.dense th:first-child,
+  .msg table.dense td:first-child {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: normal;
+    vertical-align: top;
+  }
+  .msg table.dense th:last-child,
+  .msg table.dense td:last-child {
+    padding-right: 0;
+  }
+  .msg .t-name {
+    display: block;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .msg .t-sub {
+    display: block;
+    margin-top: 1px;
+    color: var(--color-muted);
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: normal;
+  }
+  /* Сценарий «что если»: пометка в начале ответа и список допущений */
+  .msg .msg-mark {
+    font-weight: 600;
+    color: var(--color-ink);
+    background: var(--color-amber);
+    border-radius: 6px;
+    padding: 1px 6px;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .msg .msg-head {
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  .msg .msg-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-size: 14px;
+  }
+  .msg .msg-list li + li {
+    margin-top: 4px;
+  }
   .msg .best {
     font-weight: 600;
     color: var(--color-good-ink);
@@ -1876,6 +1959,20 @@
   }
   .sug button:disabled {
     opacity: 0.55;
+  }
+  /* «Что если»: первые подсказки панели, светлый янтарный фон отличает их от остальных */
+  .sug button.sug-whatif {
+    background: var(--color-amber);
+    border-color: var(--color-amber-line);
+    color: var(--color-ink);
+  }
+  @media (hover: hover) {
+    .sug button.sug-whatif:hover:not(:disabled) {
+      background: var(--color-amber-hover);
+    }
+  }
+  .sug button.sug-whatif:active:not(:disabled) {
+    background: var(--color-amber-hover);
   }
   .sug button:focus-visible {
     outline: 2px solid var(--color-accent);
@@ -2767,6 +2864,69 @@
   .calc-sec h3 {
     font-size: 15px;
   }
+  /* Сценарий «что если» в панели расчёта: таблицы «сейчас и по сценарию» */
+  .wi-scroll {
+    margin-top: 10px;
+    overflow-x: auto;
+  }
+  .wi-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .wi-table th,
+  .wi-table td {
+    padding: 7px 10px 7px 0;
+    text-align: left;
+    border-top: 1px solid var(--color-line);
+    font-weight: 400;
+    vertical-align: top;
+  }
+  .wi-table thead th {
+    border-top: 0;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .wi-table th.n,
+  .wi-table td.n {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .wi-table tbody th {
+    font-weight: 500;
+  }
+  .wi-table tr.total th,
+  .wi-table tr.total td {
+    font-weight: 600;
+  }
+  .wi-h {
+    margin: 14px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  /* Мягкое предупреждение под полем: не блокирует, цвет «Внимание» из палитры */
+  .fld-warn {
+    display: block;
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--color-soft);
+    color: var(--color-warn-ink);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .calc-flag {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--color-amber);
+    color: var(--color-ink);
+    font-size: 13px;
+  }
   .calc-note {
     margin-top: 6px;
     font-size: 12px;
@@ -3062,7 +3222,7 @@
     overflow-wrap: anywhere;
   }
 
-  /* Передать специалисту */
+  /* Отправить на проверку */
   .demo-banner {
     padding: 10px 12px;
     border: 1px solid var(--color-accent);
@@ -3422,9 +3582,10 @@
     gap: 2px;
     text-align: left;
   }
+  /* Вторая строка кнопки на бордовом фоне: светлый текст, контраст не ниже 4,5:1 и в нажатом виде */
   .act.pick small {
     font-size: 12px;
-    color: var(--color-muted);
+    color: var(--color-cream);
     font-weight: 400;
   }
 
@@ -3947,7 +4108,8 @@
   .toast {
     position: fixed;
     left: 50%;
-    bottom: calc(var(--tabs-h) + 16px);
+    /* над закреплёнными снизу панелями: --toast-clear это их высота, её меряет DocumentsShell */
+    bottom: calc(var(--toast-clear, var(--tabs-h)) + 12px);
     z-index: 65;
     display: flex;
     align-items: center;

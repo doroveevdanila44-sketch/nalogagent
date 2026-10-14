@@ -233,6 +233,19 @@ insert into people(id,name,role,sort) values
 -- Шаблоны образцы, юристом не проверены. Реквизиты демо вымышленные.
 alter table legal_entities add column requisites jsonb;
 
+-- Сценарий «что если» и шаблоны договоров (миграция 0007): только добавляет колонки.
+-- revenue_per_car_monthly: выручка с НДС на одну машину в месяц (демо-значения), activity: вид деятельности.
+alter table legal_entities add column if not exists revenue_per_car_monthly numeric(18,2);
+alter table legal_entities add column if not exists activity text;
+update legal_entities set revenue_per_car_monthly = case id
+  when 'alfa' then 180000 when 'beta' then 150000 when 'delta' then 130000
+  when 'gamma' then 160000 when 'epsilon' then 170000 end
+  where id in ('alfa','beta','delta','gamma','epsilon') and revenue_per_car_monthly is null;
+update legal_entities set activity = case id
+  when 'alfa' then 'rent_no_crew' when 'beta' then 'rent_no_crew' when 'delta' then 'rent_no_crew'
+  when 'gamma' then 'rent_with_crew' when 'epsilon' then 'other' end
+  where id in ('alfa','beta','delta','gamma','epsilon') and activity is null;
+
 create table document_templates (
   key text primary key,
   category text not null,           -- contract, addendum, report, declaration

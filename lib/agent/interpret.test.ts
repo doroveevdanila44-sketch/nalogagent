@@ -179,7 +179,9 @@ describe('ставка и ответ по понятому вопросу', () =
     expect(kind('какая ставка выгоднее?')).toBe('rates');
     expect(kind('что с порогами?')).toBe('warnings');
     expect(kind('когда платить НДС')).toBe('payment');
-    expect(kind('что если купим 3 машины')).toBe('cars');
+    // без цены это сценарий «что если» (выручка машин), с ценой прежний раздел покупки
+    expect(kind('что если купим 3 машины')).toBe('whatif');
+    expect(kind('что если купим 3 машины по 7 млн')).toBe('cars');
     expect(kind('объясни вычет')).toBe('deduct');
   });
 });

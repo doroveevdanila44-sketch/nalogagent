@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Overlay, OverlayHead } from '@/components/provenance/Overlay';
 import type { DocumentDetail } from '@/lib/documents/detail';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone } from '@/lib/provenance/line';
 
 /**
  * «Комментарии»: список с пометкой «решено» и форма нового комментария к документу целиком или к
@@ -49,7 +49,7 @@ export function DocComments({
               </div>
               <p>{c.body}</p>
               <small>
-                {shortDateTime(Date.parse(c.createdAt), doc.tz)}, версия {c.versionN}
+                {dateTimeWithZone(Date.parse(c.createdAt), doc.tz)}, версия {c.versionN}
                 {c.fieldKey ? ` · ${fieldLabel.get(c.fieldKey) ?? 'абзац'}` : ''}
                 {c.resolved ? ' · решено' : ''}
               </small>

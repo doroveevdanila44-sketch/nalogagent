@@ -102,7 +102,7 @@ for (const width of [390, 1440]) {
       await expect(page.locator('[data-testid^="overlay-"]')).toHaveCount(0);
     }
 
-    // окно «Передать специалисту»: «Письмо не отправляется» только здесь, без слова «демо»
+    // окно «Отправить на проверку»: «Письмо не отправляется» только здесь, без слова «демо»
     await answer.locator('[data-action="send"]').click();
     const modal = page.getByTestId('overlay-modal');
     await expect(modal.getByTestId('demo-mail-note')).toContainText('Письмо не отправляется');
@@ -172,8 +172,8 @@ for (const width of [390, 1440]) {
 
     // статусы из меню: подписи «Письмо не отправляется» здесь нет
     await page.getByRole('button', { name: 'Меню' }).click();
-    await page.getByRole('button', { name: 'Статусы проверок' }).click();
-    await expect(page.getByRole('heading', { name: 'Статусы', level: 1 })).toBeVisible();
+    await page.getByRole('button', { name: 'Что проверено' }).click();
+    await expect(page.getByRole('heading', { name: 'Что проверено', level: 1 })).toBeVisible();
     await expectOneDemo(page, 'статусы');
     expect(await page.evaluate(() => (document.body.innerText ?? '').includes('Письмо не отправляется'))).toBe(false);
 

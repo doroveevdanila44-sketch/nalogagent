@@ -11,12 +11,12 @@ import { errorText, type TargetBody } from './client';
 import { Overlay, OverlayHead } from './Overlay';
 import { SourceLine } from './SourceLine';
 import { useSnapshots } from './useSnapshots';
-import { lineFromSnapshots, shortDateTime, snapshotTitle } from '@/lib/provenance/line';
+import { dateTimeWithZone, lineFromSnapshots, snapshotTitle } from '@/lib/provenance/line';
 
 export const MAIL_NOTE = 'Письмо не отправляется';
 
 /**
- * Окно «Передать специалисту». Получатель из справочника, комментарий, «Отправить». Создаётся
+ * Окно «Отправить на проверку». Получатель из справочника, комментарий, «Отправить». Создаётся
  * запись review_requests со снимком расчёта и Excel; письмо никуда не уходит, об этом сказано
  * только здесь, в окне: «Письмо не отправляется».
  */
@@ -64,11 +64,11 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
   const tz = snaps[0]?.tz ?? 'Europe/Moscow';
 
   return (
-    <Overlay kind="modal" label="Передать специалисту" onClose={onClose}>
-      <OverlayHead title="Передать специалисту" onClose={onClose} />
+    <Overlay kind="modal" label="Отправить на проверку" onClose={onClose}>
+      <OverlayHead title="Отправить на проверку" onClose={onClose} />
       <div className="ov-scroll">
         <p className="demo-banner" data-testid="demo-mail-note">
-          {MAIL_NOTE}. Запрос сохранится в разделе «Статусы», получатель ничего не получит.
+          {MAIL_NOTE}. Запрос сохранится в разделе «Что проверено», получатель ничего не получит.
         </p>
 
         {done ? (
@@ -90,7 +90,7 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
               </div>
               <div>
                 <dt>Когда</dt>
-                <dd>{shortDateTime(Date.parse(done.createdAt), tz)}</dd>
+                <dd>{dateTimeWithZone(Date.parse(done.createdAt), tz)}</dd>
               </div>
               {done.comment ? (
                 <div>
@@ -102,7 +102,7 @@ export function SendToSpecialist({ target, onClose }: { target: TargetBody; onCl
             <p className="calc-note">К запросу приложены снимок расчёта и файл Excel.</p>
             <div className="acts" role="group" aria-label="Что дальше">
               <Link className="act" href="/statuses" prefetch={false} onClick={onClose}>
-                Открыть статусы
+                Открыть «Что проверено»
               </Link>
               <button type="button" className="act" onClick={onClose}>
                 Закрыть

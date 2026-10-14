@@ -25,6 +25,7 @@ import {
   type MonthStatus,
   type RuleRef,
 } from '@/lib/calc';
+import type { WhatIfSnapshot } from '@/lib/provenance/whatif';
 import type { CalcResult, Interpretation, Table } from './types';
 
 /**
@@ -47,6 +48,8 @@ export interface AnswerCalc {
   result: TaxCalc;
   /** Юрлица вопроса: 'all' для группы целиком */
   scope: string[] | 'all';
+  /** Сценарий «что если»: сравнение «сейчас и по сценарию», хранится у одного расчёта набора */
+  comparison?: WhatIfSnapshot;
 }
 
 export interface TaxAnswer {

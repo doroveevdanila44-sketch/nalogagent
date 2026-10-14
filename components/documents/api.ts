@@ -1,4 +1,5 @@
 import type { Period } from '@/lib/calc/period';
+import type { Activity } from '@/lib/documents/activity';
 import type { TemplateCategory } from '@/lib/documents/types';
 
 /** Шаблон в каталоге: без тела, с числом полей. */
@@ -19,6 +20,8 @@ export interface EntityOption {
   id: string;
   name: string;
   form: string;
+  /** Вид деятельности из справочника юрлиц: по нему шаблон предлагает юрлицо */
+  activity: Activity;
 }
 
 export interface Catalog {

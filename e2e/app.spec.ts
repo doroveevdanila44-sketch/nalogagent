@@ -173,9 +173,14 @@ test('Агент: подсказки, ответ по расчёту, отказ
   await resetChat();
   await firstLogin(page, PIN);
 
-  // пустая история: три подсказки
+  // пустая история: шесть подсказок, первые две «Что если» (янтарные), панель открыта
   const sug = page.locator('.sug button');
-  await expect(sug).toHaveCount(4);
+  await expect(sug).toHaveCount(6);
+  await expect(sug.nth(0)).toHaveText('Что если купим 5 машин?');
+  await expect(sug.nth(1)).toHaveText('Что если выручка вырастет на 20%?');
+  await expect(sug.nth(0)).toHaveClass(/sug-whatif/);
+  await expect(sug.nth(1)).toHaveClass(/sug-whatif/);
+  await expect(sug.nth(2)).not.toHaveClass(/sug-whatif/);
   await expect(page.getByRole('button', { name: 'Какая ставка выгоднее?' }).first()).toBeVisible();
 
   const input = page.getByLabel('Вопрос агенту');

@@ -32,7 +32,7 @@ interface Props {
 function baseNote(e: EntityInput, t: StaticModel['perEntity'][string]['incomeTax']): string {
   switch (e.taxRegime) {
     case 'usn_income':
-      return `Доходы без НДС ${mln(t.income, 2)} × ${t.ratePct.toString()}%`;
+      return `Прогноз года: доходы без НДС ${mln(t.income, 2)} × ${t.ratePct.toString()}%`;
     case 'usn_income_expense':
       return (
         `Доходы без НДС ${mln(t.income, 2)} минус расходы ${mln(t.expenses, 2)} = ${mln(t.base, 2)}. ` +

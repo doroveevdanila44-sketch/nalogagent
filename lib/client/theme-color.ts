@@ -9,9 +9,10 @@ export const THEME_AUTH: string = THEME.auth;
 /**
  * Записывает цвет в <meta name="theme-color"> и красит страницу под часами: фон <html> (виден под
  * вырезом при установленном приложении с black-translucent и при оттягивании страницы) и, на экранах
- * входа, фон <body>. Метатег Next.js выводит один раз на маршрут, а экран блокировки открывается
- * поверх приложения без смены маршрута, поэтому цвет меняется из кода. В приложении страница (body)
- * остаётся белой, под часами лежит шапка с отступом safe-area-inset-top.
+ * входа и в приложении, фон <body>: в приложении оба цвета шапки, белая только оболочка
+ * (.app-shell). Метатег Next.js выводит один раз на маршрут, а экран блокировки открывается поверх
+ * приложения без смены маршрута, поэтому цвет меняется из кода. Под часами лежит шапка с отступом
+ * safe-area-inset-top и тем же цветом.
  */
 export function applyThemeColor(color: string): void {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
@@ -24,7 +25,7 @@ export function applyThemeColor(color: string): void {
     for (const meta of metas) meta.setAttribute('content', color);
   }
   document.documentElement.style.backgroundColor = color;
-  document.body.style.backgroundColor = color === THEME_AUTH ? color : '';
+  document.body.style.backgroundColor = color;
 }
 
 /** Возвращает фон <html> и <body> стилям страницы: экран без этого хука красят таблицы стилей. */

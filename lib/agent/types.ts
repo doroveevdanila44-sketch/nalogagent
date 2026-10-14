@@ -1,4 +1,5 @@
-import type { CalcResult as TaxCalc, Moment, Period, PeriodKind } from '@/lib/calc';
+import type { CalcResult as TaxCalc, Moment, Period, PeriodKind, WhatIfRequest } from '@/lib/calc';
+import type { WhatIfSnapshot } from '@/lib/provenance/whatif';
 import type { SourceLineData } from '@/lib/provenance/line';
 
 /** A по теме, B этикет, C служебное, D вне темы, E непонятное, F за границей продукта */
@@ -14,6 +15,8 @@ export type Intent =
   | 'deduct'
   | 'profit'
   | 'scenario'
+  /** «Что если»: пересчёт года при условии, которого в данных нет (машины, рост выручки) */
+  | 'whatif'
   | 'boundary';
 
 export interface EntityRef {
@@ -54,6 +57,8 @@ export interface Table {
   best?: [number, number][];
   /** Последняя строка итоговая */
   totalRow?: boolean;
+  /** Узкая таблица на несколько числовых столбцов: плотные поля, названия строк переносятся по словам */
+  dense?: boolean;
 }
 
 /** Результат расчёта: единственный источник чисел для ответа. */
@@ -92,7 +97,7 @@ export interface AgentReply {
   /** Вид пояснения, если агент не берётся за запрос */
   unsupported?: Unsupported['kind'] | null;
   /** Расчёты calcTax, из которых собран ответ: основа строки происхождения и действий */
-  calcs?: { result: TaxCalc; scope: string[] | 'all' }[];
+  calcs?: { result: TaxCalc; scope: string[] | 'all'; comparison?: WhatIfSnapshot }[];
 }
 
 export interface ChatTurn {
@@ -135,6 +140,7 @@ export type RateValue = 5 | 7 | 22;
  *  threshold      порог освобождения, предупреждения
  *  payment        ближайший платёж, срок
  *  deduct, fragmentation, cars  прежние разделы агента (вычет, признаки дробления, покупка машин)
+ *  whatif         «что если купим N машин», «что если выручка вырастет на X%»: пересчёт текущего года
  * null: обычный вопрос «сколько налога», его считает calcTax.
  */
 export type Scenario =
@@ -145,7 +151,8 @@ export type Scenario =
   | 'payment'
   | 'deduct'
   | 'fragmentation'
-  | 'cars';
+  | 'cars'
+  | 'whatif';
 
 export type Slot = 'entity' | 'tax' | 'period';
 
@@ -202,6 +209,11 @@ export interface Interpretation {
    * сценарию; null или поля нет, если вопрос не про следующий год.
    */
   forecast?: { year: number; growth: number } | null;
+  /**
+   * Сценарий «что если»: что именно изменится (машины, процент, сумма). Юрлицо берётся из
+   * `entities`; пока оно не названо, агент спрашивает. null или поля нет у остальных вопросов.
+   */
+  whatIf?: WhatIfRequest | null;
 }
 
 /** Карточка «Понял так» перед результатом. */

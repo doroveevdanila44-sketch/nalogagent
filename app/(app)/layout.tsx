@@ -1,10 +1,15 @@
+import type { Viewport } from 'next';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { getServerAuth } from '@/lib/auth/server';
 import { getEnv } from '@/lib/env';
+import { THEME } from '@/lib/theme';
 
 export const dynamic = 'force-dynamic';
+
+/** Приложение: полоса под часами цвета шапки. Вход и PIN задают бордо в своём маршруте (/login). */
+export const viewport: Viewport = { themeColor: THEME.app };
 
 /**
  * Серверная проверка входа для всех страниц после логина. Прокси проверяет только наличие cookie,

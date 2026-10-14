@@ -370,7 +370,7 @@ test('Проверить самому: отметка «сверил» сохр�
     .toBe(before);
 });
 
-test('Передать специалисту: запись review_requests, подпись «Письмо не отправляется» только в окне, история в «Статусах»', async ({
+test('Отправить на проверку: запись review_requests, подпись «Письмо не отправляется» только в окне, история в «Статусах»', async ({
   page,
 }) => {
   await firstLogin(page, PIN);
@@ -434,10 +434,10 @@ test('Передать специалисту: запись review_requests, п�
   await page.screenshot({ path: `${SHOTS}/prov-send-done-desktop.png` });
 });
 
-test('Раздел «Статусы»: история запросов, статус и файл запроса', async ({ page }) => {
+test('Раздел «Что проверено»: история запросов, статус и файл запроса', async ({ page }) => {
   await firstLogin(page, PIN);
   await page.getByRole('button', { name: 'Меню' }).click();
-  await page.getByRole('button', { name: 'Статусы проверок' }).click();
+  await page.getByRole('button', { name: 'Что проверено' }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/statuses');
   const item = page.getByTestId('review-item').first();
   await expect(item).toBeVisible();
@@ -695,7 +695,7 @@ test.describe('Телефон 390 px', () => {
     await page.screenshot({ path: `${SHOTS}/prov-check-mobile.png` });
   });
 
-  test('«Передать специалисту» на телефоне: окно по месту, поле комментария принимает ввод', async ({ page }) => {
+  test('«Отправить на проверку» на телефоне: окно по месту, поле комментария принимает ввод', async ({ page }) => {
     await firstLogin(page, PIN);
     await toDashboard(page);
     const card = page.locator('article.ent').first();
@@ -715,7 +715,7 @@ test.describe('Телефон 390 px', () => {
     await page.screenshot({ path: `${SHOTS}/prov-send-mobile.png` });
   });
 
-  test('чат и «Статусы» на телефоне: строка и кнопки внутри ширины', async ({ page }) => {
+  test('чат и «Что проверено» на телефоне: строка и кнопки внутри ширины', async ({ page }) => {
     await resetChat();
     await firstLogin(page, PIN);
     const input = page.getByLabel('Вопрос агенту');
@@ -737,9 +737,9 @@ test.describe('Телефон 390 px', () => {
     await page.screenshot({ path: `${SHOTS}/prov-chat-mobile.png` });
 
     await page.getByRole('button', { name: 'Меню' }).click();
-    await page.getByRole('button', { name: 'Статусы проверок' }).click();
+    await page.getByRole('button', { name: 'Что проверено' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/statuses');
-    await expect(page.getByRole('heading', { name: 'Статусы' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Что проверено' })).toBeVisible();
     expect(await noScrollX(page)).toEqual({ page: 0, body: 0 });
     await page.screenshot({ path: `${SHOTS}/prov-statuses-mobile.png` });
   });

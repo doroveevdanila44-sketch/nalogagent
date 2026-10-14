@@ -49,7 +49,7 @@ interface StoredCalc {
   interp?: Interpretation | null;
   awaiting?: Slot[];
   unsupported?: Unsupported['kind'] | null;
-  /** Снимки расчётов ответа (CalcSnapshot): по ним панель, Excel и передача специалисту */
+  /** Снимки расчётов ответа (CalcSnapshot): по ним панель, Excel и отправка на проверку */
   results?: CalcSnapshot[];
   /** Строка происхождения цифр, собранная при сохранении ответа */
   provenance?: TurnProvenance | null;
@@ -227,14 +227,18 @@ export async function handleChat(
   }
 
   // расчёты ответа сохраняются снимками: что сказал агент, то и открывают кнопки под ответом
-  const results = (reply.calcs ?? []).map((c) => toSnapshot(c.result, { at: nowMs, tz: appTz, scope: c.scope }));
+  const results = (reply.calcs ?? []).map((c) =>
+    toSnapshot(c.result, { at: nowMs, tz: appTz, scope: c.scope, comparison: c.comparison }),
+  );
+  const whatIf = reply.interp?.scenario === 'whatif' && results.some((r) => r.whatIf);
   const provenance: TurnProvenance | null =
     results.length > 0
       ? {
-          line: lineFromSnapshots(results),
+          line: lineFromSnapshots(results, whatIf ? { note: 'сценарий, а не прогноз' } : {}),
           count: results.length,
-          // документы строятся по данным: у прогноза следующего года их нет, кнопки «Сформировать» не будет
-          ...(reply.interp?.forecast
+          // документы строятся по данным: у прогноза следующего года и сценария их нет, кнопки
+          // «Сформировать» не будет
+          ...(reply.interp?.forecast || whatIf
             ? {}
             : {
                 doc: {

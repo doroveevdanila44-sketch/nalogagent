@@ -100,7 +100,8 @@ test('Удаление черновика из списка: подтвержд�
   await item(page, id).getByRole('button', { name: 'Удалить' }).click();
   const dialog = page.getByRole('dialog', { name: 'Удалить черновик?' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Восстановить нельзя');
+  await expect(dialog).toContainText('Черновик будет удалён. Отменить можно в течение 6 секунд');
+  await expect(dialog).not.toContainText('Восстановить нельзя');
   // «Удалить» красная, из палитры состояний
   const red = await dialog.getByRole('button', { name: 'Удалить' }).evaluate((b) => getComputedStyle(b).backgroundColor);
   expect(red).toBe('rgb(179, 55, 43)');
@@ -123,15 +124,15 @@ test('Удаление черновика из списка: подтвержд�
   await expect(toast(page)).toHaveCount(0);
   expect((await sql<{ d: Date | null }>('select deleted_at as d from documents where id = $1', [id]))[0]!.d).toBeNull();
 
-  // снова удалить и не отменять: уведомление живёт около 8 секунд, потом исчезает
+  // снова удалить и не отменять: уведомление живёт около 6 секунд, потом исчезает
   await item(page, id).getByRole('button', { name: 'Удалить' }).click();
   await page.getByRole('dialog', { name: 'Удалить черновик?' }).getByRole('button', { name: 'Удалить' }).click();
   await expect(toast(page)).toBeVisible();
   const shownAt = Date.now();
   await expect(toast(page)).toHaveCount(0, { timeout: 15_000 });
   const lived = Date.now() - shownAt;
-  expect(lived).toBeGreaterThan(6_500);
-  expect(lived).toBeLessThan(11_000);
+  expect(lived).toBeGreaterThan(4_500);
+  expect(lived).toBeLessThan(8_500);
   await expect(item(page, id)).toHaveCount(0);
 
   // через сутки на сервере: строка и версии стираются при ближайшем чтении списка

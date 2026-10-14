@@ -43,6 +43,8 @@ export async function loadCalcData(db: Db, today: Moment): Promise<CalcData> {
       r.taxRegime === 'osno' || r.taxRegime === 'usn_income_expense' ? r.taxRegime : 'usn_income',
     usnRate: r.usnRate === null ? null : dec(r.usnRate),
     annualExpenses: dec(r.annualExpenses),
+    revenuePerCarMonthly: r.revenuePerCarMonthly === null ? null : dec(r.revenuePerCarMonthly),
+    activity: r.activity,
   }));
 
   // записи отсортированы от новых к старым: действует первая по юрлицу и году

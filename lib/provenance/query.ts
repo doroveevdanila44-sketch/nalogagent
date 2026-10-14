@@ -48,7 +48,9 @@ export function subjectOf(snaps: CalcSnapshot[]): string {
       const rates = s.entities.filter((e) => e.applicable && e.rate !== null).map((e) => e.rate);
       // прогноз с другим ростом выручки это другой расчёт
       const growth = s.scenario ? `:g${s.scenario.growth}` : '';
-      return `${s.tax}:${periodKey(s)}:${scope}:${rates.join(',')}${growth}`;
+      // сценарий «что если» это другой расчёт, чем тот же налог по данным
+      const what = s.whatIf ? `:w${s.whatIf.role}:${s.whatIf.key}` : '';
+      return `${s.tax}:${periodKey(s)}:${scope}:${rates.join(',')}${growth}${what}`;
     })
     .join('|');
 }
@@ -122,5 +124,6 @@ export function exportFileName(snaps: CalcSnapshot[]): string {
 export function requestTitle(snaps: CalcSnapshot[]): string {
   const names = [...new Set(snaps.map((s) => s.taxName))];
   const taxes = names.map((n, i) => (i === 0 ? n : n.charAt(0).toLowerCase() + n.slice(1))).join(' и ');
-  return `${taxes}, ${scopeLabel(snaps)}, ${periodPhrase(snaps)}`;
+  const what = snaps.find((s) => s.whatIf?.role === 'scenario')?.whatIf;
+  return `${taxes}, ${scopeLabel(snaps)}, ${periodPhrase(snaps)}${what ? `, сценарий: ${what.title}` : ''}`;
 }

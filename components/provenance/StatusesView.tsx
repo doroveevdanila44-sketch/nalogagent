@@ -6,13 +6,13 @@ import { dec } from '@/lib/calc/decimal';
 import { rub2 } from '@/lib/calc/format';
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone } from '@/lib/provenance/line';
 import type { ReviewItem } from '@/lib/provenance/types';
 import { downloadFile, errorText } from './client';
 
 /**
- * Раздел «Статусы»: история запросов на проверку, переданных специалисту. Записи создаёт кнопка
- * «Передать специалисту»: статус «Отправлено на проверку».
+ * Раздел «Что проверено»: история запросов на проверку. Записи создаёт кнопка «Отправить на
+ * проверку»: статус «Отправлено на проверку».
  */
 export function StatusesView() {
   const [items, setItems] = useState<ReviewItem[] | null>(null);
@@ -58,7 +58,7 @@ export function StatusesView() {
   return (
     <div className="statuses">
       <div className="sec-h">
-        <h1 id="h-statuses">Статусы</h1>
+        <h1 id="h-statuses">Что проверено</h1>
       </div>
 
       {error ? (
@@ -87,8 +87,8 @@ export function StatusesView() {
         <div className="sec statuses-empty" data-testid="statuses-empty">
           <p style={{ fontWeight: 600 }}>Запросов пока нет</p>
           <p className="calc-note">
-            Откройте <Link href="/dashboard">дашборд</Link> или чат с агентом и нажмите «Передать
-            специалисту» под расчётом.
+            Откройте <Link href="/dashboard">дашборд</Link> или чат с агентом и нажмите «Отправить на
+            проверку» под расчётом.
           </p>
         </div>
       ) : null}
@@ -102,7 +102,7 @@ export function StatusesView() {
                 <span className="req-status">{r.statusLabel}</span>
               </div>
               <p className="req-meta">
-                {shortDateTime(Date.parse(r.createdAt), tz)} · {r.recipient.name}, {r.recipient.role}
+                {dateTimeWithZone(Date.parse(r.createdAt), tz)} · {r.recipient.name}, {r.recipient.role}
               </p>
               {r.comment ? <p className="req-comment">{r.comment}</p> : null}
               <ul className="req-totals">

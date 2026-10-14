@@ -74,7 +74,8 @@ export async function resolveTarget(
 
 export async function excelFor(snaps: CalcSnapshot[]): Promise<{ name: string; file: Buffer }> {
   const first = snaps[0]!;
-  const file = await buildWorkbook(snaps.map(fromSnapshot), { at: first.at, tz: first.tz });
+  const whatIf = snaps.find((s) => s.comparison)?.comparison ?? null;
+  const file = await buildWorkbook(snaps.map(fromSnapshot), { at: first.at, tz: first.tz, whatIf });
   return { name: exportFileName(snaps), file };
 }
 

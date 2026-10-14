@@ -6,7 +6,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { api, ApiError } from '@/lib/client/api';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { errorText } from '@/components/provenance/client';
-import { shortDateTime } from '@/lib/provenance/line';
+import { dateTimeWithZone } from '@/lib/provenance/line';
 import { CATEGORIES, CATEGORY_LABEL, type DocumentSummary, type TemplateCategory } from '@/lib/documents/types';
 import type { Catalog, TemplateMeta } from './api';
 import { ConfirmDelete, restoreDrafts } from './ConfirmDelete';
@@ -110,13 +110,13 @@ export function DocumentsView({
       return next;
     });
 
-  /** Черновики удалены: список без них, уведомление с «Отменить» на 8 секунд */
+  /** Черновики удалены: список без них, уведомление с «Отменить» на 6 секунд */
   const deleted = (ids: string[]) => {
     setConfirm(null);
     leaveSelect();
     setDocs((cur) => (cur ? cur.filter((d) => !ids.includes(d.id)) : cur));
     if (activeId && ids.includes(activeId)) router.push('/documents', { scroll: false });
-    shell.notify(ids.length > 1 ? `Черновики удалены: ${ids.length}` : 'Черновик удалён', () => restoreDrafts(ids));
+    shell.notify(ids.length > 1 ? `Черновики удалены: ${ids.length}` : 'Черновик удалён', () => restoreDrafts(ids), '/documents');
   };
 
   const withdraw = async (id: string) => {
@@ -328,7 +328,7 @@ export function DocumentsView({
                   </div>
                   <p className="req-meta">
                     {CATEGORY_LABEL[d.category]} · версия {d.version} ·{' '}
-                    {shortDateTime(Date.parse(d.updatedAt), tz)}
+                    {dateTimeWithZone(Date.parse(d.updatedAt), tz)}
                   </p>
                   <p className="req-meta">
                     {d.missing > 0 ? `Не заполнено полей: ${d.missing}` : 'Обязательные поля заполнены'}

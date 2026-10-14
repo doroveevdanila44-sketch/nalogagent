@@ -118,8 +118,9 @@ export function classify(
       f.taxes.length > 0 ||
       f.periods.length > 0 ||
       f.rate !== null ||
-      f.growth !== null;
-    if (f.fragment && slot) return { cls: 'A' };
+      f.growth !== null ||
+      f.whatIf !== null;
+    if ((f.fragment || f.whatIf !== null) && slot) return { cls: 'A' };
   }
 
   // 3. словарь темы

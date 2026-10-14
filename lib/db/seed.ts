@@ -23,7 +23,7 @@ import { dataSources, documentTemplates, legalEntities, people, revenueMonthly, 
  *    (например, дефлятор) не затиралась повторным запуском;
  *  - юрлица демо вставляются и ОБНОВЛЯЮТСЯ (название, цифры, режим налогообложения): сид
  *    приводит демо-данные к описанным в CALC.md.
- *  - справочник people для «Передать специалисту»: три вымышленных получателя, имена выдуманы,
+ *  - справочник people для «Отправить на проверку»: три вымышленных получателя, имена выдуманы,
  *    настоящих людей и адресов нет; повторный запуск приводит записи к этому списку.
  * Пользователь luxautoowner сидом не создаётся, только командой npm run user:create.
  */
@@ -44,42 +44,44 @@ export interface SeedOptions {
 
 /**
  * Реквизиты юрлиц для документов. Все выдуманы и помечены demo: ИНН и ОГРН с кодом региона 99
- * (такого региона нет), улица «Образцовая». Настоящих реквизитов клиента здесь нет.
+ * (такого региона нет), счета и БИК условные, адреса и фамилии правдоподобные, но вымышленные.
+ * Единственное место, где они заведены: договоры и допсоглашения берут их из справочника юрлица.
+ * Настоящих реквизитов клиента здесь нет.
  */
 export const SEED_REQUISITES: Record<string, EntityRequisites> = {
   alfa: {
     inn: '9900000011', kpp: '990001001', ogrn: '1999900000011',
-    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 1, офис 1',
-    signerName: 'Образцов Олег Иванович', signerPosition: 'генеральный директор',
-    bank: 'Банк «Образец»', bik: '049999991', account: '40702810000000000011', corrAccount: '30101810000000000991',
+    address: 'г. Петропавловск-Камчатский, ул. Ленинградская, д. 24, офис 3',
+    signerName: 'Воробьёв Игорь Сергеевич', signerPosition: 'генеральный директор',
+    bank: 'Банк «Авачинский»', bik: '049999991', account: '40702810000000000011', corrAccount: '30101810000000000991',
     email: 'alfa@example.invalid', phone: '+7 000 000-00-11', demo: true,
   },
   beta: {
     inn: '990000000022', ogrn: '399990000000022',
-    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 2',
-    signerName: 'Шаблонов Сергей Андреевич', signerPosition: 'индивидуальный предприниматель',
-    bank: 'Банк «Образец»', bik: '049999991', account: '40802810000000000022', corrAccount: '30101810000000000991',
+    address: 'г. Петропавловск-Камчатский, ул. Королёва, д. 11',
+    signerName: 'Громов Андрей Павлович', signerPosition: 'индивидуальный предприниматель',
+    bank: 'Банк «Авачинский»', bik: '049999991', account: '40802810000000000022', corrAccount: '30101810000000000991',
     email: 'beta@example.invalid', phone: '+7 000 000-00-22', demo: true,
   },
   delta: {
     inn: '990000000033', ogrn: '399990000000033',
-    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 3',
-    signerName: 'Примеров Дмитрий Олегович', signerPosition: 'индивидуальный предприниматель',
-    bank: 'Банк «Образец»', bik: '049999991', account: '40802810000000000033', corrAccount: '30101810000000000991',
+    address: 'г. Петропавловск-Камчатский, ул. Ларина, д. 15',
+    signerName: 'Исаев Максим Олегович', signerPosition: 'индивидуальный предприниматель',
+    bank: 'Банк «Авачинский»', bik: '049999991', account: '40802810000000000033', corrAccount: '30101810000000000991',
     email: 'delta@example.invalid', phone: '+7 000 000-00-33', demo: true,
   },
   gamma: {
     inn: '9900000044', kpp: '990001001', ogrn: '1999900000044',
-    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 4, офис 4',
-    signerName: 'Условная Мария Павловна', signerPosition: 'директор',
-    bank: 'Банк «Образец»', bik: '049999991', account: '40702810000000000044', corrAccount: '30101810000000000991',
+    address: 'г. Петропавловск-Камчатский, пр. Карла Маркса, д. 7, офис 12',
+    signerName: 'Ковалёва Мария Викторовна', signerPosition: 'директор',
+    bank: 'Банк «Авачинский»', bik: '049999991', account: '40702810000000000044', corrAccount: '30101810000000000991',
     email: 'gamma@example.invalid', phone: '+7 000 000-00-44', demo: true,
   },
   epsilon: {
     inn: '9900000055', kpp: '990001001', ogrn: '1999900000055',
-    address: 'г. Петропавловск-Камчатский, ул. Образцовая, д. 5, офис 5',
-    signerName: 'Типовой Антон Викторович', signerPosition: 'генеральный директор',
-    bank: 'Банк «Образец»', bik: '049999991', account: '40702810000000000055', corrAccount: '30101810000000000991',
+    address: 'г. Петропавловск-Камчатский, ул. Тушканова, д. 8, офис 5',
+    signerName: 'Назаров Антон Викторович', signerPosition: 'генеральный директор',
+    bank: 'Банк «Авачинский»', bik: '049999991', account: '40702810000000000055', corrAccount: '30101810000000000991',
     email: 'epsilon@example.invalid', phone: '+7 000 000-00-55', demo: true,
   },
 };
@@ -173,6 +175,8 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         usnRate: e.usnRate ? e.usnRate.toFixed(4) : null,
         annualExpenses: e.annualExpenses.toFixed(2),
         requisites: SEED_REQUISITES[e.id] ?? null,
+        revenuePerCarMonthly: e.revenuePerCarMonthly ? e.revenuePerCarMonthly.toFixed(2) : null,
+        activity: e.activity ?? null,
       })),
     )
     .onConflictDoUpdate({
@@ -191,6 +195,8 @@ export async function seedDatabase(db: Db, opts: SeedOptions = {}): Promise<void
         usnRate: sql`excluded.usn_rate`,
         annualExpenses: sql`excluded.annual_expenses`,
         requisites: sql`excluded.requisites`,
+        revenuePerCarMonthly: sql`excluded.revenue_per_car_monthly`,
+        activity: sql`excluded.activity`,
       },
     });
 

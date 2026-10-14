@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { json } from '@/lib/auth/server';
 import { getDb } from '@/lib/db/client';
 import { legalEntities } from '@/lib/db/schema';
+import { activityOf } from '@/lib/documents/activity';
 import { docRoute } from '@/lib/documents/http';
 import { listTemplates } from '@/lib/documents/service';
 import { SAMPLE_NOTE } from '@/lib/documents/types';
@@ -19,7 +20,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const [templates, entities] = await Promise.all([
       listTemplates(db),
       db
-        .select({ id: legalEntities.id, name: legalEntities.name, form: legalEntities.form })
+        .select({
+          id: legalEntities.id,
+          name: legalEntities.name,
+          form: legalEntities.form,
+          description: legalEntities.description,
+          activity: legalEntities.activity,
+        })
         .from(legalEntities)
         .orderBy(asc(legalEntities.sort), asc(legalEntities.id)),
     ]);
@@ -28,7 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       sample: SAMPLE_NOTE,
       year: now.year,
       month: now.month + 1,
-      entities,
+      entities: entities.map((e) => ({ id: e.id, name: e.name, form: e.form, activity: activityOf(e) })),
       templates: templates.map((t) => ({
         key: t.key,
         category: t.category,
