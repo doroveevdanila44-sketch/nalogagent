@@ -45,14 +45,18 @@ test('«Что если»: подсказки первыми и янтарные
 
   const forecastBefore = await forecastBanner(page);
 
-  // юрлицо не названо: один вопрос и пять кнопок юрлиц
+  // карточка с полями вместо молчаливых допущений: юрлицо, стоимость и цена сдачи спрашиваются
   await pickSuggestion(page, 'Что если купим 5 машин?');
   await expect(page.locator('.typing')).toHaveCount(0);
   const ask = lastAnswer(page);
-  await expect(ask).toContainText('Для какого юрлица?');
-  await expect(ask.locator('.qreply')).toHaveText(['Альфа', 'Бета', 'Дельта', 'Гамма', 'Эпсилон']);
-
-  await ask.getByRole('button', { name: 'Дельта', exact: true }).click();
+  await expect(ask).toContainText('Не хватает: юрлицо, стоимость машины, цена сдачи.');
+  const form = ask.locator('[data-form="fleet"]');
+  await expect(form.getByRole('radio', { name: /^(Альфа|Бета|Дельта|Гамма|Эпсилон)$/ })).toHaveCount(5);
+  await expect(form.getByRole('button', { name: 'Рассчитать', exact: true })).toBeDisabled();
+  await form.getByRole('radio', { name: 'Дельта', exact: true }).click();
+  await form.getByRole('button', { name: '3 млн', exact: true }).click();
+  await form.getByRole('button', { name: '8 000 ₽', exact: true }).click();
+  await form.getByRole('button', { name: 'Рассчитать', exact: true }).click();
   await expect(page.locator('.typing')).toHaveCount(0);
   const answer = lastAnswer(page);
   await expect(answer.getByTestId('scenario-mark')).toHaveText('Сценарий, а не прогноз:');
@@ -60,7 +64,8 @@ test('«Что если»: подсказки первыми и янтарные
   await expect(answer.locator('.understood')).toContainText('+5 машин');
   // допущения видны в самом ответе, не в раскрывающемся блоке
   const assumptions = answer.locator('.msg-list li');
-  await expect(assumptions.first()).toContainText('демо-значение из справочника юрлица');
+  await expect(assumptions.first()).toContainText('цена сдачи 8');
+  await expect(answer).not.toContainText('демо-значение');
   await expect(answer).toContainText('Признаки единого бизнеса');
   await expect(answer).toContainText('порог 20 млн пересекается');
   await expect(answer).toContainText('По сценарию дороже на');
@@ -125,9 +130,14 @@ test('«Что если выручка вырастет на 20%?»: по гру
   await typeAndSend(page, 'что если Дельта вырастет на 3 млн');
   await expect(lastAnswer(page)).toContainText('НДС начнётся с 1 декабря');
 
+  // машины без стоимости и цены сдачи не считаются: юрлицо и число машин взяты из прежнего вопроса,
+  // остальное спрашивает карточка
   await typeAndSend(page, 'а если купим 3 машины');
-  await expect(lastAnswer(page).locator('.understood')).toContainText('+3 машины');
-  await expect(lastAnswer(page).locator('.understood')).toContainText('ИП Дельта');
+  await expect(lastAnswer(page)).toContainText('Не хватает: стоимость машины, цена сдачи.');
+  const cars = lastAnswer(page).locator('[data-form="fleet"]');
+  await expect(cars.getByLabel('Сколько машин')).toHaveValue('3');
+  await expect(cars.getByRole('radio', { name: 'Дельта', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(lastAnswer(page).locator('.understood')).toHaveCount(0);
 
   await typeAndSend(page, 'а если выручка упадёт на 10% у Эпсилон');
   const eps = lastAnswer(page);

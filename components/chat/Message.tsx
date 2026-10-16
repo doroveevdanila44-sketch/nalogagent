@@ -1,7 +1,8 @@
-import type { ChatTurn, Table } from '@/lib/agent/types';
+import type { ChatTurn, FleetFormSubmit, Table } from '@/lib/agent/types';
 import { CalcActions } from '@/components/provenance/CalcActions';
 import { SourceLine } from '@/components/provenance/SourceLine';
 import { MakeDocument } from '@/components/documents/MakeDocument';
+import { FleetFormView } from './FleetFormView';
 import { QuickReplies } from './QuickReplies';
 import { Understood } from './Understood';
 
@@ -102,29 +103,46 @@ function Paragraph({ text }: { text: string }) {
  * Сообщение чата. Текст выводится как текст, разметки нет, подставить HTML нельзя.
  * Над ответом по расчёту карточка «Понял так», под ним подпись «Цифры из калькулятора» и
  * раскрывающийся блок «Как посчитано», ниже кнопки быстрых ответов (уточнение, сужение до юрлица).
- * onPick отправляет текст кнопки вместе с номером этого ответа.
+ * onPick отправляет текст кнопки вместе с номером этого ответа, onSubmitForm поля карточки
+ * «Что если купим N машин». Вопрос с полями (mode «ask») после ответа на него остаётся в ленте
+ * только для чтения (`locked`): править значения можно в карточке «Понял так» под ответом.
  */
 export function Message({
   turn,
   onPick,
+  onSubmitForm,
   disabled,
+  locked,
 }: {
   turn: ChatTurn;
   onPick?: (text: string, baseId: number) => void;
+  onSubmitForm?: (v: FleetFormSubmit, baseId: number) => void;
   disabled?: boolean;
+  locked?: boolean;
 }) {
   if (turn.role === 'user') return <div className="msg me">{turn.text}</div>;
 
   const paragraphs = turn.text.split(/\n{2,}/).filter(Boolean);
   const pick = (text: string) => onPick?.(text, turn.id);
+  const submitForm = onSubmitForm ? (v: FleetFormSubmit) => onSubmitForm(v, turn.id) : undefined;
   return (
     <div className="msg">
       {turn.understood ? (
-        <Understood card={turn.understood} change={turn.change} onPick={pick} disabled={disabled || !onPick} />
+        <Understood
+          card={turn.understood}
+          change={turn.change}
+          form={turn.form}
+          onPick={pick}
+          onSubmitForm={submitForm}
+          disabled={disabled || !onPick}
+        />
       ) : null}
       {paragraphs.map((p, i) => (
         <Paragraph key={i} text={p} />
       ))}
+      {turn.form && turn.form.mode === 'ask' && submitForm ? (
+        <FleetFormView form={turn.form} onSubmit={submitForm} disabled={disabled} locked={locked} />
+      ) : null}
       {turn.tables.map((t, i) => (
         <TableView key={i} table={t} />
       ))}

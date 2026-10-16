@@ -231,6 +231,15 @@
     /* страница приложения белая; html и body за ней цвета шапки */
     background: var(--color-page);
   }
+  /* Клавиатура открыта: Safari на iOS мог сдвинуть видимую область вниз по странице (--vv-top). Оболочка
+     встаёт ровно на видимую область, шапка остаётся под часами, а не уезжает выше видимой части, и
+     чат не виден за значками статус-бара. Сдвиг через top, а не transform: у fixed-окон внутри оболочки
+     (меню, панель расчёта, обучение) остаётся прежний контейнер. */
+  html[data-kb='open'] .app-shell {
+    position: relative;
+    top: var(--vv-top, 0px);
+    height: calc(100dvh - var(--kb, 0px) - var(--vv-top, 0px));
+  }
   .app-body {
     flex: 1 1 auto;
     min-height: 0;
@@ -1837,6 +1846,129 @@
   }
   .u-panel[hidden] {
     display: none;
+  }
+
+  /* ===== Карточка «Что если купим N машин» =====
+     Поля ввода и список выбора 16 px: меньше iOS увеличивает страницу при фокусе. Недостающее,
+     что агент не нашёл в вопросе, подсвечено янтарной обводкой, пока поле пустое. */
+  .ff {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 520px;
+    margin-top: 10px;
+    padding: 12px;
+    background: var(--color-page);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    font-size: 14px;
+  }
+  .u-panel .ff {
+    margin-top: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .ff-note {
+    color: var(--color-bad);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .ff-field,
+  .ff-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .ff-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-ink);
+  }
+  .ff-input {
+    position: relative;
+  }
+  .ff input[type='text'],
+  .ff select {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 22px;
+    color: var(--color-ink);
+    background: var(--color-page);
+    border: 1px solid var(--color-ink);
+    border-radius: 12px;
+  }
+  .ff input[type='text']:focus,
+  .ff select:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .ff input:disabled,
+  .ff select:disabled {
+    opacity: 0.6;
+  }
+  .ff [data-need='true'] input[type='text'] {
+    border-color: var(--color-amber-line);
+    background: color-mix(in srgb, var(--color-amber) 35%, var(--color-page));
+  }
+  .ff-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 10px;
+  }
+  .ff-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-muted);
+  }
+  .ff-calc {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-accent);
+  }
+  .ff-left {
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+  .ff-seg {
+    display: inline-flex;
+    align-self: flex-start;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .ff-seg[data-need='true'] {
+    border-color: var(--color-amber-line);
+  }
+  .ff-seg button {
+    height: 36px;
+    padding: 0 16px;
+    border: 0;
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .ff-seg button.on {
+    background: var(--color-wine);
+    color: var(--color-cream);
+  }
+  .ff-seg button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+  .ff .act.ff-go {
+    flex: none;
+    width: 100%;
+    min-height: 48px;
+    font-size: 16px;
   }
   .qreplies {
     display: flex;

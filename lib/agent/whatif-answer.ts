@@ -1,5 +1,6 @@
 import {
   MONTH_NAMES,
+  dec,
   numText,
   pluralRu,
   rub,
@@ -55,7 +56,8 @@ function headline(cmp: WhatIfComparison): string {
   switch (r.kind) {
     case 'cars': {
       const c = cmp.changes[0]!;
-      const label = `${r.cars} ${pluralRu(r.cars, 'машину', 'машины', 'машин')}`;
+      const n = r.cars ?? 0;
+      const label = `${n} ${pluralRu(n, 'машину', 'машины', 'машин')}`;
       const name = cmp.rows[0]!.name;
       return months
         ? `${name} покупает ${label}, добавочная выручка ${rub(c.perMonth!)} в месяц (${months})`
@@ -73,7 +75,7 @@ function cardOf(cmp: WhatIfComparison): Understanding {
   const r = cmp.spec.request;
   const what =
     r.kind === 'cars'
-      ? `+${r.cars} ${pluralRu(r.cars, 'машина', 'машины', 'машин')}`
+      ? `+${r.cars ?? 0} ${pluralRu(r.cars ?? 0, 'машина', 'машины', 'машин')}`
       : r.kind === 'growth'
         ? `${r.percent >= 0 ? '+' : '−'}${numText(Math.abs(r.percent))}% к выручке`
         : `${r.amount >= 0 ? '+' : '−'}${amountWord(r.amount)} к выручке`;
@@ -120,6 +122,11 @@ function quickOf(cmp: WhatIfComparison, entities: EntityRef[]): QuickReply[] {
 /** Формулы для блока «Как посчитано»: сценарные шаги, налог года, правила, источник. */
 function howOf(cmp: WhatIfComparison, snap: WhatIfSnapshot, c: TaxAnswerContext): string[] {
   const lines: string[] = [];
+  if (cmp.fleet) {
+    const l = cmp.fleet.lines;
+    lines.push(`${cmp.fleet.name}, парк машин: ${l.values}`, l.deduction, l.expenses, l.payback);
+    if (l.notModeled) lines.push(l.notModeled);
+  }
   for (const row of snap.rows) {
     lines.push(`${row.name}, выручка за год: ${money(row.revenue.base)} → ${money(row.revenue.scenario)}`);
   }
@@ -168,7 +175,14 @@ export function buildWhatIfAnswer(c: TaxAnswerContext, cmp: WhatIfComparison, en
   const t = snap.totals;
   const paragraphs: string[] = [];
 
-  paragraphs.push(`Сценарий, а не прогноз: ${headline(cmp)}.`);
+  const fleet = cmp.fleet;
+  if (fleet) {
+    // принятые значения одной строкой вверху, затем кто покупает и что это даёт по месяцам
+    paragraphs.push(`Сценарий, а не прогноз: ${fleet.lines.values}.`);
+    paragraphs.push(`${headline(cmp)}.`);
+  } else {
+    paragraphs.push(`Сценарий, а не прогноз: ${headline(cmp)}.`);
+  }
 
   if (cmp.noChange) {
     paragraphs.push(
@@ -183,6 +197,10 @@ export function buildWhatIfAnswer(c: TaxAnswerContext, cmp: WhatIfComparison, en
     `Новый прогноз года: выручка ${money(t.revenue.scenario)} (было ${money(t.revenue.base)}, ${diffText(t.revenue)}). ` +
       `${pairLine('НДС за год', t.vat)}. ${pairLine(incomeLabel, t.incomeTax)}.`,
   );
+  // вычет по машинам может увести НДС года ниже нуля: это возмещение, а не налог к уплате
+  if (fleet && t.vat.scenario !== null && dec(t.vat.scenario).isNegative()) {
+    paragraphs.push('НДС за год получился отрицательным: это НДС к возмещению из бюджета, а не налог к уплате.');
+  }
 
   // порог освобождения у освобождённых юрлиц: главный эффект сценария
   for (const r of snap.rows) {
@@ -192,13 +210,25 @@ export function buildWhatIfAnswer(c: TaxAnswerContext, cmp: WhatIfComparison, en
   const limit = limitLine(snap.rows);
   if (limit) paragraphs.push(limit);
 
+  // машины: вычет входного НДС, расходы, чего ядро не считает, окупаемость
+  const shown = new Set<string>();
+  if (fleet) {
+    const l = fleet.lines;
+    for (const line of [l.deduction, l.expenses, l.notModeled, l.payback]) {
+      if (!line) continue;
+      shown.add(line);
+      paragraphs.push(`${line}.`);
+    }
+  }
+
   const verdict = verdictLine(snap);
   if (verdict) paragraphs.push(verdict);
 
   const unified = unifiedLine(snap);
   if (unified) paragraphs.push(unified);
 
-  paragraphs.push(`Допущения:\n${cmp.assumptions.map((a) => `${BULLET}${a}.`).join('\n')}`);
+  const rest = cmp.assumptions.filter((a) => !shown.has(a));
+  paragraphs.push(`Допущения:\n${rest.map((a) => `${BULLET}${a}.`).join('\n')}`);
 
   const tables: Table[] = [summaryTable(snap)];
   const byEntity = entityTable(snap);

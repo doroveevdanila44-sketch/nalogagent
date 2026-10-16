@@ -4,6 +4,7 @@ import {
   dataKind,
   formatPeriod,
   type CalcData,
+  type CarsRequest,
   type DashboardInput,
   type Moment,
   type PeriodKind,
@@ -36,6 +37,14 @@ import {
   greetingFor,
 } from './templates';
 import { buildForecastAnswer } from './forecast-2027';
+import {
+  askText,
+  buildFleetForm,
+  fleetDraft,
+  requestFromSubmit,
+  valuesFromRequest,
+  type FleetDraft,
+} from './fleet-form';
 import { buildWhatIfAnswer } from './whatif-answer';
 import { buildTaxAnswer, paymentLines } from './tax-answer';
 import { checkNumbers, normalize } from './text';
@@ -44,6 +53,7 @@ import type {
   AgentReply,
   CalcResult,
   EntityRef,
+  FleetFormSubmit,
   Intent,
   Interpretation,
   ParseContext,
@@ -78,6 +88,8 @@ export interface PipelineInput {
   awaiting?: Slot[];
   /** Сообщение пришло с кнопки: продолжает прежний вопрос безусловно */
   refine?: boolean;
+  /** Карточка «Что если купим N машин» отправлена кнопкой «Рассчитать»: поля заменяют разбор текста */
+  form?: FleetFormSubmit | null;
   /** Сессия: с последнего сообщения прошло меньше четырёх часов */
   sessionActive: boolean;
   /** Сколько ответов агента уже было, для чередования уточнений */
@@ -159,6 +171,10 @@ const LEGACY_INTENT: Partial<Record<AnswerKind, Intent>> = {
 export async function runPipeline(p: PipelineInput): Promise<AgentReply> {
   const previous = p.previous ?? null;
   const awaiting = p.awaiting ?? [];
+
+  // кнопка «Рассчитать» в карточке: поля уже названы человеком, текст разбирать не нужно
+  if (p.form) return carsReply(p, formInterpretation(p.form));
+
   const route: Route = classify(p.question, {
     entities: p.entities,
     pending: p.pending,
@@ -367,15 +383,17 @@ async function amountReply(p: PipelineInput, interp: Interpretation, ectx: Expla
 const WHATIF_ASK_ENTITY = 'Для какого юрлица?';
 
 /**
- * Сценарий «что если купим N машин», «что если выручка вырастет на X%». Юрлицо не названо: один
- * вопрос с кнопками юрлиц. Расчёт делает compareWhatIf, слова вокруг него whatif-answer.ts.
- * Сценарий данные не меняет: ответ хранит снимки расчётов, дашборд читает то, что читал.
+ * Сценарий «что если купим N машин» идёт через карточку с полями, остальные («рост выручки»,
+ * «+3 млн») считаются сразу. Юрлицо не названо: один вопрос с кнопками юрлиц. Расчёт делает
+ * compareWhatIf, слова вокруг него whatif-answer.ts. Сценарий данные не меняет: ответ хранит
+ * снимки расчётов, дашборд читает то, что читал.
  */
 async function whatIfReply(p: PipelineInput, interp: Interpretation): Promise<AgentReply> {
   const req = interp.whatIf!;
+  if (req.kind === 'cars') return carsReply(p, interp);
   const named = interp.entityMode === 'named' ? interp.entities : [];
 
-  // машины и заданная сумма относятся к одному юрлицу; процент можно и по группе
+  // заданная сумма относится к одному юрлицу; процент можно и по группе
   const single = named.length === 1 ? named[0]! : null;
   let scope: string[] | 'all' | null = null;
   if (req.kind === 'growth') {
@@ -399,13 +417,6 @@ async function whatIfReply(p: PipelineInput, interp: Interpretation): Promise<Ag
     comparison = compareWhatIf(p.data, { request: req, entityIds: scope });
   } catch (e) {
     if (e instanceof WhatIfError) {
-      if (e.reason === 'no_car_revenue') {
-        return text(
-          'A',
-          `${e.message}. Добавьте выручку на машину в справочник юрлица, и я посчитаю.`,
-          { interp, intent: 'whatif' },
-        );
-      }
       return text('A', `Не могу посчитать сценарий: ${e.message.replace(/\.$/, '')}.`, {
         interp,
         intent: 'whatif',
@@ -430,6 +441,128 @@ async function whatIfReply(p: PipelineInput, interp: Interpretation): Promise<Ag
     quick: answer.quick,
     change: { entity: changeOptions(p.entities, p.now).entity, tax: [], period: [] },
     interp: { ...interp, entities: scope === 'all' ? [] : scope, entityMode: scope === 'all' ? 'group' : 'named' },
+    intent: 'whatif',
+    calcs: answer.calcs,
+  });
+}
+
+/** Понимание вопроса из отправленной карточки: все поля названы человеком. */
+function formInterpretation(s: FleetFormSubmit): Interpretation {
+  return {
+    entities: [s.entityId],
+    entityMode: 'named',
+    tax: null,
+    period: null,
+    scenario: 'whatif',
+    rate: null,
+    confidence: 1,
+    ambiguities: [],
+    unsupported: null,
+    forecast: null,
+    whatIf: requestFromSubmit(s),
+  };
+}
+
+/** Агент просит поля: карточка с подставленным из вопроса и пустым недостающим. */
+function fleetAsk(
+  p: PipelineInput,
+  interp: Interpretation,
+  draft: FleetDraft,
+  note: string | null = null,
+): AgentReply {
+  return text('A', note ?? askText(draft.missing, draft.confirmVat), {
+    form: buildFleetForm({ mode: 'ask', draft, entities: p.entities, today: p.now, note }),
+    // юрлицо можно назвать и текстом («по Дельте»): ответ продолжит этот сценарий
+    awaiting: draft.missing.includes('entity') ? ['entity'] : [],
+    interp,
+    intent: 'whatif',
+  });
+}
+
+/**
+ * «Что если купим N машин». Значения из вопроса подставляются в карточку, недостающее агент
+ * спрашивает; пока обязательные поля (юрлицо, число машин, стоимость, цена сдачи) не заполнены, ничего
+ * не считается. Расчёт делает compareWhatIf, слова вокруг него whatif-answer.ts.
+ */
+async function carsReply(p: PipelineInput, interp: Interpretation): Promise<AgentReply> {
+  const req = interp.whatIf as CarsRequest;
+  const named = interp.entityMode === 'named' ? interp.entities : [];
+
+  // в декабре месяцев до конца года не остаётся: сдача могла бы начаться только в следующем году
+  if (p.now.month >= 11) {
+    return text(
+      'A',
+      `До конца ${p.now.year} года месяцев, в которых машины дали бы выручку, не осталось: расчёт не меняется.`,
+      { interp, intent: 'whatif' },
+    );
+  }
+
+  const draft = fleetDraft(req, named, p.now);
+  // из карточки пришло всё названное человеком; из текста вопроса недостающее спрашиваем
+  const submitted = Boolean(p.form);
+  if (!submitted && draft.badStart && draft.missing.length === 0 && !draft.confirmVat) {
+    return fleetAsk(p, interp, draft, 'Сдача может начаться не раньше следующего месяца: проверьте месяц начала.');
+  }
+  if (!submitted && (draft.missing.length > 0 || draft.confirmVat || draft.badStart)) return fleetAsk(p, interp, draft);
+
+  const entityId = draft.values.entityId!;
+  if (!p.entities.some((e) => e.id === entityId)) return fleetAsk(p, interp, { ...draft, missing: ['entity'] });
+  const request: CarsRequest = submitted
+    ? req
+    : {
+        kind: 'cars',
+        cars: req.cars,
+        fleet: {
+          ...req.fleet,
+          costWithVat: draft.values.costWithVat,
+          rentDays: draft.values.rentDays,
+          startMonth: draft.values.startMonth,
+          expensesPerMonth: draft.values.expenses ?? 0,
+        },
+      };
+
+  let comparison;
+  try {
+    comparison = compareWhatIf(p.data, { request, entityIds: [entityId] });
+  } catch (e) {
+    if (e instanceof WhatIfError) {
+      // поля есть, но значение не годится: карточка возвращается с пояснением и введёнными значениями
+      const fixed = {
+        ...draft,
+        values: submitted ? valuesFromRequest(request, entityId) : draft.values,
+        confirmVat: false,
+        badStart: false,
+      };
+      return fleetAsk(p, interp, fixed, `${e.message.replace(/\.$/, '')}.`);
+    }
+    return text('A', FAILURE_FALLBACK, { failure: 'calc' });
+  }
+
+  let answer;
+  try {
+    answer = buildWhatIfAnswer(
+      { data: p.data, input: p.input, now: p.now, tz: p.tz ?? 'Asia/Kamchatka', canDo: '' },
+      comparison,
+      p.entities,
+    );
+  } catch {
+    return text('A', FAILURE_FALLBACK, { failure: 'calc' });
+  }
+
+  // «Изменить» в карточке «Понял так» открывает те же поля с принятыми значениями
+  const form = buildFleetForm({
+    mode: 'edit',
+    draft: { values: valuesFromRequest(request, entityId), missing: [], confirmVat: false, badStart: false },
+    entities: p.entities,
+    today: p.now,
+  });
+  return finish(p, answer.result, {
+    understood: answer.card,
+    quick: answer.quick,
+    change: null,
+    form,
+    // понимание хранит все названные значения: «а если купим 10 машин» возьмёт цену и сдачу отсюда
+    interp: { ...interp, entities: [entityId], entityMode: 'named', whatIf: request },
     intent: 'whatif',
     calcs: answer.calcs,
   });

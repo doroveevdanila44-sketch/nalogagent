@@ -216,7 +216,8 @@ test('Агент: подсказки, ответ по расчёту, отказ
   await expect(page.locator('.msg:not(.me)').last()).toContainText('Такие схемы я не проектирую');
 
   // уточнение и продолжение
-  await send('Что если купим машины?');
+  // прежний раздел покупки: без условия «что если» и без цены сдачи
+  await send('Купим машины');
   await expect(page.locator('.msg:not(.me)').last()).toContainText('по какому юрлицу');
   await send('по Альфе');
   await expect(page.locator('.msg:not(.me)').last()).toContainText('сколько машин и по какой цене');

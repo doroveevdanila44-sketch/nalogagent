@@ -1,13 +1,18 @@
 import {
+  FLEET_MAX_COST,
+  FLEET_MAX_EXPENSES,
+  FLEET_MAX_RENT_PER_DAY,
   WHATIF_MAX_CARS,
   WHATIF_PERCENT_MAX,
   WHATIF_PERCENT_MIN,
   resolvePeriod,
+  type FleetInput,
   type Moment,
   type Period,
   type WhatIfRequest,
 } from '@/lib/calc';
 import { mentionedEntities, mentionsGroup, unknownEntityNames } from './entities';
+import { CAR_WORD, extractFleet, mentionsRentPrice } from './fleet-extract';
 import { cyr } from './regex';
 import { normalize } from './text';
 import type {
@@ -574,8 +579,6 @@ const CAR_WORD_NUMBER: Record<string, number> = {
   одну: 1, одна: 1, один: 1, две: 2, два: 2, три: 3, четыре: 4, пять: 5, шесть: 6, семь: 7, восемь: 8,
   девять: 9, десять: 10,
 };
-/** Цена в вопросе про машины: с ней это прежний раздел (покупка, доля закупок, налог по 22%). */
-const PRICE_MENTION = cyr('\\d+(?:[.,]\\d+)?\\s*(?:млн|миллион\\w*|тыс\\w*|руб\\w*|₽)|\\bм\\b');
 
 function carCount(t: string): number | null {
   const d = CAR_DIGITS.exec(t);
@@ -685,15 +688,23 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
   const legal = LEGAL.test(t);
   const limits = LIMITS.test(t);
 
-  // «что если»: условие и что именно меняется. Машины с ценой это прежний раздел; рост выручки на
-  // следующий год (период 2027) считает прогноз, а не этот сценарий
+  // «что если»: условие и что именно меняется. «Что если купим машины» и любая фраза с ценой сдачи
+  // («сдавать по 9000 в сутки») это карточка с полями парка: названное (число, стоимость, цена,
+  // месяц) подставляется, недостающее спрашивается. «Купим 3 машины по 7 млн» без условия и без
+  // сдачи остаётся прежним разделом покупки; рост выручки на следующий год (период 2027) считает
+  // прогноз, а не этот сценарий
   let whatIf: WhatIfRequest | null = null;
-  if (CONDITION.test(normalized)) {
+  const carWord = CAR_WORD.test(normalized);
+  const rentNamed = carWord && mentionsRentPrice(normalized);
+  const condition = CONDITION.test(normalized);
+  if (condition || rentNamed) {
     const cars = carCount(normalized);
     const thisYear = mentions.every((m) => m.period.kind === 'year' && m.period.year === ctx.today.year);
     if (amount !== null && thisYear) whatIf = { kind: 'amount', amount };
-    else if (cars !== null && !PRICE_MENTION.test(normalized)) whatIf = { kind: 'cars', cars };
-    else if (growth !== null && growthStated && thisYear) whatIf = { kind: 'growth', percent: growth };
+    else if (carWord && (rentNamed || cars !== null || CARS.test(rest))) {
+      const fleet = extractFleet(normalized, monthOfWord);
+      whatIf = Object.keys(fleet).length > 0 ? { kind: 'cars', cars, fleet } : { kind: 'cars', cars };
+    } else if (growth !== null && growthStated && thisYear) whatIf = { kind: 'growth', percent: growth };
   }
 
   // сценарий: порядок как у прежних разделов агента
@@ -749,6 +760,22 @@ const GROUP_WORDS = cyr('(?:^|[^а-яa-z0-9])(?:все|всех|всем|все�
 
 // ===== Сборка понимания =====
 
+const finiteIn = (v: unknown, lo: number, hi: number): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+
+/** Значения парка машин от провайдера: остаются только допустимые, остальное считается неназванным. */
+function sanitizeFleet(f: Partial<FleetInput> | undefined): Partial<FleetInput> | undefined {
+  if (!f || typeof f !== 'object') return undefined;
+  const out: Partial<FleetInput> = {};
+  if (finiteIn(f.cost, 1, FLEET_MAX_COST)) out.cost = f.cost;
+  if (typeof f.costWithVat === 'boolean') out.costWithVat = f.costWithVat;
+  if (finiteIn(f.rentPerDay, 1, FLEET_MAX_RENT_PER_DAY)) out.rentPerDay = f.rentPerDay;
+  if (finiteIn(f.rentDays, 1, 31) && Number.isInteger(f.rentDays)) out.rentDays = f.rentDays;
+  if (finiteIn(f.startMonth, 0, 11) && Number.isInteger(f.startMonth)) out.startMonth = f.startMonth;
+  if (finiteIn(f.expensesPerMonth, 0, FLEET_MAX_EXPENSES)) out.expensesPerMonth = f.expensesPerMonth;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Проверка полей провайдера: модель может прислать что угодно, в понимание попадает только допустимое. */
 export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretContext, 'entities' | 'today'>): RawFields {
   const ids = new Set(ctx.entities.map((e) => e.id));
@@ -773,8 +800,12 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
   const w = raw.whatIf;
   let whatIf: WhatIfRequest | null = null;
   if (w && typeof w === 'object') {
-    if (w.kind === 'cars' && Number.isInteger(w.cars) && w.cars >= 1 && w.cars <= WHATIF_MAX_CARS) {
-      whatIf = { kind: 'cars', cars: w.cars };
+    if (
+      w.kind === 'cars' &&
+      (w.cars === null || (Number.isInteger(w.cars) && w.cars >= 1 && w.cars <= WHATIF_MAX_CARS))
+    ) {
+      const fleet = sanitizeFleet(w.fleet);
+      whatIf = fleet ? { kind: 'cars', cars: w.cars ?? null, fleet } : { kind: 'cars', cars: w.cars ?? null };
     } else if (
       w.kind === 'growth' &&
       Number.isFinite(w.percent) &&
@@ -1025,7 +1056,7 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
 
   // что именно изменится в сценарии: из этого вопроса или из прежнего, если реплика его продолжает
   const whatIfOut: WhatIfRequest | null =
-    scenario === 'whatif' ? (whatIfReq ?? (merge && prev?.whatIf ? prev.whatIf : null)) : null;
+    scenario === 'whatif' ? mergeWhatIf(whatIfReq, merge ? (prev?.whatIf ?? null) : null) : null;
 
   return {
     entities,
@@ -1040,6 +1071,20 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
     forecast,
     whatIf: whatIfOut,
   };
+}
+
+/**
+ * Что изменится в сценарии: из этого вопроса, дополненное прежним. «А если купим 10 машин» после
+ * ответа про машины берёт цену, сдачу и месяц из прежнего запроса, число машин из нового.
+ */
+export function mergeWhatIf(next: WhatIfRequest | null, prev: WhatIfRequest | null): WhatIfRequest | null {
+  if (!next) return prev;
+  if (next.kind === 'cars' && prev?.kind === 'cars') {
+    const fleet = { ...prev.fleet, ...next.fleet };
+    const cars = next.cars ?? prev.cars;
+    return Object.keys(fleet).length > 0 ? { kind: 'cars', cars, fleet } : { kind: 'cars', cars };
+  }
+  return next;
 }
 
 /** Текст в понимание правилами заглушки. Синхронная форма для тестов и заглушки. */

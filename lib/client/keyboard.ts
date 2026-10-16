@@ -2,7 +2,10 @@
  * Экранная клавиатура на телефоне. Следит за фокусом в текстовом поле и за размером вьюпорта и
  * выставляет на <html>:
  *  - data-kb="open", пока клавиатура видна (CSS прячет нижнюю панель вкладок);
- *  - --kb, высоту клавиатуры, которая перекрывает раскладочный вьюпорт.
+ *  - --kb, высоту клавиатуры, которая перекрывает раскладочный вьюпорт;
+ *  - --vv-top, на сколько Safari сдвинул видимую область вниз по странице (visualViewport.offsetTop),
+ *    пока клавиатура открыта. Оболочка встаёт ровно на видимую область: без поправки шапка уезжает
+ *    выше видимой части, и под часами и значками статус-бара видны сообщения чата.
  *
  * Два случая. Chrome на Android с interactive-widget=resizes-content сам уменьшает раскладочный
  * вьюпорт: fixed-элементы встают над клавиатурой, --kb равен 0, а раскладка на 100dvh сжимается.
@@ -48,8 +51,11 @@ export function watchKeyboard(): () => void {
     const next = focused && coarse.matches && (reduced > THRESHOLD || shrunk > THRESHOLD);
 
     root.style.setProperty('--kb', next ? `${covered}px` : '0px');
+    root.style.setProperty('--vv-top', next && vv && !zoomed ? `${Math.max(0, Math.round(vv.offsetTop))}px` : '0px');
     if (next) root.dataset.kb = 'open';
     else delete root.dataset.kb;
+    // страница сама не прокручивается: сдвиг окна при открытой клавиатуре возвращается на место
+    if (next && window.scrollY > 0) window.scrollTo(0, 0);
 
     // Событие и при каждом изменении, пока клавиатура открыта: список сообщений следует за вьюпортом
     if (next || open) window.dispatchEvent(new CustomEvent(KEYBOARD_EVENT, { detail: { open: next } }));
@@ -76,5 +82,6 @@ export function watchKeyboard(): () => void {
     vv?.removeEventListener('scroll', update);
     delete root.dataset.kb;
     root.style.removeProperty('--kb');
+    root.style.removeProperty('--vv-top');
   };
 }

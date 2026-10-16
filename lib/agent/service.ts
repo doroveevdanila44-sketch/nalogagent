@@ -8,6 +8,7 @@ import { agentState, chatMessages, llmUsage } from '@/lib/db/schema';
 import { lineFromSnapshots } from '@/lib/provenance/line';
 import { toSnapshot, type CalcSnapshot } from '@/lib/provenance/snapshot';
 import { getEnv } from '@/lib/env';
+import { fleetSubmitText } from './fleet-form';
 import { aliasesFor, runPipeline } from './pipeline';
 import type { LlmProvider } from './provider';
 import { getProvider } from './provider-factory';
@@ -16,6 +17,8 @@ import type {
   ChangeOptions,
   ChatTurn,
   EntityRef,
+  FleetForm,
+  FleetFormSubmit,
   Intent,
   Interpretation,
   Pending,
@@ -41,6 +44,8 @@ interface StoredCalc {
   entityId?: string | null;
   /** Карточка «Понял так» */
   understood?: Understanding | null;
+  /** Карточка с полями «Что если купим N машин» */
+  form?: FleetForm | null;
   /** Кнопки быстрых ответов */
   quick?: QuickReply[];
   /** Варианты по «Изменить» */
@@ -89,6 +94,7 @@ function toTurn(r: MessageRow): ChatTurn {
     quick: calc.quick ?? [],
     change: calc.change ?? null,
     provenance: calc.provenance ?? null,
+    form: calc.form ?? null,
   };
 }
 
@@ -112,13 +118,15 @@ export async function handleChat(
     provider?: LlmProvider;
     /** Ответ, к которому относится нажатая кнопка: его понимание вопроса продолжается */
     baseId?: number;
+    /** Карточка «Что если купим N машин» с заполненными полями: текст вопроса собирается из них */
+    form?: FleetFormSubmit;
   },
 ): Promise<{ user: ChatTurn; agent: ChatTurn }> {
   const started = Date.now();
   const nowMs = args.nowMs ?? started;
   const { appTz } = getEnv();
   const now = momentFromEpoch(nowMs, appTz);
-  const question = args.question.trim().slice(0, MAX_QUESTION);
+  let question = args.question.trim().slice(0, MAX_QUESTION);
   const provider = args.provider ?? getProvider();
   const nowDate = new Date(nowMs);
 
@@ -166,6 +174,9 @@ export async function handleChat(
     aliases: aliasesFor(e.name),
   }));
 
+  // карточка с полями: в ленте остаётся читаемая строка о том, что посчитано, а не пустое сообщение
+  if (args.form) question = fleetSubmitText(args.form, entities).slice(0, MAX_QUESTION);
+
   const [{ n: agentMessages }] = (await db.execute(
     sql`select count(*)::int as n from chat_messages where user_id = ${args.userId} and role = 'agent'`,
   )).rows as { n: number }[];
@@ -210,6 +221,7 @@ export async function handleChat(
         previous: lastCalc?.interp ?? null,
         awaiting: lastCalc?.awaiting ?? [],
         refine,
+        form: args.form ?? null,
         sessionActive,
         agentMessages: agentMessages ?? 0,
       });
@@ -263,6 +275,7 @@ export async function handleChat(
     interp: reply.interp ?? null,
     awaiting: reply.awaiting ?? [],
     unsupported: reply.unsupported ?? null,
+    form: reply.form ?? null,
     results,
     provenance,
   };

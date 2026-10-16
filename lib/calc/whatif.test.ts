@@ -8,10 +8,14 @@ import { dashboardInput, calcTax, verifyCalcResult, type CalcData, type CalcResu
 import { computeLive, computeStatic } from './dashboard';
 import { moment } from './time';
 import {
+  FLEET_DEFAULT_RENT_DAYS,
   WhatIfError,
   applyWhatIf,
   compareWhatIf,
+  fleetRevenuePerCar,
+  missingFleetFields,
   vatStartLabel,
+  type FleetInput,
   type WhatIfEntityRow,
   type WhatIfRequest,
   type WhatIfSpec,
@@ -33,6 +37,25 @@ beforeAll(async () => {
 afterAll(async () => close());
 
 const spec = (request: WhatIfRequest, entityIds: string[] | 'all'): WhatIfSpec => ({ request, entityIds });
+/** Парк из карточки: 3 млн с НДС, 8 000 ₽ в сутки × 20 дней = 160 000 ₽ в месяц на машину, с ноября. */
+const FLEET: FleetInput = {
+  cost: 3_000_000,
+  costWithVat: true,
+  rentPerDay: 8_000,
+  rentDays: 20,
+  startMonth: 10,
+  expensesPerMonth: 0,
+};
+const cars = (n: number, fleet: Partial<FleetInput> = {}): WhatIfRequest => ({
+  kind: 'cars',
+  cars: n,
+  fleet: { ...FLEET, ...fleet },
+});
+/** Выбранная ставка НДС юрлица в этом прогоне: подмена rate_choices на год сценария. */
+const withRate = (d: CalcData, id: string, rate: 5 | 7 | 22): CalcData => ({
+  ...d,
+  choices: { ...d.choices, [d.today.year]: { ...(d.choices[d.today.year] ?? {}), [id]: rate } },
+});
 const row = (rows: WhatIfEntityRow[], id: string) => rows.find((r) => r.entityId === id)!;
 const gte = (a: Dec | null, b: Dec | null) => {
   expect(a).not.toBeNull();
@@ -104,8 +127,8 @@ describe('рост выручки не уменьшает налог', () => {
     ['рост на 20% по Альфе', spec({ kind: 'growth', percent: 20 }, ['alfa'])],
     ['рост на 20% по Бете', spec({ kind: 'growth', percent: 20 }, ['beta'])],
     ['рост на 20% по Эпсилон', spec({ kind: 'growth', percent: 20 }, ['epsilon'])],
-    ['5 машин у Дельты', spec({ kind: 'cars', cars: 5 }, ['delta'])],
-    ['3 машины у Гаммы', spec({ kind: 'cars', cars: 3 }, ['gamma'])],
+    ['5 машин у Дельты', spec(cars(5), ['delta'])],
+    ['3 машины у Гаммы', spec(cars(3), ['gamma'])],
     ['рост на 3 млн у Дельты', spec({ kind: 'amount', amount: 3_000_000 }, ['delta'])],
   ];
   for (const [name, s] of cases) {
@@ -174,70 +197,313 @@ describe('рост на 20%: числа из тех же формул', () => {
 });
 
 describe('сценарий «машины»', () => {
-  it('добавочная выручка с ближайшего месяца: N × выручка на машину', () => {
-    const applied = applyWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['delta']));
+  it('добавочная выручка с выбранного месяца: N × цена сдачи в сутки × дни', () => {
+    const applied = applyWhatIf(data, spec(cars(5), ['delta']));
     const ch = applied.changes[0]!;
-    expect(ch.perCar!.toString()).toBe('130000');
-    expect(ch.perMonth!.toString()).toBe('650000');
-    // сегодня октябрь: ближайший месяц ноябрь (10), потом декабрь
+    // 8 000 ₽ в сутки × 20 дней = 160 000 ₽ на машину, × 5 машин = 800 000 ₽ в месяц
+    expect(ch.perCar!.toString()).toBe('160000');
+    expect(ch.perMonth!.toString()).toBe('800000');
     expect(applied.from).toBe(10);
     expect(ch.months).toEqual([10, 11]);
-    expect(ch.delta.toString()).toBe('1300000');
+    expect(ch.delta.toString()).toBe('1600000');
     const delta = applied.data.entities.find((e) => e.id === 'delta')!;
     const base = data.entities.find((e) => e.id === 'delta')!;
-    expect(delta.annualRevenue.minus(base.annualRevenue).toString()).toBe('1300000');
+    expect(delta.annualRevenue.minus(base.annualRevenue).toString()).toBe('1600000');
     // октябрь без изменений, у остальных юрлиц данные те же объекты
     expect(delta.whatIf!.parts[9]!.extra.isZero()).toBe(true);
     expect(applied.data.entities.find((e) => e.id === 'alfa')).toBe(data.entities.find((e) => e.id === 'alfa'));
   });
 
-  it('допущение выручки на машину названо в сравнении и в расчётах', () => {
-    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['delta']));
-    const text = c.assumptions.join(' ').replace(/[\u00a0\u202f]/g, ' ');
-    expect(text).toContain('130 000 ₽');
-    expect(text).toContain('5 × 130 000 ₽ = 650 000 ₽ в месяц');
+  it('месяц начала сдачи выбирает человек: с декабря добавка только в декабре', () => {
+    const ch = applyWhatIf(data, spec(cars(5, { startMonth: 11 }), ['alfa'])).changes[0]!;
+    expect(ch.months).toEqual([11]);
+    expect(ch.delta.toString()).toBe('800000');
+  });
+
+  it('выручка на машину не берётся из справочника юрлица', () => {
+    // у юрлица в справочнике 130 000 ₽, но считается цена сдачи из карточки
+    const delta = data.entities.find((e) => e.id === 'delta')!;
+    expect(delta.revenuePerCarMonthly!.toString()).toBe('130000');
+    const ch = applyWhatIf(data, spec(cars(1, { rentPerDay: 5_000, rentDays: 10 }), ['delta'])).changes[0]!;
+    expect(ch.perCar!.toString()).toBe('50000');
+  });
+
+  it('значения из карточки названы в допущениях сравнения и в расчётах', () => {
+    const c = compareWhatIf(data, spec(cars(5), ['delta']));
+    const text = c.assumptions.join(' ').replace(/[  ]/g, ' ');
+    expect(text).toContain('выручка на машину в месяц 160 000 ₽ с НДС = цена сдачи 8 000 ₽ в сутки × 20 дней');
+    expect(text).toContain('добавочная выручка 5 × 160 000 ₽ = 800 000 ₽ в месяц');
     expect(text).toContain('ноября по декабрь 2026');
+    expect(text).not.toContain('демо-значение');
     for (const r of c.scenario) expect(r.assumptions.join(' ')).toContain('выручка на машину');
     for (const r of c.base) expect(r.assumptions).toEqual([]);
     expect(c.scenario.every((r) => r.whatIf?.role === 'scenario')).toBe(true);
     expect(c.base.every((r) => r.whatIf?.role === 'base')).toBe(true);
   });
 
-  it('без выручки на машину в справочнике сценарий не считается', () => {
-    const noCar: CalcData = {
-      ...data,
-      entities: data.entities.map((e) => (e.id === 'beta' ? { ...e, revenuePerCarMonthly: null } : e)),
-    };
-    try {
-      applyWhatIf(noCar, spec({ kind: 'cars', cars: 2 }, ['beta']));
-      expect.unreachable();
-    } catch (e) {
-      expect(e).toBeInstanceOf(WhatIfError);
-      expect((e as WhatIfError).reason).toBe('no_car_revenue');
-      expect((e as WhatIfError).entityId).toBe('beta');
-    }
+  it('принятые значения одной строкой', () => {
+    const c = compareWhatIf(data, spec(cars(5), ['delta']));
+    expect(c.fleet!.lines.values.replace(/[  ]/g, ' ')).toBe(
+      '5 машин по 3 000 000 ₽ с НДС, сдача 8 000 ₽ в сутки × 20 дней = 160 000 ₽ в месяц на машину, с ноября',
+    );
+    const net = compareWhatIf(data, spec(cars(2, { costWithVat: false, expensesPerMonth: 15_000 }), ['delta']));
+    expect(net.fleet!.lines.values.replace(/[  ]/g, ' ')).toBe(
+      '2 машины по 3 000 000 ₽ без НДС, сдача 8 000 ₽ в сутки × 20 дней = 160 000 ₽ в месяц на машину, с ноября, расходы 15 000 ₽ в месяц на машину',
+    );
   });
 
   it('в декабре месяцев до конца года не остаётся: изменений нет', () => {
     const december = { ...data, today: moment(2026, 12, 5, 12, 0, 0) };
-    const c = compareWhatIf(december, spec({ kind: 'cars', cars: 5 }, ['alfa']));
+    const c = compareWhatIf(december, spec(cars(5), ['alfa']));
     expect(c.noChange).toBe(true);
     expect(c.months).toEqual([]);
   });
 
   it('числа вне границ отклоняются', () => {
     for (const bad of [0, -1, 1.5, 51]) {
-      expect(() => applyWhatIf(data, spec({ kind: 'cars', cars: bad }, ['alfa']))).toThrow(WhatIfError);
+      expect(() => applyWhatIf(data, spec(cars(bad), ['alfa']))).toThrow(WhatIfError);
+    }
+    const bads: Partial<FleetInput>[] = [
+      { cost: 0 },
+      { cost: -5 },
+      { rentPerDay: 0 },
+      { rentDays: 0 },
+      { rentDays: 32 },
+      { rentDays: 2.5 },
+      { expensesPerMonth: -1 },
+      // сдача не может начаться в идущем или прошедшем месяце
+      { startMonth: 9 },
+      { startMonth: 12 },
+    ];
+    for (const f of bads) {
+      expect(() => applyWhatIf(data, spec(cars(2, f), ['alfa'])), JSON.stringify(f)).toThrow(WhatIfError);
     }
     expect(() => applyWhatIf(data, spec({ kind: 'growth', percent: -95 }, 'all'))).toThrow(WhatIfError);
     expect(() => applyWhatIf(data, spec({ kind: 'growth', percent: 600 }, 'all'))).toThrow(WhatIfError);
-    expect(() => applyWhatIf(data, spec({ kind: 'cars', cars: 2 }, ['нет']))).toThrow();
+    expect(() => applyWhatIf(data, spec(cars(2), ['нет']))).toThrow();
+    // машины относятся к одному юрлицу
+    expect(() => applyWhatIf(data, spec(cars(2), ['alfa', 'beta']))).toThrow(WhatIfError);
+  });
+});
+
+describe('сценарий «машины» без обязательных полей не считается', () => {
+  const full = FLEET;
+  const required: (keyof FleetInput)[] = ['cost', 'costWithVat', 'rentPerDay', 'rentDays', 'startMonth'];
+  for (const field of required) {
+    it(`нет поля ${field}`, () => {
+      const fleet: Partial<FleetInput> = { ...full };
+      delete fleet[field];
+      const request: WhatIfRequest = { kind: 'cars', cars: 5, fleet };
+      expect(missingFleetFields(request as never)).toEqual([field]);
+      for (const run of [() => applyWhatIf(data, spec(request, ['delta'])), () => compareWhatIf(data, spec(request, ['delta']))]) {
+        try {
+          run();
+          expect.unreachable();
+        } catch (e) {
+          expect(e).toBeInstanceOf(WhatIfError);
+          expect((e as WhatIfError).reason).toBe('missing_fields');
+          expect((e as WhatIfError).fields).toEqual([field]);
+        }
+      }
+    });
+  }
+
+  it('нет ни числа машин, ни значений: названы все недостающие поля', () => {
+    const request: WhatIfRequest = { kind: 'cars', cars: null };
+    expect(missingFleetFields(request as never)).toEqual([
+      'cars',
+      'cost',
+      'costWithVat',
+      'rentPerDay',
+      'rentDays',
+      'startMonth',
+    ]);
+    expect(() => compareWhatIf(data, spec(request, ['delta']))).toThrow(WhatIfError);
+  });
+
+  it('расходы необязательны: без них сценарий считается', () => {
+    const fleet: Partial<FleetInput> = { ...FLEET };
+    delete fleet.expensesPerMonth;
+    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 2, fleet }, ['alfa']));
+    expect(c.noChange).toBe(false);
+    expect(c.fleet!.effect.expensesTotal.isZero()).toBe(true);
+  });
+
+  it('значение по умолчанию для дней сдачи 20', () => {
+    expect(FLEET_DEFAULT_RENT_DAYS).toBe(20);
+  });
+
+  it('выручка на машину в месяц это цена в сутки × дни', () => {
+    expect(fleetRevenuePerCar(8000, 20).toString()).toBe('160000');
+    expect(fleetRevenuePerCar('9500', 15).toString()).toBe('142500');
+  });
+});
+
+describe('входной НДС по машинам', () => {
+  // 5 машин по 3 млн с НДС: входной НДС 5 × 3 000 000 × 22 / 122
+  const inputVat = dec(15_000_000).times(22).div(122);
+  const extra = dec(800_000).times(2);
+
+  it('ставка 22% с вычетами: входной НДС уменьшает НДС к уплате', () => {
+    // Эпсилон на ОСНО: ставка 22% с вычетами, выбора нет
+    const c = compareWhatIf(data, spec(cars(5), ['epsilon']));
+    const e = row(c.rows, 'epsilon');
+    const p = data.entities.find((x) => x.id === 'epsilon')!.inputVatShare;
+    const grown = extra.times(22).div(122).times(dec(1).minus(p));
+    // НДС сценария = НДС «сейчас» + НДС с добавочной выручки − входной НДС по машинам
+    const want = e.vat.base!.plus(grown).minus(inputVat);
+    expect(e.vat.scenario!.minus(want).abs().lte('0.05')).toBe(true);
+    expect(e.vat.scenario!.lt(e.vat.base!)).toBe(true);
+    expect(c.fleet!.effect.deduction).toBe('applied');
+    expect(c.fleet!.effect.deducted.minus(inputVat).abs().lte('0.0001')).toBe(true);
+    expect(c.fleet!.lines.deduction.replace(/[  ]/g, ' ')).toContain(
+      'Входной НДС по машинам 2 704 918 ₽ (5 × 3 000 000 ₽ × 22 / 122) принят к вычету в ноябре',
+    );
+  });
+
+  it('вычет берётся в месяце начала сдачи и записан шагом формулы', () => {
+    const c = compareWhatIf(data, spec(cars(5), ['epsilon']));
+    const vat = c.scenario.find((r) => r.tax === 'vat')!;
+    const months = vat.entities.find((e) => e.entityId === 'epsilon')!.months;
+    const nov = months.find((m) => m.key === '2026-11')!;
+    const dec12 = months.find((m) => m.key === '2026-12')!;
+    const stepOf = (id: string | null) => vat.steps.find((s) => s.id === id)!;
+    expect(stepOf(nov.taxStep).text.replace(/[  ]/g, ' ')).toContain('входной НДС по машинам 2 704 918,03 ₽');
+    expect(stepOf(nov.taxStep).expression).toMatch(/ - 2704918\.03/);
+    expect(stepOf(dec12.taxStep).text).not.toContain('входной НДС по машинам');
+    expect(verifyCalcResult(vat)).toEqual([]);
+  });
+
+  it('стоимость без НДС: вычет 22% от стоимости', () => {
+    const c = compareWhatIf(data, spec(cars(5, { costWithVat: false }), ['epsilon']));
+    expect(c.fleet!.effect.inputVat.toString()).toBe(dec(15_000_000).times(22).div(100).toString());
+    expect(c.fleet!.lines.deduction.replace(/[  ]/g, ' ')).toContain('(5 × 3 000 000 ₽ × 22%)');
+  });
+
+  it('ставка 5%: вычета нет, НДС не зависит от стоимости машины', () => {
+    const cheap = compareWhatIf(data, spec(cars(5, { cost: 1_000_000 }), ['alfa']));
+    const dear = compareWhatIf(data, spec(cars(5, { cost: 9_000_000 }), ['alfa']));
+    const a = row(cheap.rows, 'alfa');
+    const b = row(dear.rows, 'alfa');
+    expect(a.vat.scenario!.toString()).toBe(b.vat.scenario!.toString());
+    // налог растёт ровно на 5 / 105 добавочной выручки
+    const grown = extra.times(5).div(105);
+    expect(a.vat.scenario!.minus(a.vat.base!).minus(grown).abs().lte('0.05')).toBe(true);
+    expect(cheap.fleet!.effect.deduction).toBe('low_rate');
+    expect(cheap.fleet!.effect.deducted.isZero()).toBe(true);
+    expect(cheap.fleet!.lines.deduction).toContain('Вычета входного НДС по машинам нет');
+    expect(cheap.fleet!.lines.deduction).toContain('ставка 5%');
+  });
+
+  it('ставка 7%: вычета нет', () => {
+    const c = compareWhatIf(withRate(data, 'beta', 7), spec(cars(5), ['beta']));
+    expect(c.fleet!.effect.deduction).toBe('low_rate');
+    const r = row(c.rows, 'beta');
+    const grown = extra.times(7).div(107);
+    expect(r.vat.scenario!.minus(r.vat.base!).minus(grown).abs().lte('0.05')).toBe(true);
+  });
+
+  it('освобождённое юрлицо: вычета нет, НДС за год не уменьшается', () => {
+    for (const id of ['delta', 'gamma']) {
+      const c = compareWhatIf(withRate(data, id, 22), spec(cars(5), [id]));
+      expect(c.fleet!.effect.deduction, id).toBe('exempt');
+      expect(c.fleet!.effect.deducted.isZero()).toBe(true);
+      expect(c.fleet!.lines.deduction).toContain('освобождение от НДС');
+      expect(row(c.rows, id).vat.scenario!.gte(row(c.rows, id).vat.base!), id).toBe(true);
+    }
+  });
+
+  it('плательщик УСН на ставке 22%, выбранной в справочнике: вычет есть', () => {
+    const c = compareWhatIf(withRate(data, 'alfa', 22), spec(cars(5), ['alfa']));
+    expect(c.fleet!.effect.deduction).toBe('applied');
+    const r = row(c.rows, 'alfa');
+    expect(r.vat.scenario!.lt(r.vat.base!.plus(extra.times(22).div(122)))).toBe(true);
+    for (const run of [...c.base, ...c.scenario]) expect(verifyCalcResult(run), run.taxName).toEqual([]);
+  });
+
+  it('вычет может увести НДС ниже нуля: это НДС к возмещению, формулы сходятся', () => {
+    const c = compareWhatIf(data, spec(cars(20, { cost: 9_000_000 }), ['epsilon']));
+    const r = row(c.rows, 'epsilon');
+    expect(r.vat.scenario!.isNegative()).toBe(true);
+    for (const run of [...c.base, ...c.scenario]) expect(verifyCalcResult(run), run.taxName).toEqual([]);
+  });
+});
+
+describe('расходы на машину и налог по режиму', () => {
+  it('УСН «доходы минус расходы»: расходы уменьшают налог', () => {
+    const none = compareWhatIf(data, spec(cars(5), ['beta']));
+    const spent = compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['beta']));
+    const a = row(none.rows, 'beta').incomeTax.scenario!;
+    const b = row(spent.rows, 'beta').incomeTax.scenario!;
+    // расходы 5 × 20 000 × 2 месяца = 200 000 ₽ при ставке 15%
+    expect(a.minus(b).minus(dec(200_000).times('0.15')).abs().lte('0.05')).toBe(true);
+    expect(spent.fleet!.effect.expensesTotal.toString()).toBe('200000');
+  });
+
+  it('ОСНО: расходы уменьшают налог на прибыль на 25% расходов', () => {
+    const none = compareWhatIf(data, spec(cars(5), ['epsilon']));
+    const spent = compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['epsilon']));
+    const a = row(none.rows, 'epsilon').incomeTax.scenario!;
+    const b = row(spent.rows, 'epsilon').incomeTax.scenario!;
+    expect(a.minus(b).minus(dec(200_000).times('0.25')).abs().lte('0.05')).toBe(true);
+  });
+
+  it('УСН «доходы»: расходы налог не меняют, ответ говорит об этом', () => {
+    const none = compareWhatIf(data, spec(cars(5), ['alfa']));
+    const spent = compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['alfa']));
+    expect(row(spent.rows, 'alfa').incomeTax.scenario!.toString()).toBe(row(none.rows, 'alfa').incomeTax.scenario!.toString());
+    expect(spent.fleet!.lines.expenses).toContain('налог по УСН «доходы» не уменьшают');
+  });
+
+  it('стоимость машины в расходы не включается: порядок списания не моделируется', () => {
+    const cheap = compareWhatIf(data, spec(cars(5, { cost: 1_000_000 }), ['beta']));
+    const dear = compareWhatIf(data, spec(cars(5, { cost: 9_000_000 }), ['beta']));
+    expect(row(cheap.rows, 'beta').incomeTax.scenario!.toString()).toBe(row(dear.rows, 'beta').incomeTax.scenario!.toString());
+    for (const id of ['beta', 'gamma', 'epsilon']) {
+      const c = compareWhatIf(data, spec(cars(5), [id]));
+      const t = c.fleet!.lines.notModeled!.replace(/[  ]/g, ' ');
+      expect(t, id).toContain('этот эффект не учтён, нужен бухгалтер');
+      expect(t, id).toContain('Стоимость машин 15 000 000 ₽');
+    }
+    // у УСН «доходы» стоимость машины налог не меняет: предупреждать не о чем
+    expect(compareWhatIf(data, spec(cars(5), ['alfa'])).fleet!.lines.notModeled).toBeNull();
+    expect(compareWhatIf(data, spec(cars(5), ['alfa'])).assumptions.join(' ')).not.toContain('нужен бухгалтер');
+    expect(compareWhatIf(data, spec(cars(5), ['beta'])).assumptions.join(' ')).toContain('нужен бухгалтер');
+  });
+});
+
+describe('окупаемость', () => {
+  it('стоимость машины / (выручка на машину в месяц − расходы): совпадает с ручным расчётом', () => {
+    // 3 000 000 / (8 000 × 20) = 18,75 месяца
+    const a = compareWhatIf(data, spec(cars(5), ['alfa'])).fleet!.effect;
+    expect(a.paybackMonths!.toString()).toBe('18.75');
+    // 3 000 000 / (160 000 − 20 000) = 21,428...
+    const b = compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['alfa'])).fleet!.effect;
+    expect(b.paybackMonths!.minus(dec(3_000_000).div(140_000)).abs().lte('0.000001')).toBe(true);
+    // не зависит от числа машин и юрлица
+    const c = compareWhatIf(data, spec(cars(1, { expensesPerMonth: 20_000 }), ['epsilon'])).fleet!.effect;
+    expect(c.paybackMonths!.toString()).toBe(b.paybackMonths!.toString());
+  });
+
+  it('текст: формула и результат с одним знаком', () => {
+    const c = compareWhatIf(data, spec(cars(5), ['alfa']));
+    expect(c.fleet!.lines.payback.replace(/[  ]/g, ' ')).toContain('Окупаемость: 3 000 000 ₽ / 160 000 ₽ = 18,8 мес.');
+    const e = compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['alfa']));
+    expect(e.fleet!.lines.payback.replace(/[  ]/g, ' ')).toContain(
+      'Окупаемость: 3 000 000 ₽ / (160 000 ₽ − 20 000 ₽) = 3 000 000 ₽ / 140 000 ₽ = 21,4 мес.',
+    );
+  });
+
+  it('расходы не меньше выручки: машина не окупается', () => {
+    const c = compareWhatIf(data, spec(cars(2, { expensesPerMonth: 160_000 }), ['alfa']));
+    expect(c.fleet!.effect.paybackMonths).toBeNull();
+    expect(c.fleet!.lines.payback).toContain('Машина не окупается');
   });
 });
 
 describe('порог освобождения: пересечение даёт НДС с правильного месяца', () => {
   it('сейчас Дельта пересекает порог 19 декабря, НДС с 1 января следующего года', () => {
-    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 1 }, ['delta']));
+    const c = compareWhatIf(data, spec(cars(1), ['delta']));
     const t = row(c.rows, 'delta').threshold!;
     expect(t.base.crossing).toEqual({ year: 2026, month: 11, day: 19 });
     expect(t.base.vatFrom).toEqual({ year: 2027, month: 0 });
@@ -273,7 +539,7 @@ describe('порог освобождения: пересечение даёт �
   });
 
   it('у Гаммы порог не пересекается ни до, ни после', () => {
-    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['gamma']));
+    const c = compareWhatIf(data, spec(cars(5), ['gamma']));
     const t = row(c.rows, 'gamma').threshold!;
     expect(t.base.crossing).toBeNull();
     expect(t.scenario.crossing).toBeNull();
@@ -292,14 +558,14 @@ describe('порог освобождения: пересечение даёт �
 
 describe('признаки единого бизнеса и доля лимита', () => {
   it('сумма выручки юрлиц на УСН и её доля от лимита ставки 5% по данным и по сценарию', () => {
-    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['alfa']));
+    const c = compareWhatIf(data, spec(cars(5), ['alfa']));
     const u = c.unified!;
     expect(u.signs).toBe('один бренд, один сайт, общий парк');
     expect(u.count).toBe(4);
     // Альфа 28,4 + Бета 22 + Дельта 20,9 + Гамма 6,4 = 77,7 млн
     expect(u.revenue.base!.toString()).toBe('77700000');
-    // 5 машин × 180 000 ₽ × два месяца (ноябрь, декабрь)
-    expect(u.revenue.scenario!.minus(u.revenue.base!).toString()).toBe('1800000');
+    // 5 машин × 160 000 ₽ × два месяца (ноябрь, декабрь)
+    expect(u.revenue.scenario!.minus(u.revenue.base!).toString()).toBe('1600000');
     expect(u.share.base!.times(100).toFixed(1)).toBe('28.5');
     expect(u.limit.toString()).toBe('272500000');
   });
@@ -312,7 +578,9 @@ describe('признаки единого бизнеса и доля лимит�
 
 describe('расчёты сценария объяснены шагами', () => {
   const specs: WhatIfSpec[] = [
-    spec({ kind: 'cars', cars: 5 }, ['alfa']),
+    spec(cars(5), ['alfa']),
+    spec(cars(5, { expensesPerMonth: 25_000 }), ['beta']),
+    spec(cars(5), ['epsilon']),
     spec({ kind: 'growth', percent: 20 }, 'all'),
     spec({ kind: 'growth', percent: -10 }, 'all'),
     spec({ kind: 'amount', amount: 3_000_000 }, ['delta']),
@@ -325,12 +593,12 @@ describe('расчёты сценария объяснены шагами', () =
   }
 
   it('шаг выручки месяца называет сценарий и содержит выражение для проверки', () => {
-    const c = compareWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['alfa']));
+    const c = compareWhatIf(data, spec(cars(5), ['alfa']));
     const vat = c.scenario.find((r) => r.tax === 'vat')!;
     const nov = vat.steps.find((s) => s.entityId === 'alfa' && s.month === '2026-11' && s.text.startsWith('по сценарию'))!;
     const text = nov.text.replace(/[\u00a0\u202f]/g, ' ');
-    expect(text).toContain('по сценарию: прогноз месяца 1 420 000 ₽ + добавочная выручка 900 000 ₽ = 2 320 000 ₽');
-    expect(nov.expression).toBe('1420000 * 1 + 900000');
+    expect(text).toContain('по сценарию: прогноз месяца 1 420 000 ₽ + добавочная выручка 800 000 ₽ = 2 220 000 ₽');
+    expect(nov.expression).toBe('1420000 * 1 + 800000');
     // октябрь по сценарию машин не меняется
     const oct = vat.steps.find((s) => s.entityId === 'alfa' && s.month === '2026-10' && s.text.startsWith('по сценарию'))!;
     expect(oct.text).toContain('без изменений');
@@ -346,7 +614,9 @@ describe('сценарий не меняет данные дашборда', () 
       computeLive(input, T, computeStatic(input, T)).ytdGroup.toString(),
     ]);
     compareWhatIf(data, spec({ kind: 'growth', percent: 20 }, 'all'));
-    compareWhatIf(data, spec({ kind: 'cars', cars: 5 }, ['delta']));
+    compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['delta']));
+    compareWhatIf(data, spec(cars(5, { expensesPerMonth: 20_000 }), ['epsilon']));
+    compareWhatIf(data, spec(cars(5), ['beta']));
     compareWhatIf(data, spec({ kind: 'amount', amount: 3_000_000 }, ['delta']));
     const input2 = dashboardInput(data);
     const after = JSON.stringify([

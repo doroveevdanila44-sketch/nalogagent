@@ -10,7 +10,8 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
-import type { ChatTurn } from '@/lib/agent/types';
+import { fleetSubmitText } from '@/lib/agent/fleet-form';
+import type { ChatTurn, FleetFormSubmit } from '@/lib/agent/types';
 import { api, ApiError } from '@/lib/client/api';
 import { ASK_EVENT } from '@/lib/client/ask';
 import { KEYBOARD_EVENT } from '@/lib/client/keyboard';
@@ -237,16 +238,20 @@ export function ChatView() {
   }, [fit]);
 
   const send = useCallback(
-    async (raw: string, baseId?: number) => {
+    async (raw: string, baseId?: number, form?: FleetFormSubmit) => {
       const text = raw.trim();
       if (!text || sending) return;
       setSendError(null);
-      // текст в поле ввода не трогаем, если сообщение ушло с кнопки
+      // текст в поле ввода не трогаем, если сообщение ушло с кнопки или из карточки
       if (baseId === undefined) setDraft('');
       setSending({ key: Date.now(), text });
       try {
         const res = await api<{ user: ChatTurn; agent: ChatTurn }>('/api/chat', {
-          body: baseId === undefined ? { message: text } : { message: text, baseId },
+          body: form
+            ? { form, baseId }
+            : baseId === undefined
+              ? { message: text }
+              : { message: text, baseId },
         });
         setTurns((prev) => [...(prev ?? []), res.user, res.agent]);
       } catch (e) {
@@ -300,6 +305,19 @@ export function ChatView() {
     if (had) fieldRef.current?.focus();
   };
 
+  /**
+   * Поля карточки «Что если купим N машин»: уходят в чат структурой, а не текстом. Пока ответ
+   * считается, в ленте стоит строка о том, что посчитать (сервер заменит её своей).
+   */
+  const submitForm = (values: FleetFormSubmit, baseId: number) => {
+    const names = turns?.find((t) => t.id === baseId)?.form?.entities ?? [];
+    const text = fleetSubmitText(
+      values,
+      names.map((e) => ({ id: e.id, name: e.label, aliases: [] })),
+    );
+    void send(text, baseId, values);
+  };
+
   const onFieldKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
     // На телефоне Enter переносит строку: отправляет только кнопка
@@ -314,7 +332,10 @@ export function ChatView() {
    * срабатывает как обычно, а клавиатура закрывается только жестом самой системы.
    */
   const onRootMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (isCoarse() && e.target !== fieldRef.current) e.preventDefault();
+    if (!isCoarse() || e.target === fieldRef.current) return;
+    // поля карточки с параметрами машин должны брать фокус: иначе в них нельзя печатать
+    if (e.target instanceof Element && e.target.closest('[data-form]')) return;
+    e.preventDefault();
   };
 
   const suggestionButton = (s: { text: string; whatIf?: boolean }, disabled = false) => (
@@ -361,8 +382,16 @@ export function ChatView() {
 
         {turns ? (
           <div className="chat" aria-live="polite">
-            {turns.map((t) => (
-              <Message key={t.id} turn={t} onPick={pickQuick} disabled={Boolean(sending)} />
+            {turns.map((t, i) => (
+              <Message
+                key={t.id}
+                turn={t}
+                onPick={pickQuick}
+                onSubmitForm={submitForm}
+                disabled={Boolean(sending)}
+                // вопрос с полями, на который уже ответили карточкой с ответом, остаётся для чтения
+                locked={Boolean(t.form) && turns.slice(i + 1).some((x) => x.role === 'agent' && x.form)}
+              />
             ))}
             {sending ? (
               <>
@@ -435,7 +464,7 @@ export function ChatView() {
               if (phone && phoneChoice === null) setPhoneChoice(false);
             }}
             onBlur={() => setKbOpen(false)}
-            placeholder="Например: какая ставка выгоднее?"
+            placeholder="Например: что если купим 5 машин по 3 млн"
             aria-label="Вопрос агенту"
             autoComplete="off"
             autoCorrect="off"

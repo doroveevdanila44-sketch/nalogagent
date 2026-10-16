@@ -1,7 +1,8 @@
 'use client';
 
 import { useId, useState, type MouseEvent, type PointerEvent } from 'react';
-import type { ChangeOptions, QuickReply, Understanding } from '@/lib/agent/types';
+import type { ChangeOptions, FleetForm, FleetFormSubmit, QuickReply, Understanding } from '@/lib/agent/types';
+import { FleetFormView } from './FleetFormView';
 import { QuickReplies } from './QuickReplies';
 
 const hold = (e: PointerEvent | MouseEvent) => e.preventDefault();
@@ -9,17 +10,23 @@ const hold = (e: PointerEvent | MouseEvent) => e.preventDefault();
 /**
  * Первая строка ответа: как агент понял вопрос. «Понял так: ООО «Альфа», НДС, февраль 2026 (факт)».
  * Под ней допущения, если они были, и кнопка «Изменить»: по нажатию варианты юрлица, налога
- * и периода. Выбор уходит в чат как короткий ответ и пересчитывает прежний вопрос.
+ * и периода. Выбор уходит в чат как короткий ответ и пересчитывает прежний вопрос. У сценария
+ * «купим N машин» «Изменить» снова открывает поля карточки с введёнными значениями.
  */
 export function Understood({
   card,
   change,
+  form,
   onPick,
+  onSubmitForm,
   disabled,
 }: {
   card: Understanding;
   change: ChangeOptions | null;
+  /** Сценарий «машины»: «Изменить» открывает поля с введёнными значениями вместо вариантов уточнения */
+  form?: FleetForm | null;
   onPick: (text: string) => void;
+  onSubmitForm?: (v: FleetFormSubmit) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -43,7 +50,7 @@ export function Understood({
           <span className="u-label">Понял так:</span> <b>{card.entity}</b>, <b>{card.tax}</b>,{' '}
           <b>{card.period}</b> <span className="u-kind">({card.kindLabel})</span>
         </p>
-        {change ? (
+        {change || form ? (
           <button
             type="button"
             className="u-edit"
@@ -59,7 +66,18 @@ export function Understood({
         ) : null}
       </div>
       {card.notes.length > 0 ? <p className="u-notes">{card.notes.join('. ')}.</p> : null}
-      {change ? (
+      {form && onSubmitForm ? (
+        <div id={panel} className="u-panel" hidden={!open}>
+          <FleetFormView
+            form={form}
+            disabled={disabled}
+            onSubmit={(v) => {
+              setOpen(false);
+              onSubmitForm(v);
+            }}
+          />
+        </div>
+      ) : change ? (
         <div id={panel} className="u-panel" hidden={!open}>
           <QuickReplies
             items={items}

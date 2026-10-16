@@ -98,6 +98,8 @@ export interface AgentReply {
   unsupported?: Unsupported['kind'] | null;
   /** Расчёты calcTax, из которых собран ответ: основа строки происхождения и действий */
   calcs?: { result: TaxCalc; scope: string[] | 'all'; comparison?: WhatIfSnapshot }[];
+  /** Карточка с полями «Что если купим N машин»: вопрос с недостающим или правка принятых значений */
+  form?: FleetForm | null;
 }
 
 export interface ChatTurn {
@@ -114,6 +116,58 @@ export interface ChatTurn {
   change: ChangeOptions | null;
   /** Происхождение цифр ответа; null, если в ответе нет расчёта */
   provenance: TurnProvenance | null;
+  /** Карточка с полями «Что если купим N машин»; null у остальных ответов */
+  form: FleetForm | null;
+}
+
+// ===== Карточка «Что если купим N машин» =====
+
+/** Значения полей карточки. Числа в рублях, как ввёл человек; `null`: не заполнено. */
+export interface FleetFormValues {
+  entityId: string | null;
+  cars: number | null;
+  cost: number | null;
+  /** Переключатель «с НДС / без НДС» */
+  costWithVat: boolean;
+  rentPerDay: number | null;
+  rentDays: number;
+  /** Первый месяц сдачи 0..11 */
+  startMonth: number;
+  /** Расходы на машину в месяц; null: не названы */
+  expenses: number | null;
+}
+
+/** Обязательные поля, которых агент не нашёл в вопросе. */
+export type FleetFormField = 'entity' | 'cars' | 'cost' | 'rent';
+
+export interface FleetForm {
+  /** ask: агент спрашивает недостающее; edit: «Изменить» под ответом, поля с введёнными значениями */
+  mode: 'ask' | 'edit';
+  values: FleetFormValues;
+  /** Не названо в вопросе: поле подсвечено, пока пустое, и без него «Рассчитать» не работает */
+  missing: FleetFormField[];
+  /** Стоимость названа в вопросе, а «с НДС» или «без НДС» нет: переключатель просит подтвердить */
+  confirmVat: boolean;
+  /** Юрлица для кнопок: Альфа, Бета, Дельта, Гамма, Эпсилон */
+  entities: { id: string; label: string }[];
+  /** Месяцы начала сдачи: со следующего за идущим до декабря */
+  months: { value: number; label: string }[];
+  /** Быстрые варианты цены, пока значение не названо: стоимость машины и цена сдачи в сутки */
+  quick: { cost: number[]; rent: number[] };
+  /** Сообщение над полями: что не так с введённым */
+  note: string | null;
+}
+
+/** Отправка карточки: все обязательные поля заполнены. Проверяется на сервере. */
+export interface FleetFormSubmit {
+  entityId: string;
+  cars: number;
+  cost: number;
+  costWithVat: boolean;
+  rentPerDay: number;
+  rentDays: number;
+  startMonth: number;
+  expenses: number | null;
 }
 
 /** Строка происхождения под ответом и число расчётов за ней (панель, Excel, проверка, передача). */

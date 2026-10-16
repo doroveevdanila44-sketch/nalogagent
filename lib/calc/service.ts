@@ -629,17 +629,29 @@ function calcVatMonths(run: Run, e: EntityInput, rate: number, drafts: EntityMon
       continue;
     }
     const g = yr.ctx.rules.generalRate;
-    const tax = taxFor(rate, d.revenue, e.inputVatShare, g);
     const deduction = rate === g;
     const p = e.inputVatShare;
+    // сценарий «машины»: входной НДС по купленным машинам вычитается в месяце начала сдачи. Только
+    // при ставке с вычетами; сценарий выставляет поле лишь тем, у кого вычет есть
+    const cars =
+      deduction && rm.year === run.today.year && rm.month - 1 >= run.today.month
+        ? e.whatIf?.parts[rm.month - 1]?.vatDeduct
+        : undefined;
+    const regular = taxFor(rate, d.revenue, e.inputVatShare, g);
+    const tax = cars ? regular.minus(cars) : regular;
     const head = `НДС ${rate}%: выручка ${moneyText(d.revenue)} × ${rate} / ${100 + rate}`;
+    const tail = `где ${numText(p)} это доля закупок с входным НДС`;
     d.tax = tax;
     d.taxStep = run.log.add({
       label,
-      text: deduction
-        ? `${head} × (1 - ${numText(p)}) = ${moneyText(tax)}, где ${numText(p)} это доля закупок с входным НДС`
-        : `${head} = ${moneyText(tax)}`,
-      expression: `${d.revenueStep!.id} * ${rate} / ${100 + rate}${deduction ? ` * (1 - ${lit(p)})` : ''}`,
+      text: cars
+        ? `${head} × (1 - ${numText(p)}) - входной НДС по машинам ${moneyText(cars)} = ${moneyText(tax)}, ${tail}`
+        : deduction
+          ? `${head} × (1 - ${numText(p)}) = ${moneyText(tax)}, ${tail}`
+          : `${head} = ${moneyText(tax)}`,
+      expression:
+        `${d.revenueStep!.id} * ${rate} / ${100 + rate}${deduction ? ` * (1 - ${lit(p)})` : ''}` +
+        (cars ? ` - ${lit(cars)}` : ''),
       result: tax,
       entityId: e.id,
       month: rm.key,
