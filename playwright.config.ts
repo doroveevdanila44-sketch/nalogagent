@@ -29,11 +29,12 @@ export default defineConfig({
   },
   // Системный Chrome: не требует отдельной загрузки браузера Playwright. Проект WebKit с iPhone
   // включается PW_WEBKIT=1 на машине, где Playwright поддерживает WebKit (на macOS 13 не поддерживает):
-  // он прогоняет тест оболочки (шапка и нижняя панель не двигаются при прокрутке) на движке Safari.
+  // он прогоняет тест оболочки (шапка и нижняя панель не двигаются при прокрутке) и тест экранной
+  // клавиатуры (поле ввода над клавиатурой, iPhone 390 на 844 и 375 на 667) на движке Safari.
   projects: [
     { name: 'chrome', use: { ...devices['Desktop Chrome'], channel: 'chrome' } },
     ...(process.env.PW_WEBKIT
-      ? [{ name: 'webkit-iphone', testMatch: /shell\.spec\.ts/, use: { ...devices['iPhone 14'] } }]
+      ? [{ name: 'webkit-iphone', testMatch: /(shell|keyboard)\.spec\.ts/, use: { ...devices['iPhone 14'] } }]
       : []),
   ],
   webServer: {

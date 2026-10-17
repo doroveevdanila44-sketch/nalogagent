@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
-import { watchKeyboard } from '@/lib/client/keyboard';
 import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
@@ -140,8 +139,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     };
   }, [sendLock]);
 
-  // Экранная клавиатура: на телефоне прячет нижнюю панель и поднимает поле ввода (lib/client/keyboard.ts)
-  useEffect(() => watchKeyboard(), []);
+  // Экранная клавиатура слушается из корневого layout (components/KeyboardViewport.tsx)
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {

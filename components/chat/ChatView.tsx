@@ -79,6 +79,11 @@ export function ChatView() {
   const [sending, setSending] = useState<Pending | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [kbOpen, setKbOpen] = useState(false);
+  // Клавиатура открыта по любому полю (в том числе в карточке сценария, не только в поле чата):
+  // «Подсказки» свёрнуты, чтобы освободить место, и возвращаются, когда клавиатура закрылась
+  const [kbAny, setKbAny] = useState(false);
+  // Человек нажал на ручку «Подсказки», пока клавиатура открыта: блок остаётся раскрытым до закрытия клавиатуры
+  const [kbPeek, setKbPeek] = useState(false);
   const [chipsOpen, setChipsOpen] = useState(true);
   // телефон: своё состояние, управляется только ручкой и выбором подсказки. Пока человек его не
   // трогал (null), в пустом чате панель открыта по умолчанию, в чате с историей свёрнута
@@ -152,7 +157,11 @@ export function ChatView() {
   useEffect(() => {
     const onKeyboard = (e: Event) => {
       const open = Boolean((e as CustomEvent<{ open: boolean }>).detail?.open);
-      if (!open) setKbOpen(false);
+      setKbAny(open);
+      if (!open) {
+        setKbOpen(false);
+        setKbPeek(false);
+      }
       else if (document.activeElement === fieldRef.current) setKbOpen(true);
     };
     window.addEventListener(KEYBOARD_EVENT, onKeyboard);
@@ -284,7 +293,7 @@ export function ChatView() {
 
   const empty = turns !== null && turns.length === 0 && !sending;
   const phoneOpen = phoneChoice ?? empty;
-  const suggestionsOpen = phone ? phoneOpen : chipsOpen;
+  const suggestionsOpen = (phone ? phoneOpen : chipsOpen) && (!kbAny || kbPeek);
 
   /** Кнопки под полем: если поле было в фокусе, оно остаётся в нём и клавиатура не закрывается */
   const down = (e: PointerEvent | MouseEvent) => {
@@ -428,7 +437,11 @@ export function ChatView() {
               aria-controls="chat-suggestions"
               onPointerDown={down}
               onMouseDown={down}
-              onClick={() => (phone ? setPhoneChoice(!phoneOpen) : setChipsOpen((v) => !v))}
+              onClick={() => {
+                if (kbAny) setKbPeek(true);
+                if (phone) setPhoneChoice(!phoneOpen);
+                else setChipsOpen((v) => !v);
+              }}
             >
               Подсказки
               <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">

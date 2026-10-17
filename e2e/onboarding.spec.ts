@@ -669,6 +669,9 @@ test('Клавиатура: фокус заперт в карточке, стр�
   await expect(next(page)).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(count(page)).toHaveText(`Шаг 2 из ${TOTAL}`);
+  // фокус переходит на основную кнопку нового шага, когда карточка поставлена на место: Enter раньше
+  // этого уходит в никуда (тест был нестабилен именно здесь)
+  await expect(next(page)).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(count(page)).toHaveText(`Шаг 3 из ${TOTAL}`);
 });

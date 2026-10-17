@@ -44,7 +44,10 @@ function reveal(el: HTMLElement): void {
   const c = box.getBoundingClientRect();
   const r = el.getBoundingClientRect();
   const composer = document.querySelector('.composer-wrap')?.getBoundingClientRect();
-  const bottom = composer ? Math.min(c.bottom, composer.top) : c.bottom;
+  let bottom = composer ? Math.min(c.bottom, composer.top) : c.bottom;
+  // «Рассчитать» прижата к низу списка (sticky) и закрывает его нижнюю часть: поле должно быть над ней
+  const bar = el.closest('[data-form]')?.querySelector('.ff-bar')?.getBoundingClientRect();
+  if (bar && bar.top < bottom) bottom = Math.max(c.top, bar.top);
   if (r.top >= c.top + 8 && r.bottom <= bottom - 8) return;
   const top = box.scrollTop + (r.top - c.top) - (bottom - c.top - r.height) / 2;
   box.scrollTo({ top: Math.max(0, top) });
@@ -432,7 +435,8 @@ export function FleetFormView({
       {locked ? (
         <p className="ff-hint">Карточка уже отправлена: актуальные значения в сообщении ниже.</p>
       ) : (
-        <>
+        // прижата к низу видимой области (sticky): при открытой клавиатуре «Рассчитать» не уходит под неё
+        <div className="ff-bar">
           {!ready ? (
             <p className="ff-left" data-testid="ff-left">
               Не заполнено: {left.join(', ')}
@@ -441,7 +445,7 @@ export function FleetFormView({
           <button type="button" className="act ff-go" disabled={!ready || off} onClick={submit}>
             Рассчитать
           </button>
-        </>
+        </div>
       )}
     </div>
   );

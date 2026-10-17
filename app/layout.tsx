@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Onest } from 'next/font/google';
+import { KeyboardViewport } from '@/components/KeyboardViewport';
 import { THEME } from '@/lib/theme';
 import './globals.css';
 
@@ -38,8 +39,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  // Экранная клавиатура уменьшает раскладочный вьюпорт (Chrome на Android): поле ввода и 100dvh
-  // оказываются прямо над ней. Для Safari на iOS то же делает lib/client/keyboard.ts.
+  // Экранная клавиатура уменьшает раскладочный вьюпорт только у Chrome на Android. Safari на iOS и
+  // установленное на экран приложение этого не умеют: у них уменьшается лишь visualViewport, и высоту
+  // оболочки задаёт --vvh (lib/client/keyboard.ts), а не 100vh или 100dvh.
   interactiveWidget: 'resizes-content',
   themeColor: THEME.app,
   colorScheme: 'light',
@@ -48,7 +50,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className={onest.variable}>
-      <body>{children}</body>
+      <body>
+        <KeyboardViewport />
+        {children}
+      </body>
     </html>
   );
 }

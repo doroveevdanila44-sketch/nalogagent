@@ -359,6 +359,9 @@ test('Телефон 390: подсказки не раскрываются ни 
   expect(geo.lastBottom).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
 
+  // через 150 и 350 мс после фокуса чат сам встаёт на последнее сообщение (клавиатура выезжает анимацией);
+  // жест листания начинается после этого, иначе возврат вниз перебил бы его
+  await page.waitForTimeout(450);
   // список листается жестом, пока клавиатура открыта: страница на месте, поле в фокусе, подсказки свёрнуты
   const atBottom = await scrollState();
   expect(atBottom.max).toBeGreaterThan(200);
