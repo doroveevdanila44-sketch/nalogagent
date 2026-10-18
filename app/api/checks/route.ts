@@ -8,7 +8,7 @@ import { listChecks, setCheck } from '@/lib/provenance/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const Subject = z.string().min(1).max(500);
+const Subject = z.string().min(1).max(500).refine((s) => !s.includes('\u0000'));
 
 const Body = z.object({
   subject: Subject,

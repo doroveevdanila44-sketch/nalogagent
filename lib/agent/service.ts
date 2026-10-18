@@ -109,6 +109,23 @@ export async function loadHistory(db: Db, userId: string): Promise<ChatTurn[]> {
   return rows.reverse().map(toTurn);
 }
 
+/**
+ * Очистка чата: стираются все сообщения пользователя (вопросы, ответы, снимки расчётов в них) и
+ * отметка последней активности, поэтому следующий вопрос начинает новую сессию без прежнего
+ * контекста. Чужие сообщения не затрагиваются. Документы, запросы на проверку и отметки «сверил»
+ * хранят свои снимки и остаются как были. Возвращает число стёртых сообщений.
+ */
+export async function clearHistory(db: Db, userId: string): Promise<number> {
+  return db.transaction(async (tx) => {
+    const gone = await tx
+      .delete(chatMessages)
+      .where(eq(chatMessages.userId, userId))
+      .returning({ id: chatMessages.id });
+    await tx.update(agentState).set({ lastActive: null }).where(eq(agentState.userId, userId));
+    return gone.length;
+  });
+}
+
 export async function handleChat(
   db: Db,
   args: {
@@ -126,7 +143,8 @@ export async function handleChat(
   const nowMs = args.nowMs ?? started;
   const { appTz } = getEnv();
   const now = momentFromEpoch(nowMs, appTz);
-  let question = args.question.trim().slice(0, MAX_QUESTION);
+  // NUL Postgres в текст не принимает; через API такой текст отклоняется раньше, здесь страховка
+  let question = args.question.replace(/\u0000/g, '').trim().slice(0, MAX_QUESTION);
   const provider = args.provider ?? getProvider();
   const nowDate = new Date(nowMs);
 

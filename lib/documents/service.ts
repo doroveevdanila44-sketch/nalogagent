@@ -26,6 +26,7 @@ import {
   type EntityData,
 } from './fill';
 import { documentFileName, mimeOf } from './file-name';
+import { isUuid, isVersionNumber } from './ids';
 import { buildDeclarationXlsx, buildDocx } from './files';
 import { renderBlocks } from './render';
 import {
@@ -192,7 +193,7 @@ async function event(
 }
 
 async function ownDocument(db: Db, userId: string, id: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new DocError(404, 'not_found', 'Документ не найден');
+  if (!isUuid(id)) throw new DocError(404, 'not_found', 'Документ не найден');
   const [doc] = await db
     .select()
     .from(documents)
@@ -253,6 +254,7 @@ export async function restoreDocuments(
 ): Promise<string[]> {
   const ids = [...new Set(args.ids)];
   if (ids.length === 0) return [];
+  if (!ids.every(isUuid)) throw new DocError(404, 'not_found', 'Документ не найден');
   const cutoff = new Date(args.nowMs - RESTORE_WINDOW_MS);
   const back = await db
     .update(documents)
@@ -272,6 +274,7 @@ export async function restoreDocuments(
 }
 
 async function versionRow(db: Db, documentId: string, n: number) {
+  if (!isVersionNumber(n)) throw new DocError(404, 'version', 'Версия не найдена');
   const [v] = await db
     .select()
     .from(documentVersions)

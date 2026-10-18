@@ -42,7 +42,7 @@ export const MessageTargetSchema = z.object({
 /** Расчёт, сохранённый в версии документа: панель и проверка показывают те же снимки, что в документе. */
 export const DocumentTargetSchema = z.object({
   document: z.string().uuid(),
-  version: z.number().int().positive().optional(),
+  version: z.number().int().min(1).max(2_147_483_647).optional(),
 });
 
 export const TargetSchema = z.union([QueriesTargetSchema, MessageTargetSchema, DocumentTargetSchema]);

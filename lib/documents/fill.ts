@@ -86,11 +86,20 @@ export class FieldError extends Error {
 }
 
 /**
+ * Символы, которых нет в XML 1.0 (управляющие кроме табуляции и переносов, U+FFFE, U+FFFF, одиночные
+ * половинки суррогатной пары), и NUL, который не принимает Postgres. Они попадают в текст при вставке из
+ * PDF и чужих программ; с ними .docx получался бы повреждённым, а запись версии падала. Убираются при вводе.
+ */
+const XML_INVALID = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+export const cleanText = (raw: string): string => raw.replace(XML_INVALID, '');
+
+/**
  * Приводит введённое вручную значение к виду поля. Деньги и числа принимаются с запятой и
  * пробелами, дата строго ГГГГ-ММ-ДД. Пустая строка означает «нет значения».
  */
 export function normalizeInput(f: TemplateField, raw: string): string | null {
-  const text = raw.replace(/\r\n/g, '\n').trim();
+  const text = cleanText(raw).replace(/\r\n/g, '\n').trim();
   if (text === '') return null;
   switch (f.type) {
     case 'money': {

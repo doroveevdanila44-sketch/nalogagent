@@ -483,6 +483,35 @@
     opacity: 0.55;
     cursor: default;
   }
+  /* Страницы ошибок: «Страница не найдена» и «Что-то пошло не так» */
+  .err-screen {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    text-align: center;
+    background: var(--color-page);
+  }
+  .err-screen.err-inline {
+    min-height: 60dvh;
+    background: transparent;
+  }
+  .err-screen p {
+    max-width: 32ch;
+    color: var(--color-muted);
+  }
+  .err-acts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .err-acts .btn {
+    text-decoration: none;
+  }
   .btn-ghost {
     background: transparent;
     color: var(--color-ink);
@@ -2173,6 +2202,37 @@
     line-height: 1;
   }
   .sug-handle:focus-visible {
+    outline-offset: -2px;
+  }
+  /* Ряд с ручкой «Подсказки» по центру и кнопкой «Очистить» у правого края. Кнопка поверх ряда и
+     выше его на 4 px: область нажатия 36 px при высоте ручки 28 px. */
+  .sug-row {
+    position: relative;
+  }
+  .chat-clear {
+    position: absolute;
+    top: -4px;
+    right: 8px;
+    height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--color-wine);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  @media (hover: hover) {
+    .chat-clear:hover:not(:disabled) {
+      background: var(--color-mint);
+    }
+  }
+  .chat-clear:disabled {
+    opacity: 0.55;
+  }
+  .chat-clear:focus-visible {
     outline-offset: -2px;
   }
   .sug-chev {

@@ -4,12 +4,13 @@ import { readJson } from '@/lib/auth/request';
 import { json } from '@/lib/auth/server';
 import { getDb } from '@/lib/db/client';
 import { docRoute } from '@/lib/documents/http';
+import { isUuid } from '@/lib/documents/ids';
 import { deleteDocuments } from '@/lib/documents/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const Body = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(50) });
+const Body = z.object({ ids: z.array(z.string().refine(isUuid)).min(1).max(50) });
 
 /**
  * Удалить черновики (один или выбранные в списке). Мягкое удаление: сутки их можно вернуть

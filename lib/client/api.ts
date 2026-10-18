@@ -25,7 +25,7 @@ export const UNLOCKED_EVENT = 'pva:unlocked';
 
 export async function api<T = Record<string, unknown>>(
   path: string,
-  opts: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown; signal?: AbortSignal } = {},
+  opts: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? 'GET' : 'POST');
   const headers: Record<string, string> = {};

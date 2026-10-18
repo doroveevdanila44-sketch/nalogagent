@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { BodyError, readJson } from '@/lib/auth/request';
 import { failure, json, requireApiAuth } from '@/lib/auth/server';
-import { handleChat, loadHistory } from '@/lib/agent/service';
+import { clearHistory, handleChat, loadHistory } from '@/lib/agent/service';
 import { FLEET_MAX_COST, FLEET_MAX_EXPENSES, FLEET_MAX_RENT_PER_DAY, WHATIF_MAX_CARS } from '@/lib/calc';
 import { getDb } from '@/lib/db/client';
 
@@ -57,5 +57,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (e) {
     if (e instanceof BodyError) return json({ error: 'Введите вопрос', code: 'invalid' }, 400);
     return failure('chat', e);
+  }
+}
+
+/** Очистить чат: стирает всю историю пользователя. Нужен вход, Origin и CSRF-токен, как у любого изменения. */
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  try {
+    const gate = await requireApiAuth(req, { mutating: true });
+    if (!gate.ok) return gate.res;
+    const deleted = await clearHistory(getDb(), gate.auth.userId);
+    return json({ deleted });
+  } catch (e) {
+    return failure('chat/clear', e);
   }
 }

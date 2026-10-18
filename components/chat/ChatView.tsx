@@ -17,6 +17,7 @@ import { ASK_EVENT } from '@/lib/client/ask';
 import { KEYBOARD_EVENT } from '@/lib/client/keyboard';
 import { useMediaQuery } from '@/lib/client/media';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
+import { ClearChat } from './ClearChat';
 import { Message } from './Message';
 
 /**
@@ -78,6 +79,7 @@ export function ChatView() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState<Pending | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
   const [kbOpen, setKbOpen] = useState(false);
   // Клавиатура открыта по любому полю (в том числе в карточке сценария, не только в поле чата):
   // «Подсказки» свёрнуты, чтобы освободить место, и возвращаются, когда клавиатура закрылась
@@ -429,25 +431,41 @@ export function ChatView() {
       <div className="composer-wrap">
         {turns !== null && (!empty || phone) ? (
           <>
-            <button
-              type="button"
-              className="sug-handle"
-              data-tour="suggestions-handle"
-              aria-expanded={suggestionsOpen}
-              aria-controls="chat-suggestions"
-              onPointerDown={down}
-              onMouseDown={down}
-              onClick={() => {
-                if (kbAny) setKbPeek(true);
-                if (phone) setPhoneChoice(!phoneOpen);
-                else setChipsOpen((v) => !v);
-              }}
-            >
-              Подсказки
-              <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m7 10 5 5 5-5" />
-              </svg>
-            </button>
+            <div className="sug-row">
+              <button
+                type="button"
+                className="sug-handle"
+                data-tour="suggestions-handle"
+                aria-expanded={suggestionsOpen}
+                aria-controls="chat-suggestions"
+                onPointerDown={down}
+                onMouseDown={down}
+                onClick={() => {
+                  if (kbAny) setKbPeek(true);
+                  if (phone) setPhoneChoice(!phoneOpen);
+                  else setChipsOpen((v) => !v);
+                }}
+              >
+                Подсказки
+                <svg className="sug-chev" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m7 10 5 5 5-5" />
+                </svg>
+              </button>
+              {turns.length > 0 ? (
+                <button
+                  type="button"
+                  className="chat-clear"
+                  data-testid="chat-clear"
+                  aria-label="Очистить чат"
+                  disabled={Boolean(sending)}
+                  onPointerDown={down}
+                  onMouseDown={down}
+                  onClick={() => setClearOpen(true)}
+                >
+                  Очистить
+                </button>
+              ) : null}
+            </div>
             <div id="chat-suggestions" className="sug-panel" data-open={suggestionsOpen}>
               <div inert={!suggestionsOpen}>
                 <div className="sug" data-tour="suggestions">
@@ -497,6 +515,18 @@ export function ChatView() {
           </button>
         </div>
       </div>
+      {clearOpen ? (
+        <ClearChat
+          onClose={() => setClearOpen(false)}
+          onCleared={() => {
+            setClearOpen(false);
+            setTurns([]);
+            setSendError(null);
+            // в пустом чате панель подсказок снова открыта по умолчанию
+            setPhoneChoice(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

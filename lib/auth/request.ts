@@ -29,6 +29,20 @@ export function clientIp(headers: Headers): string | null {
 
 export class BodyError extends Error {}
 
+/**
+ * Символ NUL (U+0000) Postgres в текст не принимает: запись падала бы ошибкой базы, то есть 500. Он
+ * бывает в тексте, вставленном из чужих программ, и в запросах, собранных вручную. Строка с ним
+ * отклоняется ещё при разборе тела.
+ */
+export function containsNul(value: unknown): boolean {
+  if (typeof value === 'string') return value.includes('\u0000');
+  if (Array.isArray(value)) return value.some(containsNul);
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).some(([k, v]) => k.includes('\u0000') || containsNul(v));
+  }
+  return false;
+}
+
 const MAX_BODY_BYTES = 16 * 1024;
 
 /**
@@ -46,6 +60,7 @@ export async function readJson<T extends z.ZodType>(req: Request, schema: T): Pr
   } catch {
     throw new BodyError('json');
   }
+  if (containsNul(raw)) throw new BodyError('nul');
   const parsed = schema.safeParse(raw);
   if (!parsed.success) throw new BodyError('shape');
   return parsed.data;

@@ -4,6 +4,7 @@ import { readJson } from '@/lib/auth/request';
 import { json } from '@/lib/auth/server';
 import { getDb } from '@/lib/db/client';
 import { docRoute, type IdContext } from '@/lib/documents/http';
+import { MAX_VERSION } from '@/lib/documents/ids';
 import { saveVersion } from '@/lib/documents/service';
 import { getEnv } from '@/lib/env';
 
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 const Body = z.object({
   /** Версия, на которой сделаны правки: должна быть нынешней */
-  baseVersion: z.number().int().positive(),
+  baseVersion: z.number().int().min(1).max(MAX_VERSION),
   values: z.record(z.string().max(64), z.string().max(2100)).default({}),
   /** Пересчитать суммы по актуальным данным и реквизитам */
   refreshCalc: z.boolean().optional(),
