@@ -51,9 +51,9 @@ beforeAll(async () => {
 });
 afterAll(async () => close());
 
-async function fetchDashboard(): Promise<DashboardPayload> {
+async function fetchDashboard(nowMs: number = NOW): Promise<DashboardPayload> {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(NOW));
+  vi.setSystemTime(new Date(nowMs));
   try {
     const res = await GET(new NextRequest('http://localhost/api/dashboard'));
     expect(res.status).toBe(200);
@@ -68,8 +68,8 @@ function groupOf(r: CalcResult, id: string) {
 }
 
 describe('/api/dashboard и расчётный сервис дают одни и те же цифры', () => {
-  async function compare(label: string) {
-    const payload = await fetchDashboard();
+  async function compare(label: string, nowMs: number = NOW) {
+    const payload = await fetchDashboard(nowMs);
     const input = fromPayload(payload);
     const now = momentFromEpoch(payload.serverNow, payload.tz);
     const stat = computeStatic(input, now);
@@ -140,6 +140,31 @@ describe('/api/dashboard и расчётный сервис дают одни и
     await saveRateChoice(db, { entityId: 'beta', year: 2026, rate: 7, userId });
     const { payload } = await compare('после выбора');
     expect(payload.selections).toMatchObject({ alfa: 22, beta: 7 });
+  });
+
+  // те же сверки на других датах: срок платежа прошёл, факта за прошедшие месяцы нет, декабрь
+  for (const [label, nowMs] of [
+    ['14 октября', Date.UTC(2026, 9, 14, 0)],
+    ['29 октября, после срока 28 октября', Date.UTC(2026, 9, 29, 0)],
+    ['20 декабря, порог уже пройден', Date.UTC(2026, 11, 20, 0)],
+  ] as const) {
+    it(`${label}: цифры дашборда, чата и графика совпадают`, async () => {
+      await compare(label, nowMs);
+    });
+  }
+
+  it('5 января 2027: правил на 2027 год нет, дашборд отвечает 503 с понятным кодом, а не пустым экраном', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2027, 0, 5, 0)));
+    try {
+      const res = await GET(new NextRequest('http://localhost/api/dashboard'));
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { code: string; error: string };
+      expect(body.code).toBe('rules_missing');
+      expect(body.error).toContain('Нет правил НДС на текущий год');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

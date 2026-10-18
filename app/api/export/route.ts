@@ -6,6 +6,7 @@ import { contentDisposition } from '@/lib/documents/file-name';
 import { getEnv } from '@/lib/env';
 import { QueriesTargetSchema } from '@/lib/provenance/schemas';
 import { excelFor, resolveTarget, reviewExcel, TargetError } from '@/lib/provenance/server';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const snaps = await resolveTarget(db, {
       userId: gate.auth.userId,
       target,
-      nowMs: Date.now(),
+      nowMs: appNow(),
       tz: getEnv().appTz,
     });
     const out = await excelFor(snaps);

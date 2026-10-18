@@ -182,7 +182,7 @@ export function GroupSummary({ moment, input, live, stat, lines, breakdown, year
       .map((e) => ({ e, n: stat.perEntity[e.id]!.incomeTax.next }))
       .filter((x) => x.n)
       .slice(0, 3)
-      .map((x) => `${x.e.name.replace(/ООО |«|»/g, '')} ${dateRu(x.n!.due)}, ${rub(x.n!.amount)}`)
+      .map((x) => `${x.e.name.replace(/ООО |«|»/g, '')} ${x.n!.due.year === moment.year ? dateRu(x.n!.due) : `${dateRu(x.n!.due)} ${x.n!.due.year}`}, ${rub(x.n!.amount)}`)
       .join('; ') +
     '.';
 

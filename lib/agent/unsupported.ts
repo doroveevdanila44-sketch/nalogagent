@@ -101,5 +101,7 @@ export function explainUnsupported(u: Unsupported, ctx: ExplainContext): string[
     }
     case 'legal_assessment':
       return [];
+    case 'bad_value':
+      return [u.message];
   }
 }

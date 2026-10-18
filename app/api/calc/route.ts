@@ -5,6 +5,7 @@ import { getDb } from '@/lib/db/client';
 import { getEnv } from '@/lib/env';
 import { TargetSchema } from '@/lib/provenance/schemas';
 import { resolveTarget, TargetError } from '@/lib/provenance/server';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const items = await resolveTarget(getDb(), {
       userId: gate.auth.userId,
       target,
-      nowMs: Date.now(),
+      nowMs: appNow(),
       tz: getEnv().appTz,
     });
     return json({ items });

@@ -235,7 +235,13 @@ export function limitLine(rows: WhatIfRowSnapshot[]): string | null {
   if (list.length === 0) return null;
   const limit = mln(dec(list[0]!.limit5!.limit), 1);
   const parts = list.map((r) => `${shortName(r.name)} ${pct(dec(r.limit5!.base), 1)} → ${pct(dec(r.limit5!.scenario), 1)}`);
-  return `Доля лимита ставки 5% (${limit}) по выручке года: ${parts.join(', ')}.`;
+  // выше лимита ставка 5% недоступна: расчёт по ней условный, что будет дальше, решает бухгалтер
+  const over = list.filter((r) => dec(r.limit5!.scenario).gt(1));
+  const tail =
+    over.length > 0
+      ? ` ${over.map((r) => shortName(r.name)).join(', ')}: выручка выше лимита, ставка 5% при ней недоступна, расчёт по ней условный, нужен бухгалтер.`
+      : '';
+  return `Доля лимита ставки 5% (${limit}) по выручке года: ${parts.join(', ')}.${tail}`;
 }
 
 /** Флаг «Признаки единого бизнеса»: сумма выручки юрлиц на УСН и доля от лимита. */
@@ -245,7 +251,8 @@ export function unifiedLine(w: WhatIfSnapshot): string | null {
   return (
     `Признаки единого бизнеса: ${u.signs}. Выручка юрлиц на УСН за год в сумме ${money(u.revenue.base)} → ` +
     `${money(u.revenue.scenario)}, это ${pct(dec(u.share.base), 1)} → ${pct(dec(u.share.scenario), 1)} ` +
-    `от лимита ставки 5% (${mln(dec(u.limit), 1)}).`
+    `от лимита ставки 5% (${mln(dec(u.limit), 1)}).` +
+    (dec(u.share.scenario).gt(1) ? ' Выше лимита: при объединении выручки ставка 5% была бы недоступна, нужен бухгалтер.' : '')
   );
 }
 

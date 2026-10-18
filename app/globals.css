@@ -1974,6 +1974,115 @@
     font-size: 13px;
     color: var(--color-muted);
   }
+  /* Переключатель «Все машины одинаковые»: область нажатия 44 px, как у полей */
+  .ff-switch {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-ink);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+  }
+  .ff-switch:disabled {
+    opacity: 0.6;
+  }
+  .ff-switch:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 999px;
+  }
+  .ff-switch-track {
+    position: relative;
+    flex: none;
+    width: 40px;
+    height: 24px;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    background: var(--color-page);
+  }
+  .ff-switch[aria-checked='true'] .ff-switch-track {
+    background: var(--color-wine);
+    border-color: var(--color-wine);
+  }
+  .ff-switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-ink);
+  }
+  .ff-switch[aria-checked='true'] .ff-switch-knob {
+    left: 18px;
+    background: var(--color-cream);
+  }
+  /* Строки «Машина N»: у каждой своя стоимость и цена сдачи */
+  .ff-units {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ff-unit {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px 10px;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+  }
+  .ff-unit[data-active='true'] {
+    border-color: var(--color-ink);
+  }
+  /* В строке машины два поля поровну: подпись «Сдача, ₽ в сутки» не переносится, поля стоят на одной линии */
+  .ff-unit .ff-pair {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+  }
+  .ff-unit-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .ff-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .ff-quick {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ff-quick-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  /* Мягкие предупреждения: считать можно, но значение стоит проверить */
+  .ff-warn {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 8px 10px;
+    list-style: none;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-amber) 35%, var(--color-page));
+    border: 1px solid var(--color-amber-line);
+    border-radius: 10px;
+  }
   .ff-seg {
     display: inline-flex;
     align-self: flex-start;

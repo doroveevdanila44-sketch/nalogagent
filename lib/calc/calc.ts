@@ -56,23 +56,20 @@ export function ytd(e: EntityInput, ctx: CalcCtx, now: Moment): Dec {
 
 /**
  * Дата, когда накопленная выручка освобождённого юрлица достигает порога.
- * Накопление считается на конец дня. Налог начинается с первого числа следующего месяца.
+ * Накопление считается на конец дня с 1 января, поэтому дата не зависит от того, какой день сегодня:
+ * после пересечения она остаётся прежней, а не сдвигается на сегодняшнее число (иначе месяц начала
+ * НДС уезжал бы вперёд с каждым новым днём). Налог начинается с первого числа следующего месяца.
  * null: плательщик или порог в этом году не будет достигнут.
  */
 export function crossing(e: EntityInput, ctx: CalcCtx, now: Moment): CalendarDay | null {
   if (e.status === 'payer') return null;
   const limit = ctx.rules.vatExemptLimit;
+  const perDay: Dec[] = [];
+  for (let m = 0; m < 12; m++) perDay.push(monthAmount(e, ctx, m, now).div(daysInMonth(now.year, m)));
   let cum = ZERO;
-  for (let i = 0; i < now.month; i++) cum = cum.plus(monthAmount(e, ctx, i, now));
-  cum = cum.plus(
-    monthAmount(e, ctx, now.month, now).times(now.day).div(daysInMonth(now.year, now.month)),
-  );
-  const today: CalendarDay = { year: now.year, month: now.month, day: now.day };
-  if (cum.gte(limit)) return today;
-
-  let day = addDay(today);
+  let day: CalendarDay = { year: now.year, month: 0, day: 1 };
   while (day.year === now.year) {
-    cum = cum.plus(monthAmount(e, ctx, day.month, now).div(daysInMonth(day.year, day.month)));
+    cum = cum.plus(perDay[day.month]!);
     if (cum.gte(limit)) return day;
     day = addDay(day);
   }
@@ -187,6 +184,11 @@ export interface MonthColumn {
   byEntity: { id: string; amount: Dec }[];
 }
 
+/** Для месяца есть факт в источнике; без списка помесячных данных считаем, что факт есть. */
+function hasFact(e: EntityInput, month: number): boolean {
+  return e.monthly === undefined || e.monthly.some((x) => x.month === month && x.isFact);
+}
+
 /** Выручка группы по месяцам для графика. */
 export function monthlySeries(entities: EntityInput[], ctx: CalcCtx, now: Moment): MonthColumn[] {
   const cols: MonthColumn[] = [];
@@ -194,7 +196,8 @@ export function monthlySeries(entities: EntityInput[], ctx: CalcCtx, now: Moment
     const byEntity = entities.map((e) => ({ id: e.id, amount: monthAmount(e, ctx, m, now) }));
     cols.push({
       month: m,
-      status: m < now.month ? 'fact' : m === now.month ? 'current' : 'forecast',
+      // прошедший месяц без факта в источнике это прогноз: так же его называют чат и строка происхождения
+      status: m < now.month ? (entities.every((e) => hasFact(e, m)) ? 'fact' : 'forecast') : m === now.month ? 'current' : 'forecast',
       total: groupTotal(byEntity.map((x) => x.amount)),
       byEntity,
     });

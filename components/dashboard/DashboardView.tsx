@@ -87,6 +87,18 @@ export function DashboardView() {
   );
   const live = input && moment && stat ? computeLive(input, moment, stat) : null;
 
+  // Окно открыто через Новый год: правила и данные загружены за прошлый год, а часы уже в новом. Данные
+  // запрашиваются заново один раз на смену года (нет правил нового года: сообщение вместо старых цифр).
+  const reloadedForYear = useRef<number | null>(null);
+  const momentYear = moment?.year ?? null;
+  const payloadYear = payload?.provenance.year ?? null;
+  useEffect(() => {
+    if (momentYear === null || payloadYear === null || momentYear === payloadYear) return;
+    if (reloadedForYear.current === momentYear) return;
+    reloadedForYear.current = momentYear;
+    void load();
+  }, [momentYear, payloadYear, load]);
+
   if (error) {
     return (
       <div className="sec" role="alert">

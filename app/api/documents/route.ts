@@ -7,6 +7,7 @@ import { docRoute } from '@/lib/documents/http';
 import { createDocument, listDocuments } from '@/lib/documents/service';
 import { getEnv } from '@/lib/env';
 import { PeriodSchema } from '@/lib/provenance/schemas';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       entityId: body.entityId ?? null,
       period: body.period ?? null,
       user: body.values,
-      nowMs: Date.now(),
+      nowMs: appNow(),
       tz: getEnv().appTz,
     });
     return json({ id }, 201);

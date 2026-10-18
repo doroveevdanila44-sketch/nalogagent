@@ -1,5 +1,6 @@
 import { dec } from '@/lib/calc/decimal';
 import { dateRuYear, rub2 } from '@/lib/calc/format';
+import { daysInMonth } from '@/lib/calc/time';
 import { formatLoadedAt } from '@/lib/calc/provenance';
 import { KIND_LABEL } from '@/lib/provenance/line';
 import type { CalcQuery } from '@/lib/provenance/query';
@@ -118,8 +119,15 @@ export function normalizeInput(f: TemplateField, raw: string): string | null {
     }
     case 'date': {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-      const ok = m && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) && Number(m[2]) >= 1 && Number(m[2]) <= 12;
-      if (!ok) throw new FieldError(f.key, `${f.label}: нужна дата ГГГГ-ММ-ДД`);
+      // существующая дата календаря: 30 февраля и 31 апреля не проходят (Date.parse переносил их на март и май)
+      const ok =
+        m &&
+        Number(m[1]) >= 1900 &&
+        Number(m[2]) >= 1 &&
+        Number(m[2]) <= 12 &&
+        Number(m[3]) >= 1 &&
+        Number(m[3]) <= daysInMonth(Number(m[1]), Number(m[2]) - 1);
+      if (!ok) throw new FieldError(f.key, `${f.label}: нужна существующая дата ГГГГ-ММ-ДД`);
       return text;
     }
     case 'longtext':
@@ -189,7 +197,20 @@ export function fillFields(
     }
     out[f.key] = v;
   }
+  checkDateOrder(out);
   return out;
+}
+
+/**
+ * Связи между полями: соглашение не может быть датировано раньше договора, к которому оно относится.
+ * Даты записаны как ГГГГ-ММ-ДД, поэтому сравниваются как строки.
+ */
+export function checkDateOrder(values: FieldValues): void {
+  const contract = values.contract_date?.value;
+  const addendum = values.addendum_date?.value;
+  if (contract && addendum && addendum < contract) {
+    throw new FieldError('addendum_date', 'Дата соглашения: не может быть раньше даты договора');
+  }
 }
 
 /** Обязательные поля без значения: «Не хватает N полей». */
@@ -229,5 +250,6 @@ export function applyEdits(
     if ((prev[key]?.value ?? null) !== next.value) touched.push(key);
     values[key] = next;
   }
+  checkDateOrder(values);
   return { values, touched };
 }

@@ -3,23 +3,41 @@ import { z } from 'zod';
 import { BodyError, readJson } from '@/lib/auth/request';
 import { failure, json, requireApiAuth } from '@/lib/auth/server';
 import { clearHistory, handleChat, loadHistory } from '@/lib/agent/service';
-import { FLEET_MAX_COST, FLEET_MAX_EXPENSES, FLEET_MAX_RENT_PER_DAY, WHATIF_MAX_CARS } from '@/lib/calc';
+import {
+  FLEET_MAX_COST,
+  FLEET_MAX_DIFFERENT,
+  FLEET_MAX_EXPENSES,
+  FLEET_MAX_RENT_PER_DAY,
+  WHATIF_MAX_CARS,
+} from '@/lib/calc';
 import { getDb } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Карточка «Что если купим N машин» с заполненными полями. Границы те же, что проверяет расчётное ядро. */
-const FleetForm = z.object({
-  entityId: z.string().min(1).max(40),
-  cars: z.number().int().min(1).max(WHATIF_MAX_CARS),
+/** Цены одной машины, когда машины разные. */
+const FleetUnit = z.object({
   cost: z.number().positive().max(FLEET_MAX_COST),
-  costWithVat: z.boolean(),
   rentPerDay: z.number().positive().max(FLEET_MAX_RENT_PER_DAY),
-  rentDays: z.number().int().min(1).max(31),
-  startMonth: z.number().int().min(0).max(11),
-  expenses: z.number().min(0).max(FLEET_MAX_EXPENSES).nullable(),
 });
+
+/**
+ * Карточка «Что если купим N машин» с заполненными полями. Границы те же, что проверяет расчётное ядро.
+ * Одинаковые машины: общие `cost` и `rentPerDay`; разные: `units` по одной записи на машину (до 10).
+ */
+const FleetForm = z
+  .object({
+    entityId: z.string().min(1).max(40),
+    cars: z.number().int().min(1).max(WHATIF_MAX_CARS),
+    cost: z.number().positive().max(FLEET_MAX_COST).nullable().default(null),
+    costWithVat: z.boolean(),
+    rentPerDay: z.number().positive().max(FLEET_MAX_RENT_PER_DAY).nullable().default(null),
+    units: z.array(FleetUnit).min(1).max(FLEET_MAX_DIFFERENT).nullable().default(null),
+    rentDays: z.number().int().min(1).max(31),
+    startMonth: z.number().int().min(0).max(11),
+    expenses: z.number().min(0).max(FLEET_MAX_EXPENSES).nullable(),
+  })
+  .refine((f) => (f.units ? f.units.length === f.cars : f.cost !== null && f.rentPerDay !== null));
 
 const Body = z
   .object({

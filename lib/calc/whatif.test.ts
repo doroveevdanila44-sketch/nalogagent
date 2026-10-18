@@ -12,9 +12,14 @@ import {
   WhatIfError,
   applyWhatIf,
   compareWhatIf,
+  fleetLiveLine,
+  fleetMissingMessages,
   fleetRevenuePerCar,
+  fleetSoftWarnings,
+  fleetUnitPrices,
   missingFleetFields,
   vatStartLabel,
+  type CarsRequest,
   type FleetInput,
   type WhatIfEntityRow,
   type WhatIfRequest,
@@ -625,5 +630,229 @@ describe('сценарий не меняет данные дашборда', () 
       computeLive(input2, T, computeStatic(input2, T)).ytdGroup.toString(),
     ]);
     expect(after).toBe(before);
+  });
+});
+
+describe('машины с разными ценами: расчёт по каждой машине', () => {
+  /** Две машины: 3 млн и сдача 8 000, 5 млн и сдача 10 000 ₽ в сутки; 20 дней, с ноября */
+  const two = (over: Partial<FleetInput> = {}): WhatIfRequest => ({
+    kind: 'cars',
+    cars: 2,
+    fleet: {
+      costWithVat: true,
+      rentDays: 20,
+      startMonth: 10,
+      expensesPerMonth: 0,
+      units: [
+        { cost: 3_000_000, rentPerDay: 8_000 },
+        { cost: 5_000_000, rentPerDay: 10_000 },
+      ],
+      ...over,
+    },
+  });
+  const inputVat = dec(8_000_000).times(22).div(122);
+  // 160 000 + 200 000 = 360 000 в месяц, ноябрь и декабрь
+  const extra = dec(360_000).times(2);
+
+  it('выручка, добавочная выручка и входной НДС считаются по каждой машине', () => {
+    const c = compareWhatIf(data, spec(two(), ['epsilon']));
+    const f = c.fleet!.effect;
+    expect(f.uniform).toBe(false);
+    expect(f.units.map((u) => u.perMonth.toString())).toEqual(['160000', '200000']);
+    expect(f.units.map((u) => u.cost.toString())).toEqual(['3000000', '5000000']);
+    expect(f.perMonth.toString()).toBe('360000');
+    expect(f.totalCost.toString()).toBe('8000000');
+    // входной НДС каждой машины: стоимость × 22 / 122
+    expect(f.units[0]!.inputVat.minus(dec(3_000_000).times(22).div(122)).abs().lte('0.0001')).toBe(true);
+    expect(f.units[1]!.inputVat.minus(dec(5_000_000).times(22).div(122)).abs().lte('0.0001')).toBe(true);
+    expect(f.inputVat.minus(inputVat).abs().lte('0.0001')).toBe(true);
+    expect(c.changes[0]!.perMonth!.toString()).toBe('360000');
+    expect(c.changes[0]!.delta.toString()).toBe(extra.toString());
+  });
+
+  it('НДС юрлица на 22%: вычет суммы по обеим машинам, формулы сходятся', () => {
+    const c = compareWhatIf(data, spec(two(), ['epsilon']));
+    const e = row(c.rows, 'epsilon');
+    const p = data.entities.find((x) => x.id === 'epsilon')!.inputVatShare;
+    const want = e.vat.base!.plus(extra.times(22).div(122).times(dec(1).minus(p))).minus(inputVat);
+    expect(e.vat.scenario!.minus(want).abs().lte('0.05')).toBe(true);
+    expect(c.fleet!.effect.deduction).toBe('applied');
+    for (const r of [...c.base, ...c.scenario]) expect(verifyCalcResult(r), r.taxName).toEqual([]);
+    const text = c.fleet!.lines.deduction.replace(/[\u00a0\u202f]/g, ' ');
+    expect(text).toContain('(3 000 000 ₽ + 5 000 000 ₽) × 22 / 122');
+  });
+
+  it('для 5%, 7% и освобождённых вычета нет, налог от стоимости не зависит', () => {
+    const dear = two({ units: [{ cost: 9_000_000, rentPerDay: 8_000 }, { cost: 9_000_000, rentPerDay: 10_000 }] });
+    for (const [d, id, why] of [
+      [data, 'alfa', 'low_rate'],
+      [withRate(data, 'beta', 7), 'beta', 'low_rate'],
+      [data, 'delta', 'exempt'],
+      [data, 'gamma', 'exempt'],
+      [withRate(data, 'delta', 22), 'delta', 'exempt'],
+    ] as const) {
+      const a = compareWhatIf(d, spec(two(), [id]));
+      const b = compareWhatIf(d, spec(dear, [id]));
+      expect(a.fleet!.effect.deduction, id).toBe(why);
+      expect(a.fleet!.effect.deducted.isZero(), id).toBe(true);
+      expect(row(a.rows, id).vat.scenario!.toString(), id).toBe(row(b.rows, id).vat.scenario!.toString());
+      expect(a.fleet!.lines.deduction, id).toContain('Вычета входного НДС по машинам нет');
+    }
+  });
+
+  it('окупаемость каждой машины и всех вместе совпадает с ручным расчётом', () => {
+    const f = compareWhatIf(data, spec(two(), ['alfa'])).fleet!.effect;
+    expect(f.units[0]!.paybackMonths!.toString()).toBe('18.75'); // 3 000 000 / 160 000
+    expect(f.units[1]!.paybackMonths!.toString()).toBe('25'); // 5 000 000 / 200 000
+    expect(f.paybackMonths!.minus(dec(8_000_000).div(360_000)).abs().lte('0.000001')).toBe(true);
+    // с расходами 20 000 на машину
+    const g = compareWhatIf(data, spec(two({ expensesPerMonth: 20_000 }), ['alfa'])).fleet!.effect;
+    expect(g.units[0]!.paybackMonths!.minus(dec(3_000_000).div(140_000)).abs().lte('0.000001')).toBe(true);
+    expect(g.units[1]!.paybackMonths!.minus(dec(5_000_000).div(180_000)).abs().lte('0.000001')).toBe(true);
+    expect(g.paybackMonths!.minus(dec(8_000_000).div(320_000)).abs().lte('0.000001')).toBe(true);
+    expect(g.expensesTotal.toString()).toBe('80000'); // 2 машины × 20 000 × 2 месяца
+  });
+
+  it('одна машина не окупается, остальные да: общая окупаемость есть, лишнее названо', () => {
+    const c = compareWhatIf(data, spec(two({ expensesPerMonth: 170_000 }), ['alfa']));
+    const f = c.fleet!.effect;
+    expect(f.units[0]!.paybackMonths).toBeNull();
+    expect(f.units[1]!.paybackMonths!.gt(0)).toBe(true);
+    expect(c.fleet!.lines.payback).toContain('не окупаются сами по себе: машина 1');
+  });
+
+  it('строка принятых значений называет каждую машину', () => {
+    const c = compareWhatIf(data, spec(two(), ['delta']));
+    expect(c.fleet!.lines.values.replace(/[\u00a0\u202f]/g, ' ')).toBe(
+      '2 машины с НДС, сдача × 20 дней в месяц: машина 1 за 3 000 000 ₽, сдача 8 000 ₽ в сутки (160 000 ₽ в месяц); ' +
+        'машина 2 за 5 000 000 ₽, сдача 10 000 ₽ в сутки (200 000 ₽ в месяц), с ноября',
+    );
+    // одинаковые цены в списке машин считаются одной ценой на всех, строка прежняя
+    const same = compareWhatIf(
+      data,
+      spec(two({ units: [{ cost: 3_000_000, rentPerDay: 8_000 }, { cost: 3_000_000, rentPerDay: 8_000 }] }), ['delta']),
+    );
+    expect(same.fleet!.effect.uniform).toBe(true);
+    expect(same.fleet!.lines.values.replace(/[\u00a0\u202f]/g, ' ')).toBe(
+      '2 машины по 3 000 000 ₽ с НДС, сдача 8 000 ₽ в сутки × 20 дней = 160 000 ₽ в месяц на машину, с ноября',
+    );
+  });
+
+  it('общая цена и свои цены вместе: «по 3 млн, вторая 5 млн»; «остальные такие же» берёт последнюю названную', () => {
+    const mixed: CarsRequest = {
+      kind: 'cars',
+      cars: 3,
+      fleet: { cost: 3_000_000, rentPerDay: 8_000, costWithVat: true, rentDays: 20, startMonth: 10, units: [{}, { cost: 5_000_000 }] },
+    };
+    expect(fleetUnitPrices(mixed).map((p) => p.cost)).toEqual([3_000_000, 5_000_000, 3_000_000]);
+    const rest: CarsRequest = { kind: 'cars', cars: 4, fleet: { rentPerDay: 8_000, units: [{ cost: 3_000_000 }], rest: 'same' } };
+    expect(fleetUnitPrices(rest).map((p) => p.cost)).toEqual([3_000_000, 3_000_000, 3_000_000, 3_000_000]);
+    const noRest: CarsRequest = { kind: 'cars', cars: 4, fleet: { rentPerDay: 8_000, units: [{ cost: 3_000_000 }] } };
+    expect(fleetUnitPrices(noRest).map((p) => p.cost)).toEqual([3_000_000, null, null, null]);
+  });
+
+  it('без цены какой-то машины не считается, сообщения называют номер машины', () => {
+    const r: WhatIfRequest = {
+      kind: 'cars',
+      cars: 3,
+      fleet: {
+        costWithVat: true,
+        rentDays: 20,
+        startMonth: 10,
+        units: [{ cost: 3_000_000, rentPerDay: 8_000 }, { cost: 5_000_000 }],
+      },
+    };
+    expect(missingFleetFields(r as never)).toEqual(['cost', 'rentPerDay']);
+    expect(fleetMissingMessages(r as never)).toEqual([
+      'Укажите цену сдачи машины 2',
+      'Укажите стоимость машины 3',
+      'Укажите цену сдачи машины 3',
+    ]);
+    for (const run of [() => applyWhatIf(data, spec(r, ['delta'])), () => compareWhatIf(data, spec(r, ['delta']))]) {
+      expect(run).toThrow(WhatIfError);
+    }
+  });
+
+  it('цена машины не больше нуля называет машину; дни и месяц проверяются', () => {
+    const bad = two({ units: [{ cost: 3_000_000, rentPerDay: 8_000 }, { cost: 0, rentPerDay: 10_000 }] });
+    expect(() => applyWhatIf(data, spec(bad, ['alfa']))).toThrow(/Укажите стоимость машины 2/);
+    const badRent = two({ units: [{ cost: 3_000_000, rentPerDay: -1 }, { cost: 5_000_000, rentPerDay: 10_000 }] });
+    expect(() => applyWhatIf(data, spec(badRent, ['alfa']))).toThrow(/Укажите цену сдачи машины 1/);
+    expect(() => applyWhatIf(data, spec(two({ rentDays: 0 }), ['alfa']))).toThrow(/от 1 до 31/);
+    expect(() => applyWhatIf(data, spec(two({ rentDays: 32 }), ['alfa']))).toThrow(/от 1 до 31/);
+    expect(() => applyWhatIf(data, spec(two({ startMonth: 9 }), ['alfa']))).toThrow(/не раньше следующего месяца/);
+  });
+
+  it('разные цены только до 10 машин; одна цена на всех до 50', () => {
+    const eleven = (units: { cost: number; rentPerDay: number }[]): WhatIfRequest => ({
+      kind: 'cars',
+      cars: 11,
+      fleet: { costWithVat: true, rentDays: 20, startMonth: 10, units },
+    });
+    const differ = Array.from({ length: 11 }, (_, i) => ({ cost: 3_000_000 + i * 100_000, rentPerDay: 8_000 }));
+    expect(() => applyWhatIf(data, spec(eleven(differ), ['alfa']))).toThrow(/до 10 машин/);
+    const ten = Array.from({ length: 10 }, (_, i) => ({ cost: 3_000_000 + i * 100_000, rentPerDay: 8_000 }));
+    expect(() => applyWhatIf(data, spec({ ...eleven(ten), cars: 10 } as WhatIfRequest, ['alfa']))).not.toThrow();
+    // одинаковые цены у 11 машин и одна цена на 50 считаются
+    const same = Array.from({ length: 11 }, () => ({ cost: 3_000_000, rentPerDay: 8_000 }));
+    expect(() => applyWhatIf(data, spec(eleven(same), ['alfa']))).not.toThrow();
+    expect(compareWhatIf(data, spec(cars(50), ['epsilon'])).fleet!.effect.units).toHaveLength(50);
+  });
+
+  it('мягкие предупреждения не блокируют расчёт', () => {
+    const odd = two({ units: [{ cost: 100_000, rentPerDay: 500 }, { cost: 40_000_000, rentPerDay: 150_000 }] });
+    const c = compareWhatIf(data, spec(odd, ['alfa']));
+    expect(c.noChange).toBe(false);
+    const w = fleetSoftWarnings(fleetUnitPrices(odd as never)).map((x) => x.replace(/[\u00a0\u202f]/g, ' '));
+    expect(w).toEqual([
+      'Машина 1: стоимость 100 000 ₽ меньше 300 000 ₽, проверьте',
+      'Машина 1: цена сдачи 500 ₽ в сутки меньше 1 000 ₽, проверьте',
+      'Машина 2: стоимость 40 000 000 ₽ больше 30 000 000 ₽, проверьте',
+      'Машина 2: цена сдачи 150 000 ₽ в сутки больше 100 000 ₽, проверьте',
+    ]);
+    // обычные значения и границы без предупреждений
+    expect(fleetSoftWarnings([{ cost: 300_000, rentPerDay: 1_000 }, { cost: 30_000_000, rentPerDay: 100_000 }])).toEqual([]);
+    expect(fleetSoftWarnings([{ cost: 299_999, rentPerDay: 5_000 }]).length).toBe(1);
+  });
+
+  it('живая строка итога под полями считается ядром', () => {
+    const plain = (s: string | null) => s?.replace(/[\u00a0\u202f]/g, ' ');
+    expect(plain(fleetLiveLine(Array.from({ length: 5 }, () => ({ cost: 3_000_000, rentPerDay: 8_000 })), 20))).toBe(
+      '5 машин × 3 000 000 ₽ = 15 000 000 ₽, выручка 800 000 ₽ в месяц',
+    );
+    expect(plain(fleetLiveLine([{ cost: 3_000_000, rentPerDay: 8_000 }, { cost: 5_000_000, rentPerDay: 10_000 }], 20))).toBe(
+      'Всего 2 машины: 8 000 000 ₽, выручка 360 000 ₽ в месяц',
+    );
+    // не всё названо: показано только посчитанное
+    expect(plain(fleetLiveLine([{ cost: 3_000_000, rentPerDay: null }, { cost: 3_000_000, rentPerDay: null }], 20))).toBe(
+      '2 машины × 3 000 000 ₽ = 6 000 000 ₽',
+    );
+    expect(plain(fleetLiveLine([{ cost: null, rentPerDay: 8_000 }], 20))).toBe('выручка 160 000 ₽ в месяц');
+    expect(fleetLiveLine([{ cost: null, rentPerDay: null }], 20)).toBeNull();
+    expect(plain(fleetLiveLine([{ cost: 1, rentPerDay: 1 }], 0))).toBe('1 машина × 1 ₽ = 1 ₽');
+  });
+
+  it('разные цены не меняют данные дашборда', () => {
+    const input = dashboardInput(data);
+    const before = JSON.stringify([
+      data.entities.map((e) => [e.id, e.annualRevenue.toString(), e.annualExpenses.toString(), e.whatIf ?? null]),
+      computeStatic(input, T).forecastGroup.toString(),
+      computeLive(input, T, computeStatic(input, T)).ytdGroup.toString(),
+    ]);
+    compareWhatIf(data, spec(two({ expensesPerMonth: 15_000 }), ['epsilon']));
+    compareWhatIf(data, spec(two(), ['beta']));
+    const input2 = dashboardInput(data);
+    const after = JSON.stringify([
+      data.entities.map((e) => [e.id, e.annualRevenue.toString(), e.annualExpenses.toString(), e.whatIf ?? null]),
+      computeStatic(input2, T).forecastGroup.toString(),
+      computeLive(input2, T, computeStatic(input2, T)).ytdGroup.toString(),
+    ]);
+    expect(after).toBe(before);
+  });
+
+  it('другой набор цен это другой сценарий: ключи отметок «сверил» разные', () => {
+    const a = compareWhatIf(data, spec(two(), ['alfa'])).key;
+    const b = compareWhatIf(data, spec(two({ units: [{ cost: 3_000_000, rentPerDay: 8_000 }, { cost: 5_000_000, rentPerDay: 11_000 }] }), ['alfa'])).key;
+    expect(a).not.toBe(b);
   });
 });

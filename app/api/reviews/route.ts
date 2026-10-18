@@ -12,6 +12,7 @@ import {
   resolveTarget,
   TargetError,
 } from '@/lib/provenance/server';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const snaps = await resolveTarget(db, {
       userId: gate.auth.userId,
       target: body.target,
-      nowMs: Date.now(),
+      nowMs: appNow(),
       tz: getEnv().appTz,
     });
     const request = await createReview(db, {

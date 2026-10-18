@@ -50,6 +50,8 @@ export default defineConfig({
       PIN_BACKGROUND_SECONDS: '60',
       APP_TZ: 'Asia/Kamchatka',
       LLM_PROVIDER: 'stub',
+      // проверка экранов на выбранную дату (e2e/dates.spec.ts): часы расчётов идут от этого момента
+      ...(process.env.PW_FAKE_NOW ? { PVA_FAKE_NOW: process.env.PW_FAKE_NOW, PVA_ALLOW_FAKE_NOW: '1' } : {}),
     },
   },
 });

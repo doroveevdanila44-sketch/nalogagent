@@ -7,12 +7,13 @@ import {
   WHATIF_PERCENT_MIN,
   resolvePeriod,
   type FleetInput,
+  type FleetUnitInput,
   type Moment,
   type Period,
   type WhatIfRequest,
 } from '@/lib/calc';
 import { mentionedEntities, mentionsGroup, unknownEntityNames } from './entities';
-import { CAR_WORD, extractFleet, mentionsRentPrice } from './fleet-extract';
+import { CAR_WORD, extractFleet, fleetBadValue, isNo, isYes, mentionsRentPrice, restReply } from './fleet-extract';
 import { cyr } from './regex';
 import { normalize } from './text';
 import type {
@@ -75,6 +76,11 @@ export interface RawFields {
   whatIf: WhatIfRequest | null;
   /** «Что если …» с начала фразы: самостоятельный вопрос, он не продолжает прежний сценарий */
   newTopic: boolean;
+  /** Названное значение вне границ («100 машин», «40 дней», «на 1000%»): текст пояснения, считать нельзя */
+  badValue?: string | null;
+  /** Короткое «да» или «нет»: отвечает на вопрос агента, если он его задавал (про остальные машины) */
+  yes?: boolean;
+  no?: boolean;
 }
 
 export interface InterpretContext {
@@ -546,11 +552,11 @@ const HOW_MUCH = cyr('сколько');
 
 /** Рост выручки: «рост 10%», «рост выручки +20%», «увеличим на 15 процентов». */
 const GROWTH_UP = cyr(
-  '(?:рост\\w*|увелич\\w*|вырастет\\w*|вырастем)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?\\+?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:%|процент\\w*)?',
+  '(?:рост\\w*|увелич\\w*|вырастет\\w*|вырастем)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?\\+?\\s*(\\d+(?:[.,]\\d+)?)(?![\\d])\\s*(?:%|процент\\w*)?(?!\\s*(?:млн|млрд|трлн|миллион\\w*|миллиард\\w*|тыс\\w*|руб\\w*|₽|машин\\w*|шт\\w*))',
 );
 /** Спад выручки: «падение на 10%», «снизится на 5 процентов». */
 const GROWTH_DOWN = cyr(
-  '(?:снижени\\w*|падени\\w*|спад\\w*|уменьш\\w*|снизит\\w*|упад\\w*)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?[-−]?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:%|процент\\w*)?',
+  '(?:снижени\\w*|падени\\w*|спад\\w*|уменьш\\w*|снизит\\w*|упад\\w*)\\s*(?:выручк\\w*\\s*)?(?:на\\s*)?[-−]?\\s*(\\d+(?:[.,]\\d+)?)(?![\\d])\\s*(?:%|процент\\w*)?(?!\\s*(?:млн|млрд|трлн|миллион\\w*|миллиард\\w*|тыс\\w*|руб\\w*|₽|машин\\w*|шт\\w*))',
 );
 /** Число со знаком и процентом без слова: «а если +15%?» */
 const GROWTH_SIGNED = /(?<![0-9a-zа-я])([+−-])\s*(\d+(?:[.,]\d+)?)\s*%/;
@@ -567,11 +573,13 @@ const NEW_TOPIC = /^что если(?![а-я])/;
  */
 const AMOUNT_CHANGE = cyr(
   '(вырастет|вырастут|вырастем|увеличит\\w*|увеличим|прибавит\\w*|прибавим|добавит\\w*|добавим|упадет|упадут|упадем|снизит\\w*|снизим|сократит\\w*|уменьшит\\w*|плюс|минус)' +
-    '\\s+(?:выручк\\w*\\s+)?(?:на\\s+)?(\\d{1,3}(?: \\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)\\s*(млн|миллион\\w*|тыс\\w*|руб\\w*|₽|р\\b)',
+    '\\s+(?:выручк\\w*\\s+)?(?:на\\s+)?(\\d{1,3}(?: \\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)\\s*(млн|млрд|трлн|миллион\\w*|миллиард\\w*|триллион\\w*|тыс\\w*|руб\\w*|₽|р\\b)',
 );
 const AMOUNT_NEGATIVE = /^(?:упад|снизи|сократи|уменьши|минус)/;
 /** Число машин: «5 машин», «три автомобиля». */
-const CAR_DIGITS = cyr('(\\d+)\\s*(?:машин\\w*|авто\\w*|автомобил\\w*)');
+const CAR_DIGITS = cyr('(?<![\\d.,])(\\d+)(?![.,]\\d)\\s*(?:машин\\w*|авто\\w*|автомобил\\w*)');
+/** Любое число перед словом «машин», в том числе дробное: «1,5 машины» */
+const CAR_ANY = cyr('(?<![\\d.,])(\\d+(?:[.,]\\d+)?)\\s*(?:машин\\w*|авто\\w*|автомобил\\w*)');
 const CAR_WORDS = cyr(
   '\\b(одну|одна|один|две|два|три|четыре|пять|шесть|семь|восемь|девять|десять)\\s+(?:машин\\w*|авто\\w*|автомобил\\w*)',
 );
@@ -628,7 +636,15 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
   const am = AMOUNT_CHANGE.exec(t);
   if (am) {
     const unit = am[3]!;
-    const mult = /^(?:млн|миллион)/.test(unit) ? 1_000_000 : /^тыс/.test(unit) ? 1_000 : 1;
+    const mult = /^(?:трлн|триллион)/.test(unit)
+      ? 1_000_000_000_000
+      : /^(?:млрд|миллиард)/.test(unit)
+        ? 1_000_000_000
+        : /^(?:млн|миллион)/.test(unit)
+          ? 1_000_000
+          : /^тыс/.test(unit)
+            ? 1_000
+            : 1;
     const value = Number(am[2]!.replace(/ /g, '').replace(',', '.')) * mult;
     if (Number.isFinite(value) && value > 0) {
       amount = AMOUNT_NEGATIVE.test(am[1]!) ? -value : value;
@@ -697,14 +713,38 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
   const carWord = CAR_WORD.test(normalized);
   const rentNamed = carWord && mentionsRentPrice(normalized);
   const condition = CONDITION.test(normalized);
-  if (condition || rentNamed) {
-    const cars = carCount(normalized);
+  // цены названы по машинам («первая 3 млн, вторая 5 млн»): это тоже карточка парка
+  const fleetNamed = carWord ? extractFleet(normalized, monthOfWord) : {};
+  const perCarNamed = (fleetNamed.units?.length ?? 0) > 0;
+  const restWord = restReply(normalized);
+  if (restWord) {
+    // ответ на «Для остальных такая же цена?»: продолжает прежний сценарий
+    whatIf = { kind: 'cars', cars: null, fleet: { rest: restWord } };
+  } else if (condition || rentNamed || perCarNamed) {
+    let cars = carCount(normalized);
     const thisYear = mentions.every((m) => m.period.kind === 'year' && m.period.year === ctx.today.year);
     if (amount !== null && thisYear) whatIf = { kind: 'amount', amount };
-    else if (carWord && (rentNamed || cars !== null || CARS.test(rest))) {
+    else if (carWord && (rentNamed || perCarNamed || cars !== null || CARS.test(rest))) {
+      // число машин не названо, а перечислены две и больше: считаем, что парк из названных
+      if (cars === null && (fleetNamed.units?.length ?? 0) >= 2) cars = fleetNamed.units!.length;
       const fleet = extractFleet(normalized, monthOfWord);
       whatIf = Object.keys(fleet).length > 0 ? { kind: 'cars', cars, fleet } : { kind: 'cars', cars };
     } else if (growth !== null && growthStated && thisYear) whatIf = { kind: 'growth', percent: growth };
+  }
+
+  // названное значение вне границ нельзя молча заменить умолчанием («1,5 машины» стало бы 5, «40 дней» 20)
+  let badValue: string | null = null;
+  if (carWord && (condition || rentNamed || perCarNamed)) {
+    const cd = CAR_ANY.exec(normalized);
+    if (cd) {
+      const v = Number(cd[1]!.replace(',', '.'));
+      if (!Number.isInteger(v)) badValue = `Число машин должно быть целым, от 1 до ${WHATIF_MAX_CARS}.`;
+      else if (v < 1 || v > WHATIF_MAX_CARS) badValue = `Число машин должно быть от 1 до ${WHATIF_MAX_CARS}.`;
+    }
+    badValue ??= fleetBadValue(normalized);
+  }
+  if (!badValue && condition && growthStated && (growth! < WHATIF_PERCENT_MIN || growth! > WHATIF_PERCENT_MAX)) {
+    badValue = `Изменение выручки должно быть от ${WHATIF_PERCENT_MIN} до ${WHATIF_PERCENT_MAX} процентов.`;
   }
 
   // сценарий: порядок как у прежних разделов агента
@@ -753,6 +793,9 @@ export function extractFields(text: string, ctx: Pick<InterpretContext, 'entitie
     fragment,
     whatIf,
     newTopic: NEW_TOPIC.test(normalized),
+    badValue,
+    yes: isYes(normalized),
+    no: isNo(normalized),
   };
 }
 
@@ -773,6 +816,16 @@ function sanitizeFleet(f: Partial<FleetInput> | undefined): Partial<FleetInput> 
   if (finiteIn(f.rentDays, 1, 31) && Number.isInteger(f.rentDays)) out.rentDays = f.rentDays;
   if (finiteIn(f.startMonth, 0, 11) && Number.isInteger(f.startMonth)) out.startMonth = f.startMonth;
   if (finiteIn(f.expensesPerMonth, 0, FLEET_MAX_EXPENSES)) out.expensesPerMonth = f.expensesPerMonth;
+  if (f.rest === 'same' || f.rest === 'each') out.rest = f.rest;
+  if (Array.isArray(f.units)) {
+    const units = f.units.slice(0, WHATIF_MAX_CARS).map((u) => {
+      const unit: FleetUnitInput = {};
+      if (u && finiteIn(u.cost, 1, FLEET_MAX_COST)) unit.cost = u.cost;
+      if (u && finiteIn(u.rentPerDay, 1, FLEET_MAX_RENT_PER_DAY)) unit.rentPerDay = u.rentPerDay;
+      return unit;
+    });
+    if (units.some((u) => Object.keys(u).length > 0)) out.units = units;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -839,6 +892,9 @@ export function sanitizeFields(raw: Partial<RawFields>, ctx: Pick<InterpretConte
     fragment: Boolean(raw.fragment),
     whatIf,
     newTopic: Boolean(raw.newTopic),
+    badValue: typeof raw.badValue === 'string' && raw.badValue.length > 0 && raw.badValue.length <= 200 ? raw.badValue : null,
+    yes: Boolean(raw.yes),
+    no: Boolean(raw.no),
   };
 }
 
@@ -882,8 +938,12 @@ function unsupportedPeriod(p: Period, ctx: InterpretContext): Unsupported | null
  *  - реплика со своим сценарием («что с порогами?») это новый вопрос.
  */
 export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): Interpretation {
-  const raw = rawIn;
   const prev = ctx.previous;
+  // «да» и «нет» после вопроса «Для остальных такая же цена?» отвечают на него
+  const raw: RawFields =
+    prev?.restAsk && prev.whatIf?.kind === 'cars' && !rawIn.whatIf && (rawIn.yes || rawIn.no)
+      ? { ...rawIn, whatIf: { kind: 'cars', cars: null, fleet: { rest: rawIn.yes ? 'same' : 'each' } }, scenario: 'whatif', fragment: false }
+      : rawIn;
   const hasSlot =
     raw.all ||
     raw.entities.length > 0 ||
@@ -1018,6 +1078,7 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
   // неподдерживаемое: оценка схемы, другой налог, чужое юрлицо, период вне данных
   let unsupported: Unsupported | null = null;
   if (raw.legal) unsupported = { kind: 'legal_assessment' };
+  else if (raw.badValue) unsupported = { kind: 'bad_value', message: raw.badValue };
   else if (raw.otherTaxes.length > 0) unsupported = { kind: 'other_tax', name: raw.otherTaxes[0]! };
   else if (raw.unknownEntities.length > 0) unsupported = { kind: 'unknown_entity', name: raw.unknownEntities[0]! };
   else {
@@ -1080,8 +1141,15 @@ export function buildInterpretation(rawIn: RawFields, ctx: InterpretContext): In
 export function mergeWhatIf(next: WhatIfRequest | null, prev: WhatIfRequest | null): WhatIfRequest | null {
   if (!next) return prev;
   if (next.kind === 'cars' && prev?.kind === 'cars') {
-    const fleet = { ...prev.fleet, ...next.fleet };
+    const fleet: Partial<FleetInput> = { ...prev.fleet, ...next.fleet };
     const cars = next.cars ?? prev.cars;
+    // другое число машин: цены по машинам усекаются; прибавились машины без цены: решение про остальных спрашивается заново
+    if (next.cars !== null && prev.cars !== null && next.cars !== prev.cars) {
+      if (prev.fleet?.units && !next.fleet?.units) {
+        fleet.units = prev.fleet.units.slice(0, next.cars);
+        if (next.cars > prev.cars && fleet.rest === 'same') delete fleet.rest;
+      }
+    }
     return Object.keys(fleet).length > 0 ? { kind: 'cars', cars, fleet } : { kind: 'cars', cars };
   }
   return next;

@@ -126,10 +126,35 @@ describe('4. crossing', () => {
   it('плательщик не имеет даты пересечения', () => {
     expect(crossing(ent('alfa'), ctx, T)).toBeNull();
   });
-  it('уже пересёк: возвращается сегодняшняя дата', () => {
+  it('уже пересёк: возвращается дата самого пересечения, а не сегодняшняя', () => {
+    // 60 млн в год: 20 млн накопились 5 июня; налог начался бы с 1 июля
     const rich: EntityInput = { ...ent('delta'), id: 'rich', annualRevenue: dec(60_000_000) };
     const c = crossing(rich, ctx, T)!;
-    expect(toIsoDate(c)).toBe('2026-10-10');
+    expect(toIsoDate(c)).toBe('2026-06-05');
+    // и на следующий день, и через месяц дата та же: она не едет за сегодняшним числом
+    for (const later of [moment(2026, 10, 11, 12), moment(2026, 11, 20, 12), moment(2026, 12, 31, 12)]) {
+      expect(toIsoDate(crossing(rich, seedCtx(later), later)!)).toBe('2026-06-05');
+    }
+  });
+  it('Дельта: дата пересечения 19 декабря не сдвигается после самой даты (20 и 31 декабря)', () => {
+    for (const day of [18, 19, 20, 25, 31]) {
+      const m = moment(2026, 12, day, 12);
+      expect(toIsoDate(crossing(ent('delta'), seedCtx(m), m)!), `${day} декабря`).toBe('2026-12-19');
+    }
+  });
+  it('пересечение 31 октября: НДС начинается с 1 ноября, а не с 1 декабря, и 1 ноября дата та же', () => {
+    // 31 октября накопленная выручка достигает 20 млн: пересечение на границе месяцев
+    const e = ent('delta');
+    const base: EntityInput = { ...e, id: 'edge', annualRevenue: dec(1) };
+    const monthSum = (to: number) => Array.from({ length: to }, (_, i) => SEED_WEIGHTS[i]!).reduce((a, w) => a.plus(w), dec(0));
+    // годовая выручка, при которой накопление за январь–октябрь ровно равно порогу плюс рубль
+    const annual = dec(20_000_001).div(monthSum(10));
+    const edge: EntityInput = { ...base, annualRevenue: annual };
+    const onOct = moment(2026, 10, 15, 12);
+    const c = crossing(edge, seedCtx(onOct), onOct)!;
+    expect(toIsoDate(c)).toBe('2026-10-31');
+    const onNov = moment(2026, 11, 1, 12);
+    expect(toIsoDate(crossing(edge, seedCtx(onNov), onNov)!)).toBe('2026-10-31');
   });
   it('пересечение раньше: налогооблагаемая выручка это месяцы после месяца пересечения', () => {
     const big: EntityInput = { ...ent('delta'), id: 'big', annualRevenue: dec(40_000_000) };

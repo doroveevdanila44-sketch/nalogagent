@@ -8,6 +8,7 @@ import { getDb } from '@/lib/db/client';
 import { loadCalcData } from '@/lib/db/queries';
 import { getEnv } from '@/lib/env';
 import { buildDashboardProvenance, type DashboardResponse } from '@/lib/provenance/dashboard';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const gate = await requireApiAuth(req, { mutating: false });
     if (!gate.ok) return gate.res;
     const { appTz } = getEnv();
-    const nowMs = Date.now();
+    const nowMs = appNow();
     const today = momentFromEpoch(nowMs, appTz);
     const data = await loadCalcData(getDb(), today);
     const input = dashboardInput(data);

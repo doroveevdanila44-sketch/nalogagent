@@ -1,4 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
+import { appNow } from '@/lib/clock';
 import { dashboardInput } from '@/lib/calc/service';
 import { MissingRuleError } from '@/lib/calc/rules';
 import { momentFromEpoch } from '@/lib/calc/time';
@@ -140,7 +141,7 @@ export async function handleChat(
   },
 ): Promise<{ user: ChatTurn; agent: ChatTurn }> {
   const started = Date.now();
-  const nowMs = args.nowMs ?? started;
+  const nowMs = args.nowMs ?? appNow();
   const { appTz } = getEnv();
   const now = momentFromEpoch(nowMs, appTz);
   // NUL Postgres в текст не принимает; через API такой текст отклоняется раньше, здесь страховка

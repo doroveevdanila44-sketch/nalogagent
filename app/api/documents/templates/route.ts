@@ -9,6 +9,7 @@ import { listTemplates } from '@/lib/documents/service';
 import { SAMPLE_NOTE } from '@/lib/documents/types';
 import { momentFromEpoch } from '@/lib/calc/time';
 import { getEnv } from '@/lib/env';
+import { appNow } from '@/lib/clock';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .from(legalEntities)
         .orderBy(asc(legalEntities.sort), asc(legalEntities.id)),
     ]);
-    const now = momentFromEpoch(Date.now(), getEnv().appTz);
+    const now = momentFromEpoch(appNow(), getEnv().appTz);
     return json({
       sample: SAMPLE_NOTE,
       year: now.year,

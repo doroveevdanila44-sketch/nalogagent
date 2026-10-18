@@ -1,6 +1,6 @@
 import { bestRate, crossing, forecast, selectedRate, taxFor, groupTotal } from './calc';
 import { dec, sum } from './decimal';
-import { dateRu, mln, pct, pluralRu, rub } from './format';
+import { dateRu, dateRuYear, mln, pct, pluralRu, rub } from './format';
 import { incomeTax, incomeTaxSchedule, nextPayment } from './income-tax';
 import { daysUntil, groupPayments, sumKind } from './payments';
 import type { Moment } from './time';
@@ -22,6 +22,10 @@ const NEAR_LIMIT_MARGIN = dec(5_000_000);
 const PAYMENT_LEAD_DAYS = 45;
 
 const VAT_THIRD = ['первая треть', 'вторая треть', 'третья треть'] as const;
+
+/** «28 марта» в текущем году и «28 марта 2027» в другом: срок в следующем году без года читался бы как этот. */
+const dateIn = (d: { year: number; month: number; day: number }, now: Moment): string =>
+  d.year === now.year ? dateRu(d) : dateRuYear(d);
 
 /**
  * Предупреждения строятся из расчёта, не из текста модели. Сортировка: crit, warn, info,
@@ -48,6 +52,8 @@ export function buildWarnings(
         const start = startsNextYear
           ? `1 января ${c.year + 1}`
           : dateRu({ month: startMonth, day: 1 });
+        // первое число месяца после пересечения уже наступило: НДС не «начнёт», а уже начисляется
+        const startPassed = !startsNextYear && compareDays({ year: c.year, month: startMonth, day: 1 }, today) <= 0;
         const t5 = taxFor(5, e.annualRevenue, e.inputVatShare, rules.generalRate);
         const t22 = taxFor(rules.generalRate, e.annualRevenue, e.inputVatShare, rules.generalRate);
         list.push({
@@ -56,10 +62,10 @@ export function buildWarnings(
           entityId: e.id,
           tag: TAG.crit,
           title: already
-            ? `${e.name} уже пересёк порог ${limitLabel}`
+            ? `${e.name} уже пересёк порог ${limitLabel} (${dateRu(c)})`
             : `${e.name} пересечёт порог ${limitLabel} около ${dateRu(c)}`,
           text:
-            `НДС начнёт начисляться с ${start}. Нужны счета-фактуры и выбранная ставка. ` +
+            `НДС ${startPassed ? 'начисляется' : 'начнёт начисляться'} с ${start}. Нужны счета-фактуры и выбранная ставка. ` +
             `При выручке этого года налог составил бы ${rub(t5)} при 5% и ${rub(t22)} при ${rules.generalRate}%. ` +
             `Решить заранее дешевле, чем узнать в марте.`,
         });
@@ -155,7 +161,7 @@ export function buildWarnings(
       level: 'info',
       kind: 'payment-date',
       tag: TAG.info,
-      title: `${dateRu(first.due)}: ${parts.join(' и ')}`,
+      title: `${dateIn(first.due, now)}: ${parts.join(' и ')}`,
       text:
         `К уплате по расчёту: ${items.join(', ')}. Всего ${rub(usnSum.plus(profitSum).plus(vatSum))}. ` +
         `Суммы ориентировочные (без страховых взносов), проверьте с бухгалтером.`,
@@ -175,7 +181,7 @@ export function buildWarnings(
       text:
         `Прибыль за год ${mln(tax.base, 2)}: выручка без НДС ${mln(tax.income, 2)} минус расходы ${mln(tax.expenses, 2)}, ` +
         `ставка ${tax.ratePct.toString()}%. Начислено на сегодня ${rub(tax.accrued)}.` +
-        (next ? ` Ближайший платёж ${dateRu(next.due)}, ${rub(next.amount)}.` : '') +
+        (next ? ` Ближайший платёж ${dateIn(next.due, now)}, ${rub(next.amount)}.` : '') +
         ` Проверьте с бухгалтером.`,
     });
   }

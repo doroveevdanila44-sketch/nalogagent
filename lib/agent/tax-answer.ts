@@ -173,7 +173,8 @@ export function paymentLines(
   if (first.kind === 'vat') {
     const total = sum(same.filter((p) => p.kind === 'vat').map((p) => p.amount));
     const third = VAT_THIRD[(first.vatThird ?? 1) - 1];
-    return `Ближайший платёж по НДС ${dateRu(first.due)}: ${third} за ${first.vatQuarter} квартал, ${rub(total)}.`;
+    const when = first.due.year === c.now.year ? dateRu(first.due) : `${dateRu(first.due)} ${first.due.year}`;
+    return `Ближайший платёж по НДС ${when}: ${third} за ${first.vatQuarter} квартал, ${rub(total)}.`;
   }
   const usn = sum(same.filter((p) => p.kind === 'usn').map((p) => p.amount));
   const profit = sum(same.filter((p) => p.kind === 'profit').map((p) => p.amount));
@@ -270,7 +271,7 @@ function vatAnswer(c: TaxAnswerContext, i: Interpretation, scope: string[], name
     }
     const q = i.period!.kind === 'quarter' || i.period!.kind === 'year' || i.period!.kind === 'ytd';
     const pay = paymentLines(c, ['vat'], scope);
-    if (q) paragraphs.push('НДС платится тремя равными частями до 28 числа трёх месяцев после квартала.');
+    if (q) paragraphs.push(`НДС платится тремя равными частями до ${c.input.ctx.rules.paymentDay} числа трёх месяцев после квартала.`);
     if (pay) {
       paragraphs.push(pay);
       evidence.push(`График платежей: ${pay}`);

@@ -82,16 +82,16 @@ test.describe('карточка «Что если купим N машин»: к�
     // обязательные поля пусты: «Рассчитать» не работает, подсказка называет недостающее
     const go = form.getByRole('button', { name: 'Рассчитать', exact: true });
     await expect(go).toBeDisabled();
-    await expect(form.getByTestId('ff-left')).toContainText('юрлицо');
-    await expect(form.getByTestId('ff-left')).toContainText('стоимость машины');
-    await expect(form.getByTestId('ff-left')).toContainText('цена сдачи');
+    await expect(form.getByTestId('ff-left')).toContainText('Выберите юрлицо');
+    await expect(form.getByTestId('ff-left')).toContainText('Укажите стоимость машины');
+    await expect(form.getByTestId('ff-left')).toContainText('Укажите цену сдачи');
 
     await form.getByRole('radio', { name: 'Дельта', exact: true }).click();
     await form.getByRole('button', { name: '3 млн', exact: true }).click();
     await expect(go).toBeDisabled();
     await form.getByRole('button', { name: '8 000 ₽', exact: true }).click();
-    // выручка на машину считается ядром и видна до отправки
-    await expect(form.getByTestId('ff-per-car')).toHaveText('= 160 000 ₽ в месяц на машину');
+    // итог считается ядром и виден до отправки: сумма покупки и выручка в месяц
+    await expect(form.getByTestId('ff-live')).toHaveText('5 машин × 3 000 000 ₽ = 15 000 000 ₽, выручка 800 000 ₽ в месяц');
     await expect(form.getByLabel('Стоимость одной машины, ₽')).toHaveValue('3 000 000');
     await expect(go).toBeEnabled();
     await shot(page, 'desktop-card');
@@ -147,17 +147,17 @@ test.describe('карточка «Что если купим N машин»: к�
     await expect(form.getByLabel('Сколько машин')).toHaveValue('3');
     await expect(form.getByLabel('Стоимость одной машины, ₽')).toHaveValue('4 000 000');
     await expect(form.getByLabel('Цена сдачи, ₽ в сутки')).toHaveValue('9 000');
-    // названное быстрыми вариантами не предлагается
-    await expect(form.getByRole('group', { name: 'Быстрые варианты стоимости' })).toHaveCount(0);
-    await expect(form.getByRole('group', { name: 'Быстрые варианты цены сдачи' })).toHaveCount(0);
-    // «с НДС» или «без НДС» не названо: ни один вариант не выбран, пока человек не подтвердит
-    await expect(form.getByRole('radio', { name: 'с НДС', exact: true })).toHaveAttribute('aria-checked', 'false');
+    // быстрые суммы подписаны «Быстро» и есть всегда, пока карточка не отправлена
+    await expect(form.getByRole('group', { name: 'Быстрые варианты стоимости' }).getByText('Быстро', { exact: true })).toBeVisible();
+    await expect(form.getByRole('group', { name: 'Быстрые варианты цены сдачи' })).toHaveCount(1);
+    // «с НДС» стоит сразу (покупка у дилера), подтверждать не нужно
+    await expect(form.getByRole('radio', { name: 'с НДС', exact: true })).toHaveAttribute('aria-checked', 'true');
     await expect(form.getByRole('radio', { name: 'без НДС', exact: true })).toHaveAttribute('aria-checked', 'false');
     const go = form.getByRole('button', { name: 'Рассчитать', exact: true });
-    await form.getByRole('radio', { name: 'Эпсилон', exact: true }).click();
     await expect(go).toBeDisabled();
-    await form.getByRole('radio', { name: 'без НДС', exact: true }).click();
+    await form.getByRole('radio', { name: 'Эпсилон', exact: true }).click();
     await expect(go).toBeEnabled();
+    await form.getByRole('radio', { name: 'без НДС', exact: true }).click();
     await go.click();
     await waitAnswer(page);
     const t = plain(await lastMsg(page).innerText());
@@ -165,6 +165,103 @@ test.describe('карточка «Что если купим N машин»: к�
     // Эпсилон на 22% с вычетами: вход по машинам принят к вычету
     expect(t).toContain('принят к вычету в ноябре');
     expect(t).toContain('этот эффект не учтён, нужен бухгалтер');
+  });
+
+  test('разные цены по машинам: строки на каждую, быстрые суммы в строку с курсором, копирование первой, ответ по каждой', async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await resetChat();
+    await firstLogin(page, PIN);
+    await pickSuggestion(page, 'Что если купим 5 машин?');
+    await waitAnswer(page);
+    const form = card(page);
+    await form.getByRole('radio', { name: 'Эпсилон', exact: true }).click();
+
+    // по умолчанию все машины одинаковые: поля общие, строк по машинам нет
+    const same = form.getByTestId('ff-same');
+    await expect(same).toHaveAttribute('aria-checked', 'true');
+    await expect(form.getByTestId('ff-units')).toHaveCount(0);
+    await same.click();
+    await expect(same).toHaveAttribute('aria-checked', 'false');
+    await expect(form.locator('.ff-unit')).toHaveCount(5);
+    await expect(form.getByLabel('Стоимость одной машины, ₽')).toHaveCount(0);
+    // жёсткие сообщения называют поле и машину
+    const go = form.getByRole('button', { name: 'Рассчитать', exact: true });
+    await expect(go).toBeDisabled();
+    await expect(form.getByTestId('ff-left')).toContainText('Укажите стоимость машины 1');
+    await expect(form.getByTestId('ff-left')).toContainText('Укажите цену сдачи машины 1');
+    await expect(form.getByTestId('ff-left')).toContainText('и ещё 7');
+    // копировать нечего, пока первая машина пуста, и причина написана
+    await expect(form.getByTestId('ff-copy-first')).toBeDisabled();
+    await expect(form.getByText('Сначала заполните машину 1.')).toBeVisible();
+
+    // быстрая сумма попадает в строку, где курсор (машина 1 по умолчанию)
+    await form.getByLabel('Стоимость машины 1, ₽').focus();
+    await form.getByTestId('ff-quick-cost').getByRole('button', { name: '3 млн', exact: true }).click();
+    await form.getByLabel('Цена сдачи машины 1, ₽ в сутки').focus();
+    await form.getByTestId('ff-quick-rent').getByRole('button', { name: '8 000 ₽', exact: true }).click();
+    await expect(form.getByLabel('Стоимость машины 1, ₽')).toHaveValue('3 000 000');
+    await expect(form.getByLabel('Цена сдачи машины 1, ₽ в сутки')).toHaveValue('8 000');
+    await form.getByTestId('ff-copy-first').click();
+    for (let i = 1; i <= 5; i++) {
+      await expect(form.getByLabel(`Стоимость машины ${i}, ₽`)).toHaveValue('3 000 000');
+      await expect(form.getByLabel(`Цена сдачи машины ${i}, ₽ в сутки`)).toHaveValue('8 000');
+    }
+    // машина 2 дороже: курсор в её строке, быстрые суммы идут туда
+    await form.getByLabel('Стоимость машины 2, ₽').focus();
+    await expect(form.getByTestId('ff-quick-cost')).toContainText('стоимость машины 2');
+    await form.getByTestId('ff-quick-cost').getByRole('button', { name: '5 млн', exact: true }).click();
+    await form.getByLabel('Цена сдачи машины 2, ₽ в сутки').focus();
+    await form.getByTestId('ff-quick-rent').getByRole('button', { name: '12 000 ₽', exact: true }).click();
+    await expect(form.getByLabel('Стоимость машины 2, ₽')).toHaveValue('5 000 000');
+    await expect(form.getByLabel('Стоимость машины 1, ₽')).toHaveValue('3 000 000');
+    await expect(form.getByLabel('Цена сдачи машины 2, ₽ в сутки')).toHaveValue('12 000');
+    await expect(go).toBeEnabled();
+    // итог по всем машинам считает ядро: 3+5+3+3+3 млн; (4 × 8 000 + 12 000) × 20 = 880 000 ₽
+    await expect(form.getByTestId('ff-live')).toHaveText('Всего 5 машин: 17 000 000 ₽, выручка 880 000 ₽ в месяц');
+    await expect(form.getByTestId('ff-warn')).toHaveCount(0);
+    await shot(page, 'desktop-rows');
+
+    // мягкое предупреждение не блокирует
+    await form.getByLabel('Стоимость машины 5, ₽').fill('100000');
+    await expect(form.getByTestId('ff-warn')).toContainText('Машина 5: стоимость 100 000 ₽ меньше 300 000 ₽, проверьте');
+    await expect(go).toBeEnabled();
+    await form.getByLabel('Стоимость машины 5, ₽').fill('3000000');
+    await expect(form.getByTestId('ff-warn')).toHaveCount(0);
+
+    // общий переключатель «с НДС» относится к покупке; цена сдачи с НДС, как платит клиент
+    await expect(form.getByRole('radio', { name: 'с НДС', exact: true })).toHaveAttribute('aria-checked', 'true');
+    await expect(form.getByText('Цена, которую платит клиент, как есть', { exact: false }).first()).toBeVisible();
+
+    await go.click();
+    await waitAnswer(page);
+    const answer = lastMsg(page);
+    await expect(answer.getByTestId('scenario-mark')).toHaveText('Сценарий, а не прогноз:');
+    const t = plain(await answer.innerText());
+    expect(t).toContain('машина 2 за 5 000 000 ₽, сдача 12 000 ₽ в сутки (240 000 ₽ в месяц)');
+    expect(t).toContain('принят к вычету в ноябре: у ООО «Эпсилон» ставка 22% с вычетами');
+    expect(t).toContain('Окупаемость всех машин вместе');
+    // таблица по машинам: пять строк и «Вместе»
+    const perCar = answer.locator('table').filter({ hasText: 'Окупаемость' }).last();
+    await expect(perCar.locator('tbody tr')).toHaveCount(6);
+    await expect(perCar.locator('tbody tr').nth(1)).toContainText('5 000 000 ₽');
+    await expect(perCar.locator('tbody tr').nth(1)).toContainText('240 000 ₽');
+    await expect(perCar.locator('tbody tr').last()).toContainText('Вместе');
+
+    // «Изменить» открывает те же строки; больше 10 машин: переключатель заблокирован с подсказкой
+    await answer.getByRole('button', { name: 'Изменить', exact: true }).click();
+    const edit = answer.locator('[data-form="fleet"]');
+    await expect(edit.getByTestId('ff-same')).toHaveAttribute('aria-checked', 'false');
+    await expect(edit.getByLabel('Стоимость машины 2, ₽')).toHaveValue('5 000 000');
+    await edit.getByLabel('Сколько машин').fill('11');
+    await expect(edit.getByTestId('ff-same')).toBeDisabled();
+    await expect(edit.getByTestId('ff-same')).toHaveAttribute('aria-checked', 'true');
+    await expect(edit.getByTestId('ff-many')).toContainText('до 10 машин');
+    await expect(edit.getByLabel('Стоимость одной машины, ₽')).toBeVisible();
+    await edit.getByLabel('Сколько машин').fill('0');
+    await expect(edit.getByTestId('ff-left')).toContainText('Укажите, сколько машин: от 1 до 50');
+    await expect(edit.getByRole('button', { name: 'Рассчитать', exact: true })).toBeDisabled();
   });
 });
 
@@ -284,5 +381,37 @@ test.describe('карточка «Что если купим N машин»: т�
     // страница на месте: шапка не уехала под часы
     expect(await page.evaluate(() => [window.scrollY, document.documentElement.scrollTop])).toEqual([0, 0]);
     await shot(page, 'phone-answer');
+  });
+
+  test('разные цены по машинам на телефоне: строки помещаются в 390 px, поля 16 px и не меньше 44 px высотой', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await resetChat();
+    await firstLogin(page, PIN);
+    await pickSuggestion(page, 'Что если купим 5 машин?');
+    await waitAnswer(page);
+    const form = card(page);
+    await form.getByTestId('ff-same').tap();
+    await expect(form.locator('.ff-unit')).toHaveCount(5);
+    const geo = await form.evaluate((root) => {
+      const box = root.getBoundingClientRect();
+      const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('.ff-unit input'));
+      return {
+        overflow: root.scrollWidth - root.clientWidth,
+        right: Math.max(...inputs.map((i) => i.getBoundingClientRect().right)) - box.right,
+        heights: inputs.map((i) => Math.round(i.getBoundingClientRect().height)),
+        sizes: inputs.map((i) => parseFloat(getComputedStyle(i).fontSize)),
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+    expect(geo.overflow).toBeLessThanOrEqual(0);
+    expect(geo.right).toBeLessThanOrEqual(0);
+    expect(geo.pageOverflow).toBeLessThanOrEqual(0);
+    for (const h of geo.heights) expect(h).toBeGreaterThanOrEqual(44);
+    for (const sz of geo.sizes) expect(sz).toBeGreaterThanOrEqual(16);
+    const sw = (await form.getByTestId('ff-same').boundingBox())!;
+    expect(sw.height).toBeGreaterThanOrEqual(44);
+    await shot(page, 'phone-rows');
   });
 });

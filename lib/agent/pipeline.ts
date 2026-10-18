@@ -42,6 +42,7 @@ import {
   buildFleetForm,
   fleetDraft,
   requestFromSubmit,
+  restQuestion,
   valuesFromRequest,
   type FleetDraft,
 } from './fleet-form';
@@ -178,7 +179,7 @@ export async function runPipeline(p: PipelineInput): Promise<AgentReply> {
   const route: Route = classify(p.question, {
     entities: p.entities,
     pending: p.pending,
-    context: { today: p.now, awaiting, hasPrevious: previous !== null },
+    context: { today: p.now, awaiting, hasPrevious: previous !== null, restAsk: Boolean(previous?.restAsk) },
   });
 
   switch (route.cls) {
@@ -272,6 +273,11 @@ async function unsupportedReply(p: PipelineInput, interp: Interpretation, ectx: 
   if (u.kind === 'legal_assessment') {
     const i = await p.counters.nextRefusal();
     return text('D', `${REFUSALS[i % REFUSALS.length]!}\n\n${canDo}`, { unsupported: u.kind, interp });
+  }
+
+  // значение вне границ: ответ называет границу и просит поправить, строка «Что могу сейчас» здесь лишняя
+  if (u.kind === 'bad_value') {
+    return text('A', `${u.message} Поправьте значение и спросите ещё раз.`, { unsupported: u.kind, interp });
   }
 
   let quick: QuickReply[] = [];
@@ -497,9 +503,15 @@ async function carsReply(p: PipelineInput, interp: Interpretation): Promise<Agen
     );
   }
 
-  const draft = fleetDraft(req, named, p.now);
   // из карточки пришло всё названное человеком; из текста вопроса недостающее спрашиваем
   const submitted = Boolean(p.form);
+  // названы цены не всех машин: сначала один вопрос про остальные, потом карточка
+  const rq = submitted ? null : restQuestion(req);
+  if (rq) {
+    return text('A', rq.text, { quick: rq.quick, interp: { ...interp, restAsk: true }, intent: 'whatif' });
+  }
+
+  const draft = fleetDraft(req, named, p.now);
   if (!submitted && draft.badStart && draft.missing.length === 0 && !draft.confirmVat) {
     return fleetAsk(p, interp, draft, 'Сдача может начаться не раньше следующего месяца: проверьте месяц начала.');
   }
@@ -584,7 +596,7 @@ async function paymentReply(p: PipelineInput, interp: Interpretation, ectx: Expl
     paragraphs,
     tables: [],
     how: [
-      'Сроки по справочнику: платёж не позднее 28 числа; НДС тремя равными частями после квартала.',
+      `Сроки по справочнику: платёж не позднее ${p.input.ctx.rules.paymentDay} числа; НДС тремя равными частями после квартала.`,
       ...(line ? [`График платежей: ${line}`] : []),
     ],
     entityId: scope.length === 1 ? scope[0] : null,

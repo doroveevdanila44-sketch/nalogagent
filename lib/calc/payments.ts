@@ -27,7 +27,8 @@ export interface GroupPayment {
 /**
  * Предстоящие платежи группы с сегодняшнего дня, по возрастанию срока:
  *  - УСН и налог на прибыль: авансы и итог года по графику юрлица;
- *  - НДС за прошедший квартал тремя равными частями до 28 числа трёх месяцев после квартала.
+ *  - НДС за прошедший квартал тремя равными частями до 28 числа трёх месяцев после квартала; в четвёртом
+ *    квартале добавляются три доли за четвёртый квартал со сроками в январе, феврале и марте следующего года.
  * Для первого квартала данных о прошлом годе нет, платежи НДС не строятся.
  */
 export function groupPayments(
@@ -78,6 +79,31 @@ export function groupPayments(
           amount: third,
           vatThird: k + 1,
           vatQuarter: prev + 1,
+        });
+      }
+    }
+  }
+
+  // В четвёртом квартале идут и платежи за третий, и платежи за четвёртый: они выпадают на январь,
+  // февраль и март следующего года. Без них после 28 декабря ближайшим стал бы платёж в конце марта.
+  if (q === 3) {
+    for (const e of entities) {
+      if (e.status !== 'payer') continue;
+      const third = taxFor(
+        selectedRate(e, selections),
+        quarterRevenue(e, ctx, 3, now),
+        e.inputVatShare,
+        ctx.rules.generalRate,
+      ).div(3);
+      for (let k = 0; k < 3; k++) {
+        out.push({
+          due: { year: now.year + 1, month: k, day: ctx.rules.paymentDay },
+          kind: 'vat',
+          entityId: e.id,
+          entityName: e.name,
+          amount: third,
+          vatThird: k + 1,
+          vatQuarter: 4,
         });
       }
     }

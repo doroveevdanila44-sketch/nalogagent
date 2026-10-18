@@ -122,14 +122,24 @@ export interface ChatTurn {
 
 // ===== Карточка «Что если купим N машин» =====
 
+/** Цены одной машины в карточке; `null`: не заполнено. */
+export interface FleetFormUnit {
+  cost: number | null;
+  rentPerDay: number | null;
+}
+
 /** Значения полей карточки. Числа в рублях, как ввёл человек; `null`: не заполнено. */
 export interface FleetFormValues {
   entityId: string | null;
   cars: number | null;
+  /** Переключатель «Все машины одинаковые»: общие `cost` и `rentPerDay`; выключен: цены в `units` */
+  same: boolean;
   cost: number | null;
-  /** Переключатель «с НДС / без НДС» */
+  /** Переключатель «с НДС / без НДС»: относится к стоимости покупки */
   costWithVat: boolean;
   rentPerDay: number | null;
+  /** Цены по машинам (до 10), когда машины разные; пусто у одинаковых */
+  units: FleetFormUnit[];
   rentDays: number;
   /** Первый месяц сдачи 0..11 */
   startMonth: number;
@@ -146,7 +156,7 @@ export interface FleetForm {
   values: FleetFormValues;
   /** Не названо в вопросе: поле подсвечено, пока пустое, и без него «Рассчитать» не работает */
   missing: FleetFormField[];
-  /** Стоимость названа в вопросе, а «с НДС» или «без НДС» нет: переключатель просит подтвердить */
+  /** Всегда false: «с НДС» (покупка у дилера) стоит по умолчанию и виден в поле, подтверждать не нужно. Поле осталось для ранее сохранённых ответов */
   confirmVat: boolean;
   /** Юрлица для кнопок: Альфа, Бета, Дельта, Гамма, Эпсилон */
   entities: { id: string; label: string }[];
@@ -162,9 +172,12 @@ export interface FleetForm {
 export interface FleetFormSubmit {
   entityId: string;
   cars: number;
-  cost: number;
+  /** Одинаковые машины: общая стоимость и цена сдачи; разные: null, цены в `units` */
+  cost: number | null;
   costWithVat: boolean;
-  rentPerDay: number;
+  rentPerDay: number | null;
+  /** Разные машины: цены по порядку, по одной на машину */
+  units: { cost: number; rentPerDay: number }[] | null;
   rentDays: number;
   startMonth: number;
   expenses: number | null;
@@ -242,7 +255,9 @@ export type Unsupported =
   | { kind: 'next_year'; year: number; period: Period; reason: NextYearReason }
   | { kind: 'other_tax'; name: string }
   | { kind: 'unknown_entity'; name: string }
-  | { kind: 'legal_assessment' };
+  | { kind: 'legal_assessment' }
+  /** Названное значение вне допустимых границ («100 машин», «40 дней», «на 1000%»): ответ называет границу */
+  | { kind: 'bad_value'; message: string };
 
 export interface Interpretation {
   /** Юрлица из группы по id; пусто для группы целиком и когда юрлицо не названо */
@@ -268,6 +283,8 @@ export interface Interpretation {
    * `entities`; пока оно не названо, агент спрашивает. null или поля нет у остальных вопросов.
    */
   whatIf?: WhatIfRequest | null;
+  /** Агент спросил «Для остальных такая же цена?»: короткое «да» или «нет» отвечает на это */
+  restAsk?: boolean;
 }
 
 /** Карточка «Понял так» перед результатом. */

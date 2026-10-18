@@ -1,10 +1,14 @@
 import {
   MONTH_NAMES,
   dec,
+  fleetSoftWarnings,
+  fleetUnitPrices,
   numText,
   pluralRu,
   rub,
   sourceLine,
+  type CarsRequest,
+  type FleetEffect,
   type WhatIfComparison,
 } from '@/lib/calc';
 import {
@@ -42,6 +46,28 @@ export interface WhatIfAnswer {
 }
 
 const BULLET = '• ';
+
+const paybackCell = (v: FleetEffect['paybackMonths']) => (v === null ? 'не окупается' : `${v.toFixed(1).replace('.', ',')} мес.`);
+
+/** Разбивка по машинам, когда они различаются: стоимость, цена сдачи, выручка, вычет, окупаемость и итог. */
+function breakdownTable(f: FleetEffect): Table {
+  const applied = f.deduction === 'applied';
+  const rows = f.units.map((u) => [
+    `Машина ${u.index + 1}`,
+    rub(u.cost),
+    rub(u.rentPerDay),
+    rub(u.perMonth),
+    applied ? rub(u.inputVat) : 'нет',
+    paybackCell(u.paybackMonths),
+  ]);
+  rows.push(['Вместе', rub(f.totalCost), '', rub(f.perMonth), applied ? rub(f.deducted) : 'нет', paybackCell(f.paybackMonths)]);
+  return {
+    head: ['Машина', 'Стоимость', 'Сдача в сутки', 'Выручка в месяц', 'Вычет НДС', 'Окупаемость'],
+    rows,
+    totalRow: true,
+    dense: true,
+  };
+}
 
 /** Кто затронут, в фразе «у …»: «у ИП Дельта», «у группы». */
 function whoOf(cmp: WhatIfComparison): string {
@@ -180,6 +206,9 @@ export function buildWhatIfAnswer(c: TaxAnswerContext, cmp: WhatIfComparison, en
     // принятые значения одной строкой вверху, затем кто покупает и что это даёт по месяцам
     paragraphs.push(`Сценарий, а не прогноз: ${fleet.lines.values}.`);
     paragraphs.push(`${headline(cmp)}.`);
+    // необычные значения не блокируют расчёт, но их стоит перепроверить
+    const soft = fleetSoftWarnings(fleetUnitPrices(cmp.spec.request as CarsRequest));
+    if (soft.length > 0) paragraphs.push(`Проверьте значения: ${soft.join('; ')}.`);
   } else {
     paragraphs.push(`Сценарий, а не прогноз: ${headline(cmp)}.`);
   }
@@ -231,6 +260,8 @@ export function buildWhatIfAnswer(c: TaxAnswerContext, cmp: WhatIfComparison, en
   paragraphs.push(`Допущения:\n${rest.map((a) => `${BULLET}${a}.`).join('\n')}`);
 
   const tables: Table[] = [summaryTable(snap)];
+  // машины различаются: разбивка по каждой
+  if (fleet && !fleet.effect.uniform) tables.push(breakdownTable(fleet.effect));
   const byEntity = entityTable(snap);
   if (byEntity) tables.push(byEntity);
 

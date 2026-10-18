@@ -57,6 +57,7 @@ const FORM: FleetFormSubmit = {
   cost: 3_000_000,
   costWithVat: true,
   rentPerDay: 8_000,
+  units: null,
   rentDays: 20,
   startMonth: 10,
   expenses: null,
@@ -179,9 +180,11 @@ describe('подсказка «Что если купим 5 машин?»: ка�
     expect(f.values).toEqual({
       entityId: null,
       cars: 5,
+      same: true,
       cost: null,
       costWithVat: true,
       rentPerDay: null,
+      units: [],
       rentDays: 20,
       startMonth: 10,
       expenses: null,
@@ -245,9 +248,11 @@ describe('подсказка «Что если купим 5 машин?»: ка�
     expect(f.values).toEqual({
       entityId: 'delta',
       cars: 5,
+      same: true,
       cost: 4_500_000,
       costWithVat: false,
       rentPerDay: 8_000,
+      units: [],
       rentDays: 20,
       startMonth: 10,
       expenses: 25_000,
@@ -298,8 +303,9 @@ describe('значения из вопроса подставляются, сп�
     const f = q.form!;
     expect(f.missing).toEqual(['entity']);
     expect(f.values).toMatchObject({ entityId: null, cars: 3, cost: 4_000_000, rentPerDay: 9_000, rentDays: 20, startMonth: 10 });
-    // «с НДС или без» не названо: переключатель просит подтвердить
-    expect(f.confirmVat).toBe(true);
+    // «с НДС или без» не названо: стоит «с НДС» (покупка у дилера), подтверждать не нужно
+    expect(f.confirmVat).toBe(false);
+    expect(f.values.costWithVat).toBe(true);
     expect(q.text).toBe('Чтобы посчитать, уточните параметры машин. Не хватает: юрлицо.');
   });
 
@@ -313,13 +319,13 @@ describe('значения из вопроса подставляются, сп�
     );
   });
 
-  it('стоимость без «с НДС» или «без НДС»: считать нельзя, пока человек не подтвердит', async () => {
-    const q = await ask('что если Дельта купит 3 машины по 4 млн, сдавать по 9000 в сутки');
-    expect(q.fromCalc).toBe(false);
-    expect(q.form!.mode).toBe('ask');
-    expect(q.form!.missing).toEqual([]);
-    expect(q.form!.confirmVat).toBe(true);
-    expect(q.text).toContain('с НДС или без НДС');
+  it('стоимость без «с НДС» или «без НДС»: считается с НДС (покупка у дилера), это видно в первой строке ответа', async () => {
+    const r = await ask('что если Дельта купит 3 машины по 4 млн, сдавать по 9000 в сутки');
+    expect(r.fromCalc).toBe(true);
+    expect(r.form!.mode).toBe('edit');
+    expect(r.form!.confirmVat).toBe(false);
+    expect(r.form!.values.costWithVat).toBe(true);
+    expect(plain(r.text)).toContain('3 машины по 4 000 000 ₽ с НДС');
   });
 
   it('месяц начала уже идёт: молча не заменяется, карточка просит проверить', async () => {
@@ -501,8 +507,9 @@ describe('свободный ввод', () => {
     expect(r.fromCalc).toBe(false);
     expect(r.form!.values).toMatchObject({ entityId: 'alfa', cars: 3, cost: 7_000_000, rentPerDay: null });
     expect(r.form!.missing).toEqual(['rent']);
-    // с НДС или без не названо: просит подтвердить
-    expect(r.form!.confirmVat).toBe(true);
+    // с НДС или без не названо: «с НДС» по умолчанию, спрашивать нечего
+    expect(r.form!.confirmVat).toBe(false);
+    expect(r.form!.values.costWithVat).toBe(true);
   });
 
   it('прежний сценарий покупки (без условия и без сдачи) работает как раньше', async () => {
@@ -583,6 +590,39 @@ describe('сценарий не меняет данные и действия р
     }
   });
 
+  it('цены по машинам доходят до панели и Excel: допущения по каждой машине, те же итоги, что в ответе', async () => {
+    const q = await ask('Что если купим 2 машины?');
+    const { agent: r } = await submit(
+      {
+        entityId: 'epsilon',
+        cars: 2,
+        cost: null,
+        rentPerDay: null,
+        units: [
+          { cost: 3_000_000, rentPerDay: 8_000 },
+          { cost: 5_000_000, rentPerDay: 12_000 },
+        ],
+      },
+      q.id,
+    );
+    const snaps = await resolveTarget(db, { userId, target: { message: r.id }, nowMs: clock, tz: TZ });
+    const scenario = snaps.find((x) => x.tax === 'vat' && x.whatIf?.role === 'scenario')!;
+    const assumptions = plain(scenario.assumptions!.join(' '));
+    expect(assumptions).toContain('машина 1 160 000 ₽');
+    expect(assumptions).toContain('машина 2 240 000 ₽');
+    expect(assumptions).toContain('400 000');
+    // та же добавочная выручка 400 000 ₽ в месяц × 2 месяца, что и в ответе
+    const vatBase = snaps.find((x) => x.tax === 'vat' && x.whatIf?.role === 'base')!;
+    expect(Number(scenario.revenue) - Number(vatBase.revenue)).toBeCloseTo(800_000, 2);
+    const file = await excelFor(snaps);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(file.file as unknown as ArrayBuffer);
+    expect(wb.worksheets[0]!.name).toBe('Сценарий');
+    const cells: string[] = [];
+    wb.worksheets[0]!.eachRow((row) => row.eachCell((c) => cells.push(String(typeof c.value === 'object' && c.value && 'result' in c.value ? c.value.result : c.value))));
+    expect(plain(cells.join(' | '))).toContain('машина 2 240 000 ₽');
+  });
+
   it('запись в базе хранит понимание сценария со всеми значениями для продолжения', async () => {
     const q = await ask('Что если купим 5 машин?');
     const { agent: r } = await submit({ entityId: 'alfa' }, q.id);
@@ -595,5 +635,282 @@ describe('сценарий не меняет данные и действия р
       fleet: { cost: 3_000_000, costWithVat: true, rentPerDay: 8_000, rentDays: 20, startMonth: 10, expensesPerMonth: 0 },
     });
     expect(interp.entities).toEqual(['alfa']);
+  });
+});
+
+describe('цены по машинам: вопрос, карточка и ответ', () => {
+  const PAIR = 'машины, первая 3 млн, вторая 5 млн, сдавать по 8000 в сутки';
+
+  it('«купим 2 машины, первая 3 млн, вторая 5 млн»: строки машин заполнены, по каждой своя цена', async () => {
+    const r = await ask(`что если Эпсилон купит 2 ${PAIR}`);
+    expect(r.fromCalc).toBe(true);
+    expect(r.form!.mode).toBe('edit');
+    expect(r.form!.values).toMatchObject({
+      entityId: 'epsilon',
+      cars: 2,
+      same: false,
+      units: [
+        { cost: 3_000_000, rentPerDay: 8_000 },
+        { cost: 5_000_000, rentPerDay: 8_000 },
+      ],
+    });
+    const t = plain(r.text);
+    expect(t).toContain('машина 1 за 3 000 000 ₽, сдача 8 000 ₽ в сутки (160 000 ₽ в месяц)');
+    expect(t).toContain('машина 2 за 5 000 000 ₽, сдача 8 000 ₽ в сутки (160 000 ₽ в месяц)');
+    expect(t).toContain('((3 000 000 ₽ + 5 000 000 ₽) × 22 / 122)');
+    expect(t).toContain('Окупаемость всех машин вместе: 8 000 000 ₽ / 320 000 ₽ = 25,0 мес.');
+  });
+
+  it('в ответе есть таблица по машинам: вычет, выручка и окупаемость каждой, строка «Вместе»', async () => {
+    const r = await ask(`что если Эпсилон купит 2 ${PAIR}`);
+    const table = r.tables.find((x) => x.head[0] === 'Машина')!;
+    expect(table.head).toEqual(['Машина', 'Стоимость', 'Сдача в сутки', 'Выручка в месяц', 'Вычет НДС', 'Окупаемость']);
+    expect(table.rows.map((row) => row.map(plain))).toEqual([
+      ['Машина 1', '3 000 000 ₽', '8 000 ₽', '160 000 ₽', '540 984 ₽', '18,8 мес.'],
+      ['Машина 2', '5 000 000 ₽', '8 000 ₽', '160 000 ₽', '901 639 ₽', '31,3 мес.'],
+      ['Вместе', '8 000 000 ₽', '', '320 000 ₽', '1 442 623 ₽', '25,0 мес.'],
+    ]);
+  });
+
+  it('одинаковые машины: таблицы по машинам нет, ответ прежний', async () => {
+    const r = await ask('что если Эпсилон купит 3 машины по 3 млн, сдавать по 8000 в сутки');
+    expect(r.tables.find((x) => x.head[0] === 'Машина')).toBeUndefined();
+    expect(plain(r.text)).toContain('3 машины по 3 000 000 ₽ с НДС, сдача 8 000 ₽ в сутки × 20 дней = 160 000 ₽ в месяц на машину');
+    expect(r.form!.values).toMatchObject({ same: true, cost: 3_000_000, units: [] });
+  });
+
+  it('вычет входного НДС: 22% получает, 5% и освобождение нет, и ответ говорит об этом прямо', async () => {
+    const eps = plain((await ask(`что если Эпсилон купит 2 ${PAIR}`)).text);
+    expect(eps).toContain('принят к вычету в ноябре: у ООО «Эпсилон» ставка 22% с вычетами');
+    const alfa = plain((await ask(`что если Альфа купит 2 ${PAIR}`)).text);
+    expect(alfa).toContain('Вычета входного НДС по машинам нет: у ООО «Альфа» выбрана ставка 5%, при ней вычеты не применяются');
+    const beta = plain((await ask(`что если Бета купит 2 ${PAIR}`)).text);
+    expect(beta).toContain('Вычета входного НДС по машинам нет: у ИП Бета выбрана ставка 5%');
+    for (const [id, name] of [
+      ['Дельта', 'ИП Дельта'],
+      ['Гамма', 'ООО «Гамма»'],
+    ] as const) {
+      const t = plain((await ask(`что если ${id} купит 2 ${PAIR}`)).text);
+      expect(t, id).toContain(`Вычета входного НДС по машинам нет: у ${name} освобождение от НДС, вычеты не применяются`);
+    }
+  });
+
+  it('названа цена только первой машины: агент спрашивает про остальные, считать не начинает', async () => {
+    const q = await ask('что если Альфа купит 5 машин, первая 3 млн');
+    expect(q.fromCalc).toBe(false);
+    expect(q.form).toBeNull();
+    expect(q.text).toBe('Для остальных четырёх такая же цена?');
+    expect(q.quick.map((x) => x.label)).toEqual(['Да', 'Указать каждую']);
+  });
+
+  it('«Да»: остальные машины с той же ценой, карточка с общей стоимостью спрашивает цену сдачи', async () => {
+    const q = await ask('что если Альфа купит 5 машин, первая 3 млн');
+    const yes = await ask(q.quick[0]!.text, q.id);
+    expect(yes.fromCalc).toBe(false);
+    expect(yes.form!.values).toMatchObject({ cars: 5, same: true, cost: 3_000_000, units: [] });
+    expect(yes.form!.missing).toEqual(['rent']);
+  });
+
+  it('«Указать каждую»: строки по пяти машинам, у первой цена 3 млн, у остальных пусто', async () => {
+    const q = await ask('что если Альфа купит 5 машин, первая 3 млн');
+    const each = await ask(q.quick[1]!.text, q.id);
+    expect(each.fromCalc).toBe(false);
+    const v = each.form!.values;
+    expect(v.same).toBe(false);
+    expect(v.units).toHaveLength(5);
+    expect(v.units[0]).toEqual({ cost: 3_000_000, rentPerDay: null });
+    expect(v.units.slice(1).every((u) => u.cost === null)).toBe(true);
+    expect(each.form!.missing).toEqual(['cost', 'rent']);
+  });
+
+  it('просто «да» после вопроса про остальные машины тоже принимается', async () => {
+    const q = await ask('что если Альфа купит 3 машины, первая 3 млн, вторая 5 млн');
+    expect(q.text).toBe('Для остальной машины такая же цена, как у машины 2?');
+    const yes = await ask('да', q.id);
+    expect(yes.form!.values.units).toHaveLength(3);
+    expect(yes.form!.values.units[2]!.cost).toBe(5_000_000);
+  });
+
+  it('больше 10 машин: разные цены недоступны, есть только «Да»', async () => {
+    const q = await ask('что если Альфа купит 12 машин, первая 3 млн');
+    expect(q.text).toBe('Для остальных 11 машин такая же цена?');
+    expect(q.quick.map((x) => x.label)).toEqual(['Да']);
+  });
+
+  it('карточка с ценами по машинам: считает по каждой, ответ с таблицей, правка возвращает те же строки', async () => {
+    const q = await ask('Что если купим 2 машины?');
+    const { agent: r } = await submit(
+      {
+        entityId: 'epsilon',
+        cars: 2,
+        cost: null,
+        rentPerDay: null,
+        units: [
+          { cost: 3_000_000, rentPerDay: 8_000 },
+          { cost: 5_000_000, rentPerDay: 12_000 },
+        ],
+      },
+      q.id,
+    );
+    expect(r.fromCalc).toBe(true);
+    const table = r.tables.find((x) => x.head[0] === 'Машина')!;
+    expect(table.rows.map((row) => row.map(plain))).toEqual([
+      ['Машина 1', '3 000 000 ₽', '8 000 ₽', '160 000 ₽', '540 984 ₽', '18,8 мес.'],
+      ['Машина 2', '5 000 000 ₽', '12 000 ₽', '240 000 ₽', '901 639 ₽', '20,8 мес.'],
+      ['Вместе', '8 000 000 ₽', '', '400 000 ₽', '1 442 623 ₽', '20,0 мес.'],
+    ]);
+    expect(r.form!.mode).toBe('edit');
+    expect(r.form!.values.same).toBe(false);
+    expect(r.form!.values.units).toEqual([
+      { cost: 3_000_000, rentPerDay: 8_000 },
+      { cost: 5_000_000, rentPerDay: 12_000 },
+    ]);
+  });
+
+  it('форма без обязательных полей не считает: нет цены сдачи машины 2, нет стоимости', async () => {
+    const q = await ask('Что если купим 2 машины?');
+    const noRent = await submit(
+      {
+        cars: 2,
+        cost: null,
+        rentPerDay: null,
+        units: [
+          { cost: 3_000_000, rentPerDay: 8_000 },
+          { cost: 5_000_000, rentPerDay: 0 },
+        ],
+      },
+      q.id,
+    );
+    expect(noRent.agent.fromCalc).toBe(false);
+    expect(noRent.agent.provenance).toBeNull();
+    expect(noRent.agent.tables).toEqual([]);
+    expect(noRent.agent.form!.note).toContain('Укажите цену сдачи машины 2');
+    const noCost = await submit({ cost: null, rentPerDay: null, units: null }, q.id);
+    expect(noCost.agent.fromCalc).toBe(false);
+    expect(noCost.agent.tables).toEqual([]);
+    expect(noCost.agent.form!.mode).toBe('ask');
+    expect(noCost.agent.form!.missing).toEqual(expect.arrayContaining(['cost', 'rent']));
+  });
+
+  it('неправильные значения называют поле: дни 40, стоимость 0, месяц уже идёт', async () => {
+    const q = await ask('Что если купим 2 машины?');
+    const days = await submit({ rentDays: 40 }, q.id);
+    expect(days.agent.fromCalc).toBe(false);
+    expect(days.agent.form!.note).toContain('Дней сдачи в месяц');
+    const cost = await submit({ cost: 0 }, q.id);
+    expect(cost.agent.fromCalc).toBe(false);
+    expect(cost.agent.form!.note).toContain('Укажите стоимость машины');
+    const month = await submit({ startMonth: 9 }, q.id);
+    expect(month.agent.fromCalc).toBe(false);
+    expect(month.agent.form!.note).toContain('не раньше следующего месяца');
+  });
+
+  it('мягкие предупреждения не блокируют: стоимость 100 000 ₽ считается, в ответе просьба проверить', async () => {
+    const q = await ask('Что если купим 2 машины?');
+    const { agent: r } = await submit({ entityId: 'epsilon', cost: 100_000, rentPerDay: 150_000 }, q.id);
+    expect(r.fromCalc).toBe(true);
+    const t = plain(r.text);
+    expect(t).toContain('Проверьте значения');
+    expect(t).toContain('стоимость 100 000 ₽ меньше 300 000 ₽, проверьте');
+    expect(t).toContain('цена сдачи 150 000 ₽ в сутки больше 100 000 ₽, проверьте');
+  });
+});
+
+describe('значения вне границ называют границу и не заменяются молча', () => {
+  const cases: [string, string][] = [
+    ['что если Альфа купит 1,5 машины по 3 млн, сдавать по 8000 в сутки', 'Число машин должно быть целым, от 1 до 50.'],
+    ['что если Альфа купит 100 машин по 3 млн, сдавать по 8000 в сутки', 'Число машин должно быть от 1 до 50.'],
+    ['что если Альфа купит 51 машину по 3 млн, сдавать по 8000 в сутки', 'Число машин должно быть от 1 до 50.'],
+    ['что если Альфа купит 3 машины по 3 млн, сдавать по 8000 в сутки 40 дней в месяц', 'Дней сдачи в месяц должно быть от 1 до 31.'],
+    ['что если Альфа купит 3 машины по 3 млн, сдавать по 8000 в сутки 0 дней', 'Дней сдачи в месяц должно быть от 1 до 31.'],
+    ['что если Альфа купит 3 машины по -3 млн, сдавать по 8000 в сутки', 'Стоимость машины и цена сдачи должны быть больше нуля.'],
+    ['что если выручка Дельты вырастет на 1000%', 'Изменение выручки должно быть от -90 до 500 процентов.'],
+    ['что если выручка Дельты упадёт на 95%', 'Изменение выручки должно быть от -90 до 500 процентов.'],
+  ];
+  for (const [question, message] of cases) {
+    it(`«${question}» → ${message}`, async () => {
+      const r = await ask(question);
+      expect(r.fromCalc).toBe(false);
+      expect(r.form).toBeNull();
+      expect(r.tables).toEqual([]);
+      expect(plain(r.text)).toBe(`${message} Поправьте значение и спросите ещё раз.`);
+    });
+  }
+
+  it('«вырастет на 3 млрд» это сумма 3 000 000 000 ₽, а не 3 процента', async () => {
+    const r = await ask('что если Дельта вырастет на 3 млрд');
+    const t = plain(r.text);
+    expect(t).toContain('вырастет на 3000 млн');
+    expect(t).not.toContain('вырастет на 3%');
+    expect(t).toContain('выручка 3020,90 млн (было 20,90 млн, +3000,00 млн)');
+  });
+
+  it('«вырастет на 500 тыс» и «на 3 млн» по-прежнему суммы, «на 20%» процент', async () => {
+    expect(plain((await ask('что если Дельта вырастет на 500 тыс')).text)).toContain('вырастет на 500 000 ₽');
+    expect(plain((await ask('что если Дельта вырастет на 3 млн')).text)).toContain('вырастет на 3 млн');
+    expect(plain((await ask('что если Дельта вырастет на 20%')).text)).toContain('вырастет на 20%');
+  });
+
+  it('границы допустимого проходят: 50 машин, 31 день, +500% и −90%', async () => {
+    const fifty = await ask('что если Альфа купит 50 машин по 3 млн, сдавать по 8000 в сутки 31 день');
+    expect(fifty.fromCalc).toBe(true);
+    expect(plain(fifty.text)).toContain('50 машин по 3 000 000 ₽ с НДС, сдача 8 000 ₽ в сутки × 31 день');
+    expect((await ask('что если выручка Дельты вырастет на 500%')).fromCalc).toBe(true);
+    expect((await ask('что если выручка Дельты упадёт на 90%')).fromCalc).toBe(true);
+  });
+});
+
+describe('перечень стоимостей через «и»', () => {
+  it('«2 машины по 3 млн и 5 млн»: две разные машины, а не 3 млн на обе и потерянные 5 млн', async () => {
+    const r = await ask('что если Эпсилон купит 2 машины по 3 млн и 5 млн, сдавать по 8000 в сутки');
+    expect(r.fromCalc).toBe(true);
+    expect(r.form!.values).toMatchObject({
+      same: false,
+      units: [
+        { cost: 3_000_000, rentPerDay: 8_000 },
+        { cost: 5_000_000, rentPerDay: 8_000 },
+      ],
+    });
+    expect(plain(r.text)).toContain('((3 000 000 ₽ + 5 000 000 ₽) × 22 / 122)');
+  });
+
+  it('«по 3 и 5 млн» берёт единицу справа, «по 2, 3 и 5 млн» даёт три машины', async () => {
+    const two = await ask('что если Эпсилон купит 2 машины по 3 и 5 млн, сдавать по 8000 в сутки');
+    expect(two.form!.values.units.map((u) => u.cost)).toEqual([3_000_000, 5_000_000]);
+    const three = await ask('что если Эпсилон купит 3 машины по 2, 3 и 5 млн, сдавать по 8000 в сутки');
+    expect(three.form!.values.units.map((u) => u.cost)).toEqual([2_000_000, 3_000_000, 5_000_000]);
+  });
+
+  it('названо меньше цен, чем машин: спрашивает про остальные', async () => {
+    const q = await ask('что если Эпсилон купит 4 машины по 3 млн и 5 млн, сдавать по 8000 в сутки');
+    expect(q.fromCalc).toBe(false);
+    expect(q.text).toBe('Для остальных двух такая же цена, как у машины 2?');
+  });
+
+  it('«по 3 млн» одно число: цена на все машины, как раньше', async () => {
+    const r = await ask('что если Эпсилон купит 3 машины по 3 млн, сдавать по 8000 в сутки');
+    expect(r.form!.values).toMatchObject({ same: true, cost: 3_000_000, units: [] });
+  });
+
+  it('«31 день» и «1 день» читаются как дни сдачи', async () => {
+    const a = await ask('что если Эпсилон купит 2 машины по 3 млн, сдавать по 8000 в сутки 31 день');
+    expect(plain(a.text)).toContain('× 31 день');
+    const b = await ask('что если Эпсилон купит 2 машины по 3 млн, сдавать по 8000 в сутки 1 день');
+    expect(plain(b.text)).toContain('× 1 день');
+  });
+});
+
+describe('переход через лимит ставки 5%', () => {
+  it('выручка выше лимита: ответ прямо говорит, что ставка 5% недоступна и нужен бухгалтер', async () => {
+    const r = await ask('что если Альфа вырастет на 300 млн');
+    const t = plain(r.text);
+    expect(t).toContain('Альфа 10,4% → 120,5%.');
+    expect(t).toContain('Альфа: выручка выше лимита, ставка 5% при ней недоступна, расчёт по ней условный, нужен бухгалтер.');
+    expect(t).toContain('Выше лимита: при объединении выручки ставка 5% была бы недоступна, нужен бухгалтер.');
+  });
+
+  it('ниже лимита предупреждения нет', async () => {
+    const r = await ask('что если Альфа вырастет на 3 млн');
+    expect(plain(r.text)).not.toContain('выше лимита');
   });
 });

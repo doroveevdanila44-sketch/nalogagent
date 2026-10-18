@@ -48,9 +48,19 @@ import {
  * ответ говорит об этом прямо.
  */
 
-/** Параметры парка машин из карточки чата. Ядро ничего не подставляет само. */
+/** Цены одной машины, когда машины разные: свои стоимость и цена сдачи. */
+export interface FleetUnitInput {
+  cost?: number;
+  rentPerDay?: number;
+}
+
+/**
+ * Параметры парка машин из карточки чата. Ядро ничего не подставляет само, кроме двух правил,
+ * которые назвал человек: общие `cost` и `rentPerDay` действуют для всех машин, у которых нет своих
+ * цен в `units`; «остальные такие же» (`rest: 'same'`) берёт цену последней названной машины.
+ */
 export interface FleetInput {
-  /** Стоимость одной машины, ₽ */
+  /** Стоимость одной машины, ₽ (общая для машин без своей цены в `units`) */
   cost: number;
   /** true: в стоимости есть НДС; false: стоимость названа без НДС */
   costWithVat: boolean;
@@ -62,6 +72,10 @@ export interface FleetInput {
   startMonth: number;
   /** Расходы на одну машину в месяц, ₽ (лизинг, страховка, обслуживание); 0: не названы */
   expensesPerMonth: number;
+  /** Цены по машинам по порядку: i-я машина берёт свои, остальное общее. До 10 машин */
+  units?: FleetUnitInput[];
+  /** Названы цены не всех машин: `same` для остальных такая же, `each` человек укажет каждую */
+  rest?: 'same' | 'each';
 }
 
 /** Поля сценария «машины», без которых он не считается (расходы необязательны). */
@@ -104,23 +118,141 @@ export const WHATIF_PERCENT_MAX = 500;
 export const FLEET_MAX_COST = 1_000_000_000;
 export const FLEET_MAX_RENT_PER_DAY = 10_000_000;
 export const FLEET_MAX_EXPENSES = 100_000_000;
+/** Разные цены по машинам считаются не больше чем для стольких машин; больше это одна цена на всех. */
+export const FLEET_MAX_DIFFERENT = 10;
+/** Мягкие границы: за ними человек видит предупреждение, но считать можно. */
+export const FLEET_SOFT = { costMin: 300_000, costMax: 30_000_000, rentMin: 1_000, rentMax: 100_000 } as const;
+
+/** Цена одной машины с учётом общих значений; null: не названа. */
+export interface FleetUnitPrice {
+  cost: number | null;
+  rentPerDay: number | null;
+}
+
+/**
+ * Цены по машинам: своя из `units`, иначе общая, а при `rest: 'same'` цена последней названной
+ * машины. Длина равна числу машин (0, пока оно не названо).
+ */
+export function fleetUnitPrices(r: CarsRequest): FleetUnitPrice[] {
+  const n = r.cars ?? 0;
+  const f = r.fleet ?? {};
+  const units = f.units ?? [];
+  const out: FleetUnitPrice[] = [];
+  let lastCost: number | undefined;
+  let lastRent: number | undefined;
+  for (let i = 0; i < n; i++) {
+    const u = units[i];
+    let cost = u?.cost ?? f.cost;
+    let rent = u?.rentPerDay ?? f.rentPerDay;
+    if (cost === undefined && f.rest === 'same') cost = lastCost;
+    if (rent === undefined && f.rest === 'same') rent = lastRent;
+    if (cost !== undefined) lastCost = cost;
+    if (rent !== undefined) lastRent = rent;
+    out.push({ cost: cost ?? null, rentPerDay: rent ?? null });
+  }
+  return out;
+}
+
+/** Все машины с одной стоимостью и одной ценой сдачи. */
+export function fleetIsUniform(prices: FleetUnitPrice[]): boolean {
+  const first = prices[0];
+  return !first || prices.every((p) => p.cost === first.cost && p.rentPerDay === first.rentPerDay);
+}
 
 /** Чего не хватает в запросе «машины». Пустой список: можно считать. */
 export function missingFleetFields(r: CarsRequest): FleetField[] {
   const f = r.fleet ?? {};
   const out: FleetField[] = [];
-  if (r.cars === null || r.cars === undefined) out.push('cars');
-  if (f.cost === undefined || f.cost === null) out.push('cost');
+  const hasCars = r.cars !== null && r.cars !== undefined;
+  if (!hasCars) out.push('cars');
+  const prices = fleetUnitPrices(r);
+  const units = f.units ?? [];
+  // число машин не названо: хватает хотя бы одной названной цены
+  const noCost = hasCars ? prices.some((p) => p.cost === null) : f.cost === undefined && !units.some((u) => u?.cost !== undefined);
+  const noRent = hasCars ? prices.some((p) => p.rentPerDay === null) : f.rentPerDay === undefined && !units.some((u) => u?.rentPerDay !== undefined);
+  if (noCost) out.push('cost');
   if (f.costWithVat === undefined || f.costWithVat === null) out.push('costWithVat');
-  if (f.rentPerDay === undefined || f.rentPerDay === null) out.push('rentPerDay');
+  if (noRent) out.push('rentPerDay');
   if (f.rentDays === undefined || f.rentDays === null) out.push('rentDays');
   if (f.startMonth === undefined || f.startMonth === null) out.push('startMonth');
   return out;
 }
 
+/**
+ * Сообщения о недостающем с названием поля: «Укажите стоимость машины 2». Когда цены названы по
+ * машинам (`units`), указывается номер машины; когда одна цена на всех, номера нет.
+ */
+export function fleetMissingMessages(r: CarsRequest): string[] {
+  const out: string[] = [];
+  const f = r.fleet ?? {};
+  if (r.cars === null || r.cars === undefined) out.push('Укажите, сколько машин');
+  const prices = fleetUnitPrices(r);
+  const perCar = (f.units?.length ?? 0) > 0 && prices.length > 1;
+  prices.forEach((p, i) => {
+    const no = perCar ? ` ${i + 1}` : '';
+    if (p.cost === null && (perCar || i === 0)) out.push(`Укажите стоимость машины${no}`);
+    if (p.rentPerDay === null && (perCar || i === 0)) out.push(`Укажите цену сдачи${perCar ? ` машины ${i + 1}` : ''}`);
+  });
+  if (prices.length === 0) {
+    if (f.cost === undefined) out.push('Укажите стоимость машины');
+    if (f.rentPerDay === undefined) out.push('Укажите цену сдачи');
+  }
+  if (f.costWithVat === undefined || f.costWithVat === null) out.push('Выберите: стоимость с НДС или без НДС');
+  if (f.rentDays === undefined || f.rentDays === null) out.push('Укажите дней сдачи в месяц');
+  if (f.startMonth === undefined || f.startMonth === null) out.push('Выберите месяц начала сдачи');
+  return out;
+}
+
+/**
+ * Мягкие предупреждения: стоимость меньше 300 000 или больше 30 млн, цена сдачи меньше 1 000 или
+ * больше 100 000 в сутки. Считать можно, человек просто видит, что значение необычное.
+ */
+export function fleetSoftWarnings(prices: FleetUnitPrice[]): string[] {
+  const out: string[] = [];
+  const perCar = !fleetIsUniform(prices);
+  prices.forEach((p, i) => {
+    const who = perCar ? `Машина ${i + 1}: ` : '';
+    if (p.cost !== null && p.cost > 0) {
+      if (p.cost < FLEET_SOFT.costMin) out.push(`${who}стоимость ${rub(p.cost)} меньше ${rub(FLEET_SOFT.costMin)}, проверьте`);
+      else if (p.cost > FLEET_SOFT.costMax) out.push(`${who}стоимость ${rub(p.cost)} больше ${rub(FLEET_SOFT.costMax)}, проверьте`);
+    }
+    if (p.rentPerDay !== null && p.rentPerDay > 0) {
+      if (p.rentPerDay < FLEET_SOFT.rentMin) out.push(`${who}цена сдачи ${rub(p.rentPerDay)} в сутки меньше ${rub(FLEET_SOFT.rentMin)}, проверьте`);
+      else if (p.rentPerDay > FLEET_SOFT.rentMax) out.push(`${who}цена сдачи ${rub(p.rentPerDay)} в сутки больше ${rub(FLEET_SOFT.rentMax)}, проверьте`);
+    }
+  });
+  return [...new Set(out)];
+}
+
 /** Выручка на машину в месяц с НДС: цена сдачи в сутки × дни сдачи. Ту же функцию вызывает карточка в чате. */
 export function fleetRevenuePerCar(rentPerDay: number | string | Dec, rentDays: number | string | Dec): Dec {
   return dec(rentPerDay).times(dec(rentDays));
+}
+
+/**
+ * Итоговая строка под полями карточки: «5 машин × 3 000 000 ₽ = 15 000 000 ₽, выручка 800 000 ₽ в
+ * месяц» (одна цена на всех) или «Всего 2 машины: 8 000 000 ₽, выручка 360 000 ₽ в месяц». Показывает
+ * только то, что уже можно посчитать; null, пока считать нечего. Числа даёт ядро, карточка их не считает.
+ */
+export function fleetLiveLine(prices: FleetUnitPrice[], rentDays: number | null): string | null {
+  const n = prices.length;
+  if (n === 0) return null;
+  const costs = prices.map((p) => p.cost);
+  const rents = prices.map((p) => p.rentPerDay);
+  const parts: string[] = [];
+  if (costs.every((c): c is number => c !== null && c > 0)) {
+    const total = sum(costs.map((c) => dec(c)));
+    parts.push(
+      fleetIsUniform(prices)
+        ? `${n} ${pluralRu(n, 'машина', 'машины', 'машин')} × ${rub(costs[0]!)} = ${rub(total)}`
+        : `Всего ${n} ${pluralRu(n, 'машина', 'машины', 'машин')}: ${rub(total)}`,
+    );
+  }
+  if (rentDays !== null && rentDays >= 1 && rentDays <= 31 && rents.every((r): r is number => r !== null && r > 0)) {
+    const revenue = sum(rents.map((r) => fleetRevenuePerCar(r, rentDays)));
+    parts.push(`выручка ${rub(revenue)} в месяц`);
+  }
+  return parts.length > 0 ? parts.join(', ') : null;
 }
 
 export type WhatIfErrorReason =
@@ -156,22 +288,40 @@ export type FleetDeduction =
   /** До конца года месяцев не осталось: ничего не куплено */
   | 'none';
 
-/** Что парк машин даёт юрлицу: выручка, расходы, входной НДС, окупаемость. Все числа Decimal. */
+/** Что даёт одна машина парка: выручка, входной НДС, окупаемость. Все числа Decimal. */
+export interface FleetUnitEffect {
+  /** Номер машины с нуля */
+  index: number;
+  /** Стоимость, как названа */
+  cost: Dec;
+  /** Цена сдачи в сутки с НДС */
+  rentPerDay: Dec;
+  /** Выручка с НДС в месяц: цена сдачи × дни */
+  perMonth: Dec;
+  /** Входной НДС в этой машине по общей ставке справочника */
+  inputVat: Dec;
+  /** Расходы на машину в месяц и чистое за месяц (выручка − расходы) */
+  expensesPerMonth: Dec;
+  netPerMonth: Dec;
+  /** Окупаемость машины, месяцев: стоимость / (выручка − расходы); null: не окупается */
+  paybackMonths: Dec | null;
+}
+
+/** Что парк машин даёт юрлицу: по каждой машине и всего. Все числа Decimal. */
 export interface FleetEffect {
   cars: number;
-  /** Стоимость одной машины, как названа */
-  cost: Dec;
+  /** У всех машин одна стоимость и одна цена сдачи */
+  uniform: boolean;
+  /** По машинам по порядку */
+  units: FleetUnitEffect[];
   costWithVat: boolean;
-  /** Входной НДС в одной машине (по общей ставке справочника) */
-  inputVatPerCar: Dec;
-  /** Цена сдачи в сутки с НДС и дни сдачи в месяц */
-  rentPerDay: Dec;
+  /** Дни сдачи в месяц, первый месяц сдачи 0..11 и число месяцев сдачи до конца года */
   rentDays: number;
-  /** Первый месяц сдачи 0..11 и число месяцев сдачи до конца года */
   startMonth: number;
   monthsCount: number;
-  /** Выручка на одну машину в месяц с НДС: цена сдачи × дни */
-  perCar: Dec;
+  /** Стоимость всех машин, как названа, и добавочная выручка с НДС в месяц по всем машинам */
+  totalCost: Dec;
+  perMonth: Dec;
   /** Расходы на одну машину в месяц и всего за месяцы сдачи по всем машинам */
   expensesPerCar: Dec;
   expensesTotal: Dec;
@@ -183,8 +333,13 @@ export interface FleetEffect {
   deduction: FleetDeduction;
   /** Сумма, принятая к вычету: входной НДС при `applied`, иначе 0 */
   deducted: Dec;
-  /** Окупаемость, месяцев: стоимость машины / (выручка на машину − расходы); null: не окупается */
+  /** Окупаемость всех машин вместе: общая стоимость / (общая выручка − расходы); null: не окупаются */
   paybackMonths: Dec | null;
+  /** Значения первой машины: у одинаковых машин это и есть «одна машина» */
+  cost: Dec;
+  rentPerDay: Dec;
+  perCar: Dec;
+  inputVatPerCar: Dec;
 }
 
 /** Что сценарий сделал с одним юрлицом. */
@@ -235,12 +390,21 @@ function checkRequest(r: WhatIfRequest, today: Moment): void {
       if (!Number.isInteger(r.cars) || r.cars! < 1 || r.cars! > WHATIF_MAX_CARS) {
         throw new WhatIfError(`Число машин должно быть от 1 до ${WHATIF_MAX_CARS}`, 'bad_input');
       }
-      if (notFinite(f.cost) || f.cost <= 0 || f.cost > FLEET_MAX_COST) {
-        throw new WhatIfError('Стоимость машины должна быть больше нуля', 'bad_input');
+      const prices = fleetUnitPrices(r) as { cost: number; rentPerDay: number }[];
+      // названа каждая машина отдельно: в сообщении номер машины
+      const perCar = (f.units?.length ?? 0) > 0 && prices.length > 1;
+      if (perCar && !fleetIsUniform(prices) && prices.length > FLEET_MAX_DIFFERENT) {
+        throw new WhatIfError(`Разные цены по машинам доступны до ${FLEET_MAX_DIFFERENT} машин: для большего парка укажите одну цену на все`, 'bad_input');
       }
-      if (notFinite(f.rentPerDay) || f.rentPerDay <= 0 || f.rentPerDay > FLEET_MAX_RENT_PER_DAY) {
-        throw new WhatIfError('Цена сдачи в сутки должна быть больше нуля', 'bad_input');
-      }
+      prices.forEach((p, i) => {
+        const no = perCar ? ` ${i + 1}` : '';
+        if (notFinite(p.cost) || p.cost <= 0 || p.cost > FLEET_MAX_COST) {
+          throw new WhatIfError(`Укажите стоимость машины${no}: больше нуля`, 'bad_input');
+        }
+        if (notFinite(p.rentPerDay) || p.rentPerDay <= 0 || p.rentPerDay > FLEET_MAX_RENT_PER_DAY) {
+          throw new WhatIfError(`Укажите цену сдачи${perCar ? ` машины ${i + 1}` : ''}: больше нуля`, 'bad_input');
+        }
+      });
       if (!Number.isInteger(f.rentDays) || f.rentDays < 1 || f.rentDays > 31) {
         throw new WhatIfError('Дней сдачи в месяц должно быть от 1 до 31', 'bad_input');
       }
@@ -312,30 +476,45 @@ export function applyWhatIf(data: CalcData, spec: WhatIfSpec): WhatIfApplied {
       });
     }
 
-    // парк машин: выручка, расходы, входной НДС, окупаемость
+    // парк машин: выручка, расходы, входной НДС, окупаемость по каждой машине и вместе
     let effect: FleetEffect | null = null;
     if (fleet && req.kind === 'cars') {
       const g = rules!.generalRate;
       const cars = req.cars!;
-      const perCar = fleetRevenuePerCar(fleet.rentPerDay, fleet.rentDays);
-      const cost = dec(fleet.cost);
-      const inputVatPerCar = fleet.costWithVat ? cost.times(g).div(100 + g) : cost.times(g).div(100);
-      const inputVat = inputVatPerCar.times(cars);
+      const prices = fleetUnitPrices(req) as { cost: number; rentPerDay: number }[];
+      const expensesPerCar = dec(fleet.expensesPerMonth ?? 0);
+      const units: FleetUnitEffect[] = prices.map((p, index) => {
+        const cost = dec(p.cost);
+        const perMonth = fleetRevenuePerCar(p.rentPerDay, fleet.rentDays);
+        const net = perMonth.minus(expensesPerCar);
+        return {
+          index,
+          cost,
+          rentPerDay: dec(p.rentPerDay),
+          perMonth,
+          inputVat: fleet.costWithVat ? cost.times(g).div(100 + g) : cost.times(g).div(100),
+          expensesPerMonth: expensesPerCar,
+          netPerMonth: net,
+          paybackMonths: net.gt(0) ? cost.div(net) : null,
+        };
+      });
+      const first = units[0]!;
+      const totalCost = sum(units.map((u) => u.cost));
+      const totalNet = sum(units.map((u) => u.netPerMonth));
+      const inputVat = sum(units.map((u) => u.inputVat));
       const vatRate = e.taxRegime === 'osno' ? OSNO_RATE : selectedRate(e, choices);
       const deduction: FleetDeduction =
         months.length === 0 ? 'none' : e.status === 'exempt' ? 'exempt' : vatRate === g ? 'applied' : 'low_rate';
-      const expensesPerCar = dec(fleet.expensesPerMonth ?? 0);
-      const net = perCar.minus(expensesPerCar);
       effect = {
         cars,
-        cost,
+        uniform: fleetIsUniform(prices),
+        units,
         costWithVat: fleet.costWithVat,
-        inputVatPerCar,
-        rentPerDay: dec(fleet.rentPerDay),
         rentDays: fleet.rentDays,
         startMonth: fleet.startMonth,
         monthsCount: months.length,
-        perCar,
+        totalCost,
+        perMonth: sum(units.map((u) => u.perMonth)),
         expensesPerCar,
         expensesTotal: expensesPerCar.times(cars).times(months.length),
         inputVat,
@@ -343,7 +522,11 @@ export function applyWhatIf(data: CalcData, spec: WhatIfSpec): WhatIfApplied {
         generalRate: g,
         deduction,
         deducted: deduction === 'applied' ? inputVat : ZERO,
-        paybackMonths: net.gt(0) ? cost.div(net) : null,
+        paybackMonths: totalNet.gt(0) ? totalCost.div(totalNet) : null,
+        cost: first.cost,
+        rentPerDay: first.rentPerDay,
+        perCar: first.perMonth,
+        inputVatPerCar: first.inputVat,
       };
     }
 
@@ -356,7 +539,7 @@ export function applyWhatIf(data: CalcData, spec: WhatIfSpec): WhatIfApplied {
       let extra = ZERO;
       if (m >= from) {
         if (req.kind === 'growth') factor = dec(1).plus(dec(req.percent).div(100));
-        else if (effect) extra = effect.perCar.times(effect.cars);
+        else if (effect) extra = effect.perMonth;
         else extra = spread.get(m) ?? ZERO;
       }
       const amount = base.times(factor).plus(extra);
@@ -381,7 +564,7 @@ export function applyWhatIf(data: CalcData, spec: WhatIfSpec): WhatIfApplied {
       regime: e.taxRegime,
       months: touched,
       perCar: effect ? effect.perCar : null,
-      perMonth: effect ? effect.perCar.times(effect.cars) : null,
+      perMonth: effect ? effect.perMonth : null,
       fleet: effect,
       delta,
     });
@@ -531,9 +714,12 @@ function keyOf(spec: WhatIfSpec): string {
   if (r.kind === 'cars') {
     // другие цены, дни или месяц начала это другой сценарий: отметки «сверил» не переносятся
     const f = r.fleet ?? {};
-    what =
-      `cars${r.cars}-c${f.cost}${f.costWithVat ? 'v' : 'n'}-r${f.rentPerDay}x${f.rentDays}` +
-      `-s${f.startMonth}-e${f.expensesPerMonth ?? 0}`;
+    const prices = fleetUnitPrices(r);
+    const vat = f.costWithVat ? 'v' : 'n';
+    // одна цена на всех: ключ прежнего вида; разные цены: цены по машинам
+    what = fleetIsUniform(prices)
+      ? `cars${r.cars}-c${f.cost ?? prices[0]?.cost}${vat}-r${f.rentPerDay ?? prices[0]?.rentPerDay}x${f.rentDays}-s${f.startMonth}-e${f.expensesPerMonth ?? 0}`
+      : `cars${r.cars}-${prices.map((p) => `${p.cost}/${p.rentPerDay}`).join(',')}${vat}x${f.rentDays}-s${f.startMonth}-e${f.expensesPerMonth ?? 0}`;
   } else {
     what = r.kind === 'growth' ? `g${r.percent}` : `a${r.amount}`;
   }
@@ -579,16 +765,22 @@ const rateWord = (g: number) => `${g} / ${100 + g}`;
 export function fleetLines(name: string, regime: TaxRegime, f: FleetEffect): FleetLines {
   const days = `${f.rentDays} ${pluralRu(f.rentDays, 'день', 'дня', 'дней')}`;
   const start = MONTHS_GENITIVE[f.startMonth];
-  const values =
-    `${f.cars} ${carsWord(f.cars)} по ${rub(f.cost)} ${f.costWithVat ? 'с НДС' : 'без НДС'}, ` +
-    `сдача ${rub(f.rentPerDay)} в сутки × ${days} = ${rub(f.perCar)} в месяц на машину` +
+  const vat = f.costWithVat ? 'с НДС' : 'без НДС';
+  const tail =
     (f.monthsCount > 0 ? `, с ${start}` : ', но до конца года месяцев не осталось') +
     (f.expensesPerCar.gt(0) ? `, расходы ${rub(f.expensesPerCar)} в месяц на машину` : '');
+  const values = f.uniform
+    ? `${f.cars} ${carsWord(f.cars)} по ${rub(f.cost)} ${vat}, ` +
+      `сдача ${rub(f.rentPerDay)} в сутки × ${days} = ${rub(f.perCar)} в месяц на машину${tail}`
+    : `${f.cars} ${carsWord(f.cars)} ${vat}, сдача × ${days} в месяц: ` +
+      f.units
+        .map((u) => `машина ${u.index + 1} за ${rub(u.cost)}, сдача ${rub(u.rentPerDay)} в сутки (${rub(u.perMonth)} в месяц)`)
+        .join('; ') +
+      tail;
 
   const g = f.generalRate;
-  const inputFormula = f.costWithVat
-    ? `${f.cars} × ${rub(f.cost)} × ${rateWord(g)}`
-    : `${f.cars} × ${rub(f.cost)} × ${g}%`;
+  const costsText = f.uniform ? `${f.cars} × ${rub(f.cost)}` : `(${f.units.map((u) => rub(u.cost)).join(' + ')})`;
+  const inputFormula = f.costWithVat ? `${costsText} × ${rateWord(g)}` : `${costsText} × ${g}%`;
   let deduction: string;
   switch (f.deduction) {
     case 'applied':
@@ -628,19 +820,34 @@ export function fleetLines(name: string, regime: TaxRegime, f: FleetEffect): Fle
   }
 
   const net = f.perCar.minus(f.expensesPerCar);
-  const payback =
-    f.paybackMonths === null
-      ? `Машина не окупается: расходы ${rub(f.expensesPerCar)} в месяц не меньше выручки ${rub(f.perCar)} в месяц`
-      : f.expensesPerCar.isZero()
-        ? `Окупаемость: ${rub(f.cost)} / ${rub(f.perCar)} = ${paybackText(f.paybackMonths)}, по названной стоимости, налоги не учтены`
-        : `Окупаемость: ${rub(f.cost)} / (${rub(f.perCar)} − ${rub(f.expensesPerCar)}) = ${rub(f.cost)} / ${rub(net)} = ${paybackText(f.paybackMonths)}, по названной стоимости, налоги не учтены`;
+  const expensesAll = f.expensesPerCar.times(f.cars);
+  const netAll = f.perMonth.minus(expensesAll);
+  let payback: string;
+  if (f.uniform) {
+    payback =
+      f.paybackMonths === null
+        ? `Машина не окупается: расходы ${rub(f.expensesPerCar)} в месяц не меньше выручки ${rub(f.perCar)} в месяц`
+        : f.expensesPerCar.isZero()
+          ? `Окупаемость: ${rub(f.cost)} / ${rub(f.perCar)} = ${paybackText(f.paybackMonths)}, по названной стоимости, налоги не учтены`
+          : `Окупаемость: ${rub(f.cost)} / (${rub(f.perCar)} − ${rub(f.expensesPerCar)}) = ${rub(f.cost)} / ${rub(net)} = ${paybackText(f.paybackMonths)}, по названной стоимости, налоги не учтены`;
+  } else {
+    const lone = f.units.filter((u) => u.paybackMonths === null).map((u) => u.index + 1);
+    const loneText = lone.length > 0 ? `; не окупаются сами по себе: машина ${lone.join(', ')}` : '';
+    payback =
+      f.paybackMonths === null
+        ? `Машины вместе не окупаются: расходы ${rub(expensesAll)} в месяц не меньше выручки ${rub(f.perMonth)} в месяц`
+        : (f.expensesPerCar.isZero()
+            ? `Окупаемость всех машин вместе: ${rub(f.totalCost)} / ${rub(f.perMonth)} = ${paybackText(f.paybackMonths)}`
+            : `Окупаемость всех машин вместе: ${rub(f.totalCost)} / (${rub(f.perMonth)} − ${rub(expensesAll)}) = ${rub(f.totalCost)} / ${rub(netAll)} = ${paybackText(f.paybackMonths)}`) +
+          `${loneText}, по названной стоимости, налоги не учтены`;
+  }
 
   // стоимость машины в расходах налога: порядок списания ядро не моделирует. У УСН «доходы» расходы
   // налог не меняют, говорить нечего
   const notModeled =
     regime === 'usn_income' || f.deduction === 'none'
       ? null
-      : `Стоимость машин ${rub(f.cost.times(f.cars))} в расходы по налогу не включена: порядок списания основных средств ` +
+      : `Стоимость машин ${rub(f.totalCost)} в расходы по налогу не включена: порядок списания основных средств ` +
         `(амортизация на ОСНО, списание на УСН «доходы минус расходы») в расчёте не моделируется, ` +
         `этот эффект не учтён, нужен бухгалтер`;
 
@@ -656,13 +863,26 @@ function assumptionsOf(spec: WhatIfSpec, applied: WhatIfApplied, year: number): 
     for (const c of applied.changes) {
       const f = c.fleet!;
       const lines = fleetLines(c.name, c.regime, f);
-      out.push(
-        `${c.name}: выручка на машину в месяц ${rub(f.perCar)} с НДС = цена сдачи ${rub(f.rentPerDay)} в сутки × ${f.rentDays} ${pluralRu(f.rentDays, 'день', 'дня', 'дней')} (значения из карточки)`,
-      );
-      out.push(
-        `${c.name}: добавочная выручка ${f.cars} × ${rub(f.perCar)} = ${rub(c.perMonth!)} в месяц` +
-          (months ? `, ${months}` : ', месяцев до конца года не осталось'),
-      );
+      const daysText = `${f.rentDays} ${pluralRu(f.rentDays, 'день', 'дня', 'дней')}`;
+      if (f.uniform) {
+        out.push(
+          `${c.name}: выручка на машину в месяц ${rub(f.perCar)} с НДС = цена сдачи ${rub(f.rentPerDay)} в сутки × ${daysText} (значения из карточки)`,
+        );
+        out.push(
+          `${c.name}: добавочная выручка ${f.cars} × ${rub(f.perCar)} = ${rub(c.perMonth!)} в месяц` +
+            (months ? `, ${months}` : ', месяцев до конца года не осталось'),
+        );
+      } else {
+        out.push(
+          `${c.name}: выручка по машинам в месяц с НДС = цена сдачи в сутки × ${daysText}: ` +
+            f.units.map((u) => `машина ${u.index + 1} ${rub(u.perMonth)}`).join(', ') +
+            ' (значения из карточки)',
+        );
+        out.push(
+          `${c.name}: добавочная выручка по всем машинам ${rub(c.perMonth!)} в месяц` +
+            (months ? `, ${months}` : ', месяцев до конца года не осталось'),
+        );
+      }
       out.push(lines.deduction);
       out.push(lines.expenses);
       if (lines.notModeled) out.push(lines.notModeled);

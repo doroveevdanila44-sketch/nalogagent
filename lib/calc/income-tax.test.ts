@@ -10,7 +10,7 @@ import {
   incomeTaxSchedule,
   nextPayment,
 } from './income-tax';
-import { daysUntil, groupPayments } from './payments';
+import { daysUntil, groupPayments, quarterRevenue } from './payments';
 import { buildRuleSet } from './rules';
 import { moment, toIsoDate } from './time';
 import type { EntityInput } from './types';
@@ -219,11 +219,64 @@ describe('графики платежей и сроки', () => {
   });
 
   it('НДС тремя равными частями: третья часть равна первой', () => {
-    const p = groupPayments(SEED_ENTITIES, {}, ctx, T).filter((x) => x.kind === 'vat' && x.entityId === 'epsilon');
+    const p = groupPayments(SEED_ENTITIES, {}, ctx, T).filter(
+      (x) => x.kind === 'vat' && x.entityId === 'epsilon' && x.vatQuarter === 3,
+    );
     expect(p).toHaveLength(3);
     expect(p[0]!.amount.eq(p[2]!.amount)).toBe(true);
     // 74 млн × 0,37 × 22/122 × 0,45 / 3
     eq2(p[0]!.amount, '740606.56');
+  });
+
+  it('в четвёртом квартале есть и доли за третий, и доли за четвёртый (январь–март следующего года)', () => {
+    const p = groupPayments(SEED_ENTITIES, {}, ctx, T).filter((x) => x.kind === 'vat' && x.entityId === 'epsilon');
+    expect(p.map((x) => `${toIsoDate(x.due)} ${x.vatQuarter}/${x.vatThird}`)).toEqual([
+      '2026-10-28 3/1',
+      '2026-11-28 3/2',
+      '2026-12-28 3/3',
+      '2027-01-28 4/1',
+      '2027-02-28 4/2',
+      '2027-03-28 4/3',
+    ]);
+    const q4 = p.filter((x) => x.vatQuarter === 4);
+    expect(q4[0]!.amount.eq(q4[2]!.amount)).toBe(true);
+    // выручка 4 квартала по весам × 22/122 × (1 − доля закупок) / 3
+    const e = ent('epsilon');
+    const rev = quarterRevenue(e, ctx, 3, T);
+    expect(q4[0]!.amount.toFixed(2)).toBe(taxFor(22, rev, e.inputVatShare, 22).div(3).toFixed(2));
+  });
+
+  it('до 28 декабря ближайший платёж НДС за 3 квартал, после 28 декабря первая треть за 4 квартал: в январе, а не в конце марта', () => {
+    const vat = (m: ReturnType<typeof moment>) =>
+      groupPayments(SEED_ENTITIES, {}, seedCtx(m), m).filter((x) => x.kind === 'vat')[0]!;
+    const dec28 = vat(moment(2026, 12, 28, 12));
+    expect(`${toIsoDate(dec28.due)} ${dec28.vatQuarter}/${dec28.vatThird}`).toBe('2026-12-28 3/3');
+    const dec29 = vat(moment(2026, 12, 29, 12));
+    expect(`${toIsoDate(dec29.due)} ${dec29.vatQuarter}/${dec29.vatThird}`).toBe('2027-01-28 4/1');
+  });
+
+  it('ближайший срок переходит на следующую дату после 28 октября: 28 ноября, потом 28 декабря', () => {
+    const first = (m: ReturnType<typeof moment>) => {
+      const list = groupPayments(SEED_ENTITIES, {}, seedCtx(m), m);
+      const f = list[0]!;
+      return `${toIsoDate(f.due)} ${f.kind}`;
+    };
+    expect(first(moment(2026, 10, 14, 12))).toBe('2026-10-28 usn');
+    expect(first(moment(2026, 10, 28, 23, 59, 0))).toBe('2026-10-28 usn');
+    expect(first(moment(2026, 10, 29, 12))).toBe('2026-11-28 vat');
+    expect(first(moment(2026, 11, 29, 12))).toBe('2026-12-28 vat');
+    expect(first(moment(2026, 12, 20, 12))).toBe('2026-12-28 vat');
+    // предупреждение о платеже и блок «Ближайший платёж» на карточках двигаются так же
+    const w = (m: ReturnType<typeof moment>) =>
+      buildWarnings(SEED_ENTITIES, {}, seedCtx(m), m).find((x) => x.kind === 'payment-date')!;
+    expect(w(moment(2026, 10, 14, 12)).title).toContain('28 октября');
+    expect(w(moment(2026, 10, 29, 12)).title).toBe('28 ноября: вторая треть НДС за 3 квартал');
+    expect(w(moment(2026, 12, 20, 12)).title).toBe('28 декабря: третья треть НДС за 3 квартал');
+    const sched = (id: string, m: ReturnType<typeof moment>) =>
+      nextPayment(incomeTaxSchedule(ent(id), seedCtx(m), {}, m), { year: m.year, month: m.month, day: m.day });
+    expect(toIsoDate(sched('alfa', moment(2026, 10, 28, 12))!.due)).toBe('2026-10-28');
+    expect(toIsoDate(sched('alfa', moment(2026, 10, 29, 12))!.due)).toBe('2027-03-28');
+    expect(toIsoDate(sched('beta', moment(2026, 10, 29, 12))!.due)).toBe('2027-04-28');
   });
 });
 

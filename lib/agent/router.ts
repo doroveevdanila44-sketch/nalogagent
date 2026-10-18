@@ -82,6 +82,8 @@ export interface RouteContext {
   today: Moment;
   awaiting: Slot[];
   hasPrevious: boolean;
+  /** Прошлый ответ спросил «Для остальных такая же цена?»: «да» и «нет» к нему относятся */
+  restAsk?: boolean;
 }
 
 export function classify(
@@ -108,6 +110,12 @@ export function classify(
 
   // ответ на уточняющий вопрос: число или юрлицо при незавершённом запросе
   if (opts.pending && (/\d/.test(t) || mentionsEntity(t, entities))) return { cls: 'A' };
+
+  // «да» или «нет» на вопрос про остальные машины
+  if (opts.context?.restAsk) {
+    const f = extractFields(question, { entities, today: opts.context.today });
+    if (f.yes || f.no) return { cls: 'A' };
+  }
 
   // короткий ответ на уточнение или поправка к прежнему вопросу: «февраль», «УСН», «по Бете»
   if (opts.context && (opts.context.awaiting.length > 0 || opts.context.hasPrevious)) {

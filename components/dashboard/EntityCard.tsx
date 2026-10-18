@@ -178,7 +178,7 @@ export function EntityCard({ entity: e, rules, live, stat, lines, year, getAt }:
               {next ? (
                 <>
                   {dateRu(next.due)}
-                  {next.kind === 'final' ? ` ${next.due.year}` : ''}, {rub(next.amount)}{' '}
+                  {next.due.year !== year ? ` ${next.due.year}` : ''}, {rub(next.amount)}{' '}
                   <span className="muted">({next.kind === 'final' ? 'итог за год' : `аванс ${next.periodLabel}`})</span>
                 </>
               ) : (

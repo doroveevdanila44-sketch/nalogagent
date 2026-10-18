@@ -27,7 +27,7 @@ import {
   type SourceRef,
 } from './provenance';
 import { MissingRuleError, buildRuleSet, resolveRule, type RuleRow } from './rules';
-import { toIsoDate, type CalendarDay, type Moment } from './time';
+import { compareDays, toIsoDate, type CalendarDay, type Moment } from './time';
 import {
   OSNO_RATE,
   RATES,
@@ -914,15 +914,19 @@ function calcEntity(run: Run, e: EntityInput): EntityResult {
           info.from > 11
             ? `1 января ${y + 1}`
             : dateRu({ month: info.from, day: 1 });
-        const when =
-          y === run.today.year
-            ? `около ${dateRu(c)}`
-            : formatPeriodIn({ kind: 'month', year: y, month: c.month + 1 });
+        // дата пересечения или первое число месяца после него уже прошли: говорим об этом в прошедшем времени
+        const todayDay: CalendarDay = { year: run.today.year, month: run.today.month, day: run.today.day };
+        const crossed = compareDays(c, todayDay) <= 0;
+        const startDay: CalendarDay = info.from > 11 ? { year: y + 1, month: 0, day: 1 } : { year: y, month: info.from, day: 1 };
+        const startPassed = compareDays(startDay, todayDay) <= 0;
+        const when = y === run.today.year ? dateRu(c) : formatPeriodIn({ kind: 'month', year: y, month: c.month + 1 });
         warn(run, {
           kind: 'threshold',
           level: 'warn',
           entityId: e.id,
-          text: `${e.name}: порог ${limit} пересекается ${when}, НДС начнётся с ${start}`,
+          text: crossed
+            ? `${e.name}: порог ${limit} пересечён ${when}, НДС ${startPassed ? 'начисляется' : 'начнётся'} с ${start}`
+            : `${e.name}: порог ${limit} пересекается ${y === run.today.year ? `около ${when}` : when}, НДС начнётся с ${start}`,
         });
       }
     }
