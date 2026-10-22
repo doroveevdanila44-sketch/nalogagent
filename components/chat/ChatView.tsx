@@ -19,6 +19,7 @@ import { useMediaQuery } from '@/lib/client/media';
 import { UNLOCKED_EVENT } from '@/components/AppShell';
 import { ClearChat } from './ClearChat';
 import { Message } from './Message';
+import { MessageBoundary } from './MessageBoundary';
 
 /**
  * Подсказки панели. Первыми две «Что если»: пересчёт года при условии, которого в данных нет. Они
@@ -394,15 +395,16 @@ export function ChatView() {
         {turns ? (
           <div className="chat" aria-live="polite">
             {turns.map((t, i) => (
-              <Message
-                key={t.id}
-                turn={t}
-                onPick={pickQuick}
-                onSubmitForm={submitForm}
-                disabled={Boolean(sending)}
-                // вопрос с полями, на который уже ответили карточкой с ответом, остаётся для чтения
-                locked={Boolean(t.form) && turns.slice(i + 1).some((x) => x.role === 'agent' && x.form)}
-              />
+              <MessageBoundary key={t.id} turn={t}>
+                <Message
+                  turn={t}
+                  onPick={pickQuick}
+                  onSubmitForm={submitForm}
+                  disabled={Boolean(sending)}
+                  // вопрос с полями, на который уже ответили карточкой с ответом, остаётся для чтения
+                  locked={Boolean(t.form) && turns.slice(i + 1).some((x) => x.role === 'agent' && x.form)}
+                />
+              </MessageBoundary>
             ))}
             {sending ? (
               <>

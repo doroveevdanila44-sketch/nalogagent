@@ -9,12 +9,15 @@ import {
   FULL_TOUR_STEPS,
   LINE_LABELS,
   TOUR_STEPS,
+  safeStepIndex,
   stepLines,
+  stepsFor,
   stepTitle,
   tourAttributes,
   type ChapterId,
 } from '@/components/onboarding/chapters';
 import { tourNumbers } from '@/components/onboarding/numbers';
+import { TourBoundary } from '@/components/onboarding/TourBoundary';
 
 /** Фиксированный момент, как в CALC.md: 2026-10-10 12:00:00 */
 const T = moment(2026, 10, 10, 12, 0, 0);
@@ -249,5 +252,61 @@ describe('обучение: метки data-tour есть в разметке', 
       return !new RegExp(`data-tour=(\\{)?["'\`]${name}["'\`]|['"]${name}['"]`).test(ui);
     });
     expect(missing).toEqual([]);
+  });
+});
+
+describe('обучение: состояние со старым номером шага', () => {
+  it('в первом показе 8 шагов, в полном 25, и все идентификаторы первого показа есть в полном туре', () => {
+    expect(stepsFor('short')).toHaveLength(8);
+    expect(stepsFor('full')).toHaveLength(25);
+    const full = new Set(FULL_TOUR_STEPS.map((s) => s.id));
+    for (const s of TOUR_STEPS) if (s.id !== 'menu') expect(full.has(s.id), s.id).toBe(true);
+  });
+
+  it('номер из прежней версии (26, 27 при 25 шагах), отрицательный, NaN и не число дают первый шаг', () => {
+    for (const total of [8, 25]) {
+      for (const bad of [total, total + 1, 26, 27, 1000, -1, -26, Number.NaN, Infinity, -Infinity, 1.5]) {
+        expect(safeStepIndex(bad, total), `${bad} из ${total}`).toBe(0);
+      }
+      for (const bad of [undefined, null, '3', '', {}, [], true, 3n]) {
+        expect(safeStepIndex(bad, total), String(bad)).toBe(0);
+      }
+    }
+  });
+
+  it('номер в границах остаётся как есть', () => {
+    for (const total of [8, 25]) {
+      for (const ok of [0, 1, total - 1]) expect(safeStepIndex(ok, total), `${ok} из ${total}`).toBe(ok);
+    }
+    expect(safeStepIndex(0, 0)).toBe(0);
+  });
+
+  it('по любому номеру шаг находится: ни полный тур, ни первый показ не дают «нет шага»', () => {
+    for (const mode of ['short', 'full'] as const) {
+      const steps = stepsFor(mode);
+      for (const raw of [-1, 0, 7, 8, 24, 25, 26, 27, Number.NaN]) {
+        const step = steps[safeStepIndex(raw, steps.length)];
+        expect(step, `${mode} ${raw}`).toBeDefined();
+      }
+    }
+  });
+
+  it('граница вокруг обучения при ошибке закрывает его и ничего не показывает', () => {
+    const errors: unknown[][] = [];
+    const spy = console.error;
+    console.error = (...a: unknown[]) => void errors.push(a);
+    try {
+      let closed = 0;
+      const boundary = new TourBoundary({ onFail: () => void closed++, children: 'шаг' });
+      expect(boundary.render()).toBe('шаг');
+      boundary.state = TourBoundary.getDerivedStateFromError();
+      boundary.componentDidCatch(new TypeError('нет шага'));
+      expect(closed).toBe(1);
+      expect(boundary.render()).toBeNull();
+      expect(String(errors[0]?.[0])).toContain('[tour]');
+      expect(JSON.stringify(errors[0]?.[1])).toContain('нет шага');
+    } finally {
+      console.error = spy;
+    }
   });
 });

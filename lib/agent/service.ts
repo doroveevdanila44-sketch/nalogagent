@@ -10,6 +10,7 @@ import { lineFromSnapshots } from '@/lib/provenance/line';
 import { toSnapshot, type CalcSnapshot } from '@/lib/provenance/snapshot';
 import { getEnv } from '@/lib/env';
 import { fleetSubmitText } from './fleet-form';
+import { cleanChange, cleanForm, cleanHow, cleanProvenance, cleanQuick, cleanTables, cleanUnderstood } from './stored-shape';
 import { aliasesFor, runPipeline } from './pipeline';
 import type { LlmProvider } from './provider';
 import { getProvider } from './provider-factory';
@@ -81,21 +82,22 @@ type MessageRow = Pick<
 > & { calc: unknown };
 
 function toTurn(r: MessageRow): ChatTurn {
-  const calc = (r.calc ?? {}) as StoredCalc;
+  const calc = (typeof r.calc === 'object' && r.calc !== null && !Array.isArray(r.calc) ? r.calc : {}) as StoredCalc;
   return {
     id: r.id,
     role: r.role === 'user' ? 'user' : 'agent',
     class: (r.class as ChatTurn['class']) ?? null,
     text: r.content,
-    tables: calc.tables ?? [],
-    how: calc.how ?? [],
-    fromCalc: calc.fromCalc ?? false,
+    // сохранённое прежними версиями приводится к виду, который разберёт нынешняя разметка (stored-shape.ts)
+    tables: cleanTables(calc.tables),
+    how: cleanHow(calc.how),
+    fromCalc: calc.fromCalc === true,
     createdAt: r.createdAt.toISOString(),
-    understood: calc.understood ?? null,
-    quick: calc.quick ?? [],
-    change: calc.change ?? null,
-    provenance: calc.provenance ?? null,
-    form: calc.form ?? null,
+    understood: cleanUnderstood(calc.understood),
+    quick: cleanQuick(calc.quick),
+    change: cleanChange(calc.change),
+    provenance: cleanProvenance(calc.provenance),
+    form: cleanForm(calc.form),
   };
 }
 

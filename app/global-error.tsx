@@ -1,10 +1,14 @@
 'use client';
 
+import { useEffect } from 'react';
+import { logBoundaryError } from '@/lib/client/report-error';
+
 /**
  * Сбой самого корня приложения (layout не отрисовался): стили сайта не загружены, поэтому всё
  * задано на месте. Кнопка перезагружает страницу.
  */
-export default function GlobalError() {
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
+  useEffect(() => logBoundaryError('global-error', error), [error]);
   return (
     <html lang="ru">
       <body

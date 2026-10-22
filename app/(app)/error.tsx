@@ -1,12 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { logBoundaryError } from '@/lib/client/report-error';
 
 /**
  * Сбой при отрисовке страницы внутри приложения: шапка и панель вкладок остаются, в области
  * содержимого короткое сообщение и «Повторить». Текст ошибки не показывается (в нём могут быть данные).
  */
-export default function AppError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  // Причина в консоль (сообщение и digest), чтобы её было видно; на экране текст прежний
+  useEffect(() => logBoundaryError('app-error', error), [error]);
   return (
     <div className="err-screen err-inline" role="alert" data-testid="app-error">
       <h1>Что-то пошло не так</h1>

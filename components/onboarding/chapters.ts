@@ -454,6 +454,18 @@ export type TourMode = 'short' | 'full';
 
 export const stepsFor = (mode: TourMode): readonly TourStep[] => (mode === 'full' ? FULL_TOUR_STEPS : TOUR_STEPS);
 
+/**
+ * Номер шага, которому можно верить. Тур держит его только в состоянии компонента, но любой номер
+ * извне (прежнее состояние, из которого потом убрали шаги) может выйти за границы нынешнего списка:
+ * 26 или 27 при 25 шагах, отрицательное, дробное, NaN, не число. Такое значение заменяется нулём:
+ * прежний прогресс считается пройденным, и тур начинается с первого шага, а не падает на шаге,
+ * которого нет.
+ */
+export function safeStepIndex(raw: unknown, total: number): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw)) return 0;
+  return raw >= 0 && raw < total ? raw : 0;
+}
+
 /** Заголовок шага для числа. */
 export function stepTitle(step: TourStep, n: TourNumbers | null): string {
   return typeof step.title === 'function' ? step.title(n) : step.title;

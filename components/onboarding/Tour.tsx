@@ -8,7 +8,8 @@ import { askAgent } from '@/lib/client/ask';
 import type { DashboardResponse } from '@/lib/provenance/dashboard';
 import type { Catalog } from '@/components/documents/api';
 import type { DocumentSummary } from '@/lib/documents/types';
-import { CHAPTER_TITLE, stepsFor, stepLines, stepTitle, type TourMode, type TourStep } from './chapters';
+import { CHAPTER_TITLE, safeStepIndex, stepsFor, stepLines, stepTitle, type TourMode, type TourStep } from './chapters';
+import { TourBoundary } from './TourBoundary';
 import { tourNumbers } from './numbers';
 
 /**
@@ -398,7 +399,13 @@ export function Tour({
   /** Открыть или закрыть меню из трёх точек: на шагах главы «Меню» оно открыто */
   onMenu?: (open: boolean) => void;
 }) {
-  return open ? <TourRun key={mode} mode={mode} onClose={onClose} onMenu={onMenu} /> : null;
+  // Сбой внутри обучения не должен ронять страницу: обучение закрывается, приложение остаётся
+  if (!open || stepsFor(mode).length === 0) return null;
+  return (
+    <TourBoundary key={mode} onFail={onClose}>
+      <TourRun mode={mode} onClose={onClose} onMenu={onMenu} />
+    </TourBoundary>
+  );
 }
 
 function TourRun({
@@ -420,7 +427,13 @@ function TourRun({
   const pathNow = useRef(pathname);
   pathNow.current = pathname;
 
-  const [index, setIndex] = useState(0);
+  // Номер шага из состояния всегда в границах списка (safeStepIndex): вышедший за них считается
+  // пройденным прогрессом и возвращается к первому шагу
+  const [rawIndex, setIndex] = useState(0);
+  const index = safeStepIndex(rawIndex, steps.length);
+  useEffect(() => {
+    if (rawIndex !== index) setIndex(index);
+  }, [rawIndex, index]);
   const [phase, setPhase] = useState<Phase>('seek');
   const [rect, setRect] = useState<Rect | null>(null);
   const [view, setView] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
@@ -445,7 +458,7 @@ function TourRun({
   }, []);
   const targetRef = useRef<HTMLElement | null>(null);
 
-  const step = steps[index]!;
+  const step = steps[index] ?? steps[0]!;
   const stepRef = useRef(step);
   stepRef.current = step;
   const last = index === steps.length - 1;
