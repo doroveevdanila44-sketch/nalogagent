@@ -280,8 +280,8 @@ test('PWA: манифест, service worker не кэширует данные',
   expect(manifest.short_name).toBe('НДС');
   expect(manifest.display).toBe('standalone');
   expect(manifest.start_url).toBe('/agent');
-  expect(manifest.theme_color).toBe('#A0D2A8');
-  expect(manifest.background_color).toBe('#FFFFFF');
+  expect(manifest.theme_color).toBe('#6A2CF0');
+  expect(manifest.background_color).toBe('#F5F2FC');
   const sizes = manifest.icons.map((i: { sizes: string; purpose: string }) => `${i.sizes}:${i.purpose}`);
   expect(sizes).toEqual(expect.arrayContaining(['192x192:any', '512x512:any', '512x512:maskable']));
   for (const icon of manifest.icons as { src: string }[]) {
@@ -312,5 +312,5 @@ test('PWA: манифест, service worker не кэширует данные',
   expect(await page.locator('meta[name="apple-mobile-web-app-capable"]').getAttribute('content')).toBe('yes');
   expect(await page.locator('link[rel="apple-touch-icon"]').count()).toBeGreaterThan(0);
   expect(await page.locator('meta[name="viewport"]').getAttribute('content')).toContain('viewport-fit=cover');
-  expect(await page.locator('meta[name="theme-color"]').first().getAttribute('content')).toBe('#A0D2A8');
+  expect(await page.locator('meta[name="theme-color"]').first().getAttribute('content')).toBe('#6A2CF0');
 });

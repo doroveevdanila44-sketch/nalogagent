@@ -4,18 +4,16 @@ import sharp from 'sharp';
 import { PALETTE } from '@/lib/theme';
 
 /**
- * Временные иконки: «41» цвета бордо на фоне Vistoris Lake (SPEC.md, раздел 6). Цифры нарисованы
- * линиями, шрифт в системе не нужен. Когда клиент даст векторный логотип, заменить SVG здесь.
+ * Иконки PWA по дизайн-коду РОБОРАБ v3: лаймовая буква «Р» на фиолетовом фоне. Буква нарисована
+ * линиями, шрифт в системе не нужен. Лайм на фиолетовом разрешён (docs/DESIGN.md, раздел 2).
  */
-const BACKGROUND = PALETTE.lake;
-const MARK = PALETTE.wine;
+const BACKGROUND = PALETTE.violet;
+const MARK = PALETTE.lime;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <rect width="512" height="512" fill="${BACKGROUND}"/>
-  <g fill="none" stroke-width="38" stroke-linecap="butt">
-    <path d="M168 140 V292 H300" stroke="${MARK}" stroke-linejoin="miter"/>
-    <path d="M262 140 V374" stroke="${MARK}"/>
-    <path d="M326 192 L376 142 V374" stroke="${MARK}" stroke-linejoin="bevel"/>
+  <g fill="none" stroke-width="48" stroke-linecap="butt" stroke-linejoin="miter" transform="skewX(-10) translate(46 0)">
+    <path d="M178 394 V138 H292 A82 82 0 0 1 292 302 H178" stroke="${MARK}"/>
   </g>
 </svg>`;
 

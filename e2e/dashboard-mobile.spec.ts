@@ -4,8 +4,9 @@ import { E2E_DB_URL } from '../playwright.config';
 import { firstLogin, pickSuggestion, resetChat } from './helpers';
 
 const PIN = '8246';
-const WINE = 'rgb(120, 66, 68)'; // #784244
-const LAKE = 'rgb(160, 210, 168)'; // #A0D2A8
+const VIOLET = 'rgb(106, 44, 240)'; // #6A2CF0
+const LIME = 'rgb(205, 242, 0)'; // #CDF200
+const HEADER = VIOLET; // шапка и полоса под часами
 
 test.describe.configure({ mode: 'serial' });
 
@@ -26,7 +27,7 @@ test('Полоса под часами: theme-color бордо на входе �
   page,
 }) => {
   await page.goto('/login');
-  expect(await themeColor(page)).toBe('#784244');
+  expect(await themeColor(page)).toBe('#6A2CF0');
   await expect(page.locator('meta[name="theme-color"]')).toHaveCount(1);
   // установленное приложение: страница рисуется под часами
   expect(await page.locator('meta[name="apple-mobile-web-app-status-bar-style"]').getAttribute('content')).toBe(
@@ -45,39 +46,39 @@ test('Полоса под часами: theme-color бордо на входе �
       stripH: strip.height,
     };
   });
-  expect(login).toEqual({ html: WINE, body: WINE, stripBg: WINE, stripPos: 'fixed', stripH: '47px' });
+  expect(login).toEqual({ html: VIOLET, body: VIOLET, stripBg: VIOLET, stripPos: 'fixed', stripH: '47px' });
 
   // экран PIN при создании PIN остаётся бордовым
   await firstLogin(page, PIN);
   expect(new URL(page.url()).pathname).toBe('/agent');
-  expect(await themeColor(page)).toBe('#A0D2A8');
+  expect(await themeColor(page)).toBe('#6A2CF0');
   await toDashboard(page);
-  expect(await themeColor(page)).toBe('#A0D2A8');
+  expect(await themeColor(page)).toBe('#6A2CF0');
 
   // блокировка: бордо, разблокировка: озеро
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#784244');
+  expect(await themeColor(page)).toBe('#6A2CF0');
 
   // возврат из фона: система могла сбросить полосу, значение выставляется заново
   await page.evaluate(() => {
     document.querySelector('meta[name="theme-color"]')!.setAttribute('content', '#FFFFFF');
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  expect(await themeColor(page)).toBe('#784244');
+  expect(await themeColor(page)).toBe('#6A2CF0');
 
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
-  expect(await themeColor(page)).toBe('#A0D2A8');
+  expect(await themeColor(page)).toBe('#6A2CF0');
 
   // экран PIN после перезагрузки (маршрут /login): бордо с первого кадра
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#784244');
+  expect(await themeColor(page)).toBe('#6A2CF0');
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
-  expect(await themeColor(page)).toBe('#A0D2A8');
+  expect(await themeColor(page)).toBe('#6A2CF0');
 });
 
 /** Что нарисовано в верхней точке окна (под часами) и какие фоны у html, body и шапки. */
@@ -116,21 +117,21 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   // вход: html, body и верхняя область бордо, theme-color бордо
   await page.goto('/login');
   await expect(page.locator('.auth-screen')).toBeVisible();
-  expect(await strip(page)).toMatchObject({ html: WINE, body: WINE, painted: WINE, meta: '#784244' });
+  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
 
   const expectApp = async (path: string, label: string) => {
     await expect.poll(() => new URL(page.url()).pathname, label).toMatch(new RegExp(`^${path}$`));
     await settle(page);
     const s = await strip(page);
     expect(s, label).toMatchObject({
-      html: LAKE,
+      html: HEADER,
       // body в приложении того же цвета, что шапка: за краем оболочки не белое
-      body: LAKE,
-      header: LAKE,
+      body: HEADER,
+      header: HEADER,
       headerTop: 0,
       headerPad: '47px',
-      painted: LAKE,
-      meta: '#A0D2A8',
+      painted: HEADER,
+      meta: '#6A2CF0',
     });
   };
 
@@ -154,7 +155,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
-  expect(await strip(page)).toMatchObject({ html: WINE, body: WINE, painted: WINE, meta: '#784244' });
+  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
   await expectApp('/documents/[0-9a-f-]{36}', 'после разблокировки');
@@ -162,7 +163,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   // экран PIN после перезагрузки: бордо с первого кадра
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
-  expect(await strip(page)).toMatchObject({ path: '/login', html: WINE, body: WINE, painted: WINE, meta: '#784244' });
+  expect(await strip(page)).toMatchObject({ path: '/login', html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
   // после PIN на /login открывается «Агент»: страница, с которой заблокировали, не запоминается
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expectApp('/agent', 'после PIN');
@@ -207,11 +208,11 @@ test('Шапка стоит у верха без отрыва: свой padding-
     expect(m.padTop, label).toBe('47px'); // safe-area один раз, внутри шапки
     expect(m.marginTop, label).toBe('0px');
     expect(m.height, label).toBe(47 + 54); // отступ учтён один раз: 47 + 54, а не 47 + 47 + 54
-    expect(m.bg, label).toBe(LAKE);
-    expect(m.htmlBg, label).toBe(LAKE);
+    expect(m.bg, label).toBe(HEADER);
+    expect(m.htmlBg, label).toBe(HEADER);
     // body в приложении того же цвета, что шапка; белая только оболочка
-    expect(m.bodyBg, label).toBe(LAKE);
-    expect(m.shellBg, label).toBe('rgb(255, 255, 255)');
+    expect(m.bodyBg, label).toBe(HEADER);
+    expect(m.shellBg, label).toBe('rgb(245, 242, 252)');
     expect(m.overscroll, label).toBe('none');
     expect(m.htmlOverscroll, label).toBe('none');
 
@@ -305,10 +306,10 @@ test('Баннеры: расшифровка раскрывается под н�
       })(),
     };
   });
-  expect(look.bg).toBe(WINE);
-  expect(look.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
-  expect(look.rowColor).toBe('rgb(255, 248, 224)');
-  expect(look.rowBg).not.toBe(WINE); // строки на тон светлее
+  expect(look.bg).toBe(VIOLET);
+  expect(look.color).toBe('rgb(255, 255, 255)'); // #FFFFFF
+  expect(look.rowColor).toBe('rgb(255, 255, 255)');
+  expect(look.rowBg).not.toBe(VIOLET); // строки на тон светлее
   const [r, g, b] = look.rowBg.match(/\d+/g)!.map(Number) as [number, number, number];
   expect(r).toBeGreaterThan(120);
   expect(g).toBeGreaterThan(66);
@@ -317,11 +318,11 @@ test('Баннеры: расшифровка раскрывается под н�
   expect(look.acc).toEqual({
     prop: 'grid-template-rows',
     dur: '0.45s',
-    fn: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    fn: 'cubic-bezier(0.16, 1, 0.3, 1)',
   });
   // содержимое: прозрачность и сдвиг с той же длительностью и кривой
   expect(look.body.dur).toBe('0.45s, 0.45s');
-  expect(look.body.fn).toBe('cubic-bezier(0.22, 1, 0.36, 1), cubic-bezier(0.22, 1, 0.36, 1)');
+  expect(look.body.fn).toBe('cubic-bezier(0.16, 1, 0.3, 1), cubic-bezier(0.16, 1, 0.3, 1)');
 
   // открыли третий: второй закрывается одновременно, в середине анимации они оба частично раскрыты
   const h2 = (await page.locator('#sum-detail-vat').boundingBox())!.height;
@@ -374,8 +375,8 @@ test('390 px: четыре отдельных баннера группы, ши�
   });
   expect(m.lefts).toBe(1); // один столбец
   expect(m.tops).toBe(4); // четыре отдельных баннера друг под другом
-  expect(m.bg).toBe(WINE);
-  expect(m.color).toBe('rgb(255, 248, 224)');
+  expect(m.bg).toBe(VIOLET);
+  expect(m.color).toBe('rgb(255, 255, 255)');
   expect(m.scrollX).toBeLessThanOrEqual(0);
 
   // подпись справа от заголовка группы на телефоне под заголовком, раскрытие по месту работает
@@ -464,7 +465,7 @@ test('Предупреждения: по умолчанию свёрнуты, р
       const c = getComputedStyle(e);
       return { prop: c.transitionProperty, dur: c.transitionDuration, fn: c.transitionTimingFunction };
     }),
-  ).toEqual({ prop: 'grid-template-rows', dur: '0.45s', fn: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+  ).toEqual({ prop: 'grid-template-rows', dur: '0.45s', fn: 'cubic-bezier(0.16, 1, 0.3, 1)' });
 
   // вторая раскрывается, первая остаётся открытой: открыть можно несколько
   await heads.nth(1).click();
@@ -664,7 +665,7 @@ test.describe('Компьютер', () => {
     expect(m.gaps).toEqual([16, 16, 16]);
     expect(m.heights).toBe(1);
     // у каждой свой фон: бордо, бордо, бежевый #FFF8D6, мятный #A0D2A8
-    expect(m.bgs).toEqual([WINE, WINE, 'rgb(255, 248, 214)', LAKE]);
+    expect(m.bgs).toEqual([VIOLET, VIOLET, 'rgb(255, 255, 255)', LIME]);
     expect(m.radii).toEqual(['22px', '22px', '22px', '22px']);
     expect(m.labels[0]).toBe('Выручка с начала года');
     expect(m.labels[1]).toBe('НДС начислен');
@@ -750,13 +751,13 @@ test.describe('Компьютер', () => {
       };
     });
     // налог на прибыль мятный: расшифровка в его цветах, строки темнее, обводка бордовая
-    expect(look.bg).toBe(LAKE);
-    expect(look.color).toBe('rgb(42, 43, 20)'); // #2A2B14
-    expect(look.rowBg).not.toBe(LAKE);
-    expect(look.ring).toContain(WINE);
+    expect(look.bg).toBe(LIME);
+    expect(look.color).toBe('rgb(27, 11, 66)'); // #1B0B42
+    expect(look.rowBg).not.toBe(LIME);
+    expect(look.ring).toContain(VIOLET);
     expect(look.ring).toContain('2px');
     expect(look.chev).toMatch(/^matrix\(-1,/); // стрелка повёрнута
-    expect(look.panelAnim).toEqual({ prop: 'height', dur: '0.45s', fn: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+    expect(look.panelAnim).toEqual({ prop: 'height', dur: '0.45s', fn: 'cubic-bezier(0.16, 1, 0.3, 1)' });
     expect(look.openCount).toBe(1);
     expect(look.regions).toBe(1); // одна панель, а не по одной на карточку
 

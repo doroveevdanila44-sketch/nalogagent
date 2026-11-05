@@ -1,19 +1,28 @@
 import type { Metadata, Viewport } from 'next';
-import { Onest } from 'next/font/google';
+import { Manrope, Montserrat } from 'next/font/google';
 import { KeyboardViewport } from '@/components/KeyboardViewport';
 import { THEME } from '@/lib/theme';
 import './globals.css';
 
 /**
- * Один шрифт интерфейса, переменная ось веса одним файлом на подмножество. В интерфейсе
- * используются только 400, 500 и 600; курсива и 700 нет (стили не запрашивают их, жирное это 600).
- * Orbitron подключается отдельно и только для знака (components/Wordmark.tsx).
+ * Два шрифта дизайн-кода РОБОРАБ v3 (docs/DESIGN.md, раздел 3). Montserrat: заголовки, цифры, кнопки,
+ * метки; курсив 900 и 800 в заголовках, ровный 800 в кнопках, метках и вкладках (раздел 10.1).
+ * Manrope: основной текст, формы, подписи, данные; в стилях используются 400, 500, 700, 800.
+ * Переменная ось веса одним файлом на начертание, подмножества cyrillic и latin.
  */
-const onest = Onest({
+const montserrat = Montserrat({
+  subsets: ['cyrillic', 'latin'],
+  weight: 'variable',
+  style: ['normal', 'italic'],
+  display: 'swap',
+  variable: '--font-montserrat',
+});
+
+const manrope = Manrope({
   subsets: ['cyrillic', 'latin'],
   weight: 'variable',
   display: 'swap',
-  variable: '--font-onest',
+  variable: '--font-manrope',
 });
 
 export const metadata: Metadata = {
@@ -49,7 +58,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={onest.variable}>
+    <html lang="ru" className={`${montserrat.variable} ${manrope.variable}`}>
       <body>
         <KeyboardViewport />
         {children}

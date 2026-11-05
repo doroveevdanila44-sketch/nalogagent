@@ -65,7 +65,7 @@ function runs(segs: Seg[], bold = false): TextRun[] {
 function cell(text: string, header = false): DocxCell {
   return new DocxCell({
     children: [new Paragraph({ children: [new TextRun({ text, bold: header, size: 20 })] })],
-    shading: header ? { type: ShadingType.CLEAR, fill: PALETTE.lake.replace('#', ''), color: 'auto' } : undefined,
+    shading: header ? { type: ShadingType.CLEAR, fill: PALETTE.lime.replace('#', ''), color: 'auto' } : undefined,
   });
 }
 
@@ -103,7 +103,7 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
                 children: [
-                  new TextRun({ text: SAMPLE_NOTE, italics: true, size: 16, color: PALETTE.muted.replace('#', '') }),
+                  new TextRun({ text: SAMPLE_NOTE, italics: true, size: 16, color: PALETTE.mute.replace('#', '') }),
                 ],
               }),
             ],
@@ -118,7 +118,7 @@ export async function buildDocx(blocks: RenderBlock[], meta: FileMeta): Promise<
                   new TextRun({
                     text: `Версия ${meta.version} · контрольная сумма ${meta.hash.slice(0, 12)}`,
                     size: 16,
-                    color: PALETTE.muted.replace('#', ''),
+                    color: PALETTE.mute.replace('#', ''),
                   }),
                 ],
               }),
@@ -157,12 +157,12 @@ export async function buildDeclarationXlsx(
   let row = 1;
   const mark = ws.getCell(row, 1);
   mark.value = DRAFT_WATERMARK;
-  mark.font = { bold: true, size: 16, color: { argb: ARGB(PALETTE.wine) } };
+  mark.font = { bold: true, size: 16, color: { argb: ARGB(PALETTE.violet) } };
   ws.mergeCells(row, 1, row, 4);
   row += 1;
   const note = ws.getCell(row, 1);
   note.value = `${SAMPLE_NOTE}. Версия ${meta.version}, контрольная сумма ${meta.hash.slice(0, 12)}.`;
-  note.font = { italic: true, color: { argb: ARGB(PALETTE.muted) } };
+  note.font = { italic: true, color: { argb: ARGB(PALETTE.mute) } };
   ws.mergeCells(row, 1, row, 4);
   row += 2;
 
@@ -172,7 +172,7 @@ export async function buildDeclarationXlsx(
         const c = ws.getCell(row, i + 1);
         c.value = h;
         c.font = { bold: true };
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB(PALETTE.lake) } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB(PALETTE.lime) } };
       });
       row += 1;
       for (const r of b.rows) {

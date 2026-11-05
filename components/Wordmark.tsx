@@ -1,35 +1,21 @@
-import { Orbitron } from 'next/font/google';
-
 /**
- * Знак luxauto41 живым текстом. Единственное место, где используется Orbitron
- * (приближение к логотипу клиента, SPEC.md раздел 5). Когда клиент даст векторный логотип,
- * этот компонент заменяется на SVG, а Orbitron убирается (docs/OPEN_QUESTIONS.md, вопрос 1).
+ * Знак РОБОРАБ живым текстом: Montserrat Black Italic, прописные (docs/DESIGN.md, 10.3). Название
+ * клиента в шапке и на экранах входа не пишется. Стили знака в app/globals.css (.wordmark).
  */
-const orbitron = Orbitron({
-  subsets: ['latin'],
-  weight: ['500', '600'],
-  display: 'swap',
-  variable: '--font-orbitron',
-});
-
-/** tone="light" для тёмного бордового фона экранов входа и PIN */
 export function Wordmark({
   big = false,
   size,
-  tone = 'header',
 }: {
   big?: boolean;
   /** small: около 20 px на экране PIN, big: 30 px на экране пароля */
   size?: 'small' | 'normal' | 'big';
+  /** Оставлено для совместимости вызовов: знак всегда белый, шапка и экраны входа фиолетовые */
   tone?: 'header' | 'light';
 }) {
   const sz = size ?? (big ? 'big' : 'normal');
   return (
-    <div className={`wordmark ${sz === 'big' ? 'big' : ''} ${sz === 'small' ? 'small' : ''} ${tone === 'light' ? 'light' : ''} ${orbitron.variable}`} role="img" aria-label="luxauto41">
-      <span aria-hidden="true">luxauto</span>
-      <span aria-hidden="true" className="n41">
-        41
-      </span>
+    <div className={`wordmark ${sz === 'big' ? 'big' : ''} ${sz === 'small' ? 'small' : ''}`} role="img" aria-label="РОБОРАБ">
+      <span aria-hidden="true">РОБОРАБ</span>
     </div>
   );
 }
