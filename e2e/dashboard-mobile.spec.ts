@@ -124,9 +124,9 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
     await settle(page);
     const s = await strip(page);
     expect(s, label).toMatchObject({
-      html: HEADER,
-      // body в приложении того же цвета, что шапка: за краем оболочки не белое
-      body: HEADER,
+      // в приложении фон страницы светлый: под панелью вкладок и за скруглёнными углами шапки не фиолетовое
+      html: 'rgb(245, 242, 252)',
+      body: 'rgb(245, 242, 252)',
       header: HEADER,
       headerTop: 0,
       headerPad: '47px',
@@ -209,9 +209,9 @@ test('Шапка стоит у верха без отрыва: свой padding-
     expect(m.marginTop, label).toBe('0px');
     expect(m.height, label).toBe(47 + 54); // отступ учтён один раз: 47 + 54, а не 47 + 47 + 54
     expect(m.bg, label).toBe(HEADER);
-    expect(m.htmlBg, label).toBe(HEADER);
+    expect(m.htmlBg, label).toBe('rgb(245, 242, 252)');
     // body в приложении того же цвета, что шапка; белая только оболочка
-    expect(m.bodyBg, label).toBe(HEADER);
+    expect(m.bodyBg, label).toBe('rgb(245, 242, 252)');
     expect(m.shellBg, label).toBe('rgb(245, 242, 252)');
     expect(m.overscroll, label).toBe('none');
     expect(m.htmlOverscroll, label).toBe('none');

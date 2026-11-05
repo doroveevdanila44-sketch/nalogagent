@@ -1,5 +1,5 @@
 import { useLayoutEffect } from 'react';
-import { THEME } from '@/lib/theme';
+import { PALETTE, THEME } from '@/lib/theme';
 
 /** Озеро шапки: все экраны после входа. Совпадает с theme_color манифеста */
 export const THEME_APP: string = THEME.app;
@@ -24,8 +24,11 @@ export function applyThemeColor(color: string): void {
   } else {
     for (const meta of metas) meta.setAttribute('content', color);
   }
-  document.documentElement.style.backgroundColor = color;
-  document.body.style.backgroundColor = color;
+  // Вход и PIN целиком фиолетовые. В приложении фиолетова только шапка (она сама лежит под часами),
+  // а за краями оболочки, внизу под панелью вкладок и за скруглёнными углами шапки, светлый фон.
+  const page = color === THEME.auth ? color : PALETTE.bg;
+  document.documentElement.style.backgroundColor = page;
+  document.body.style.backgroundColor = page;
 }
 
 /** Возвращает фон <html> и <body> стилям страницы: экран без этого хука красят таблицы стилей. */

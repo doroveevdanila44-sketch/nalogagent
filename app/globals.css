@@ -88,7 +88,7 @@
      виден цвет шапки, а не белое. Белое это оболочка приложения (.app-shell), она занимает всю высоту
      окна. Экраны входа и PIN ниже перекрашивают html и body в бордо. */
   html {
-    background: var(--bar);
+    background: var(--color-bg);
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overscroll-behavior: none;
@@ -98,7 +98,7 @@
     margin: 0;
     min-height: 100%;
     overscroll-behavior: none;
-    background: var(--bar);
+    background: var(--color-bg);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-size: 16px;
@@ -293,6 +293,7 @@
     background: var(--bar);
     color: var(--color-white);
     padding-top: env(safe-area-inset-top, 0px);
+    border-radius: 0 0 32px 32px;
   }
   .top-in {
     display: grid;
@@ -2934,7 +2935,7 @@
   /* Метка «Демо-данные» в шапке: один раз, под знаком у левого края. Цвета только из токенов. */
   .demo-badge {
     position: absolute;
-    left: calc(16px + env(safe-area-inset-left, 0px));
+    left: calc(20px + env(safe-area-inset-left, 0px));
     bottom: 5px;
     padding: 2px 8px;
     border: 1px solid var(--color-on-dark-line);

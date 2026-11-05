@@ -145,10 +145,12 @@ describe('полоса под часами и шапка', () => {
     return m![1]!;
   };
 
-  it('шапка, html и body в приложении берут цвет из одной переменной --bar, это фиолетовый', () => {
+  it('шапка фиолетовая (--bar) со скруглением снизу, html и body в приложении светлые', () => {
     expect(css).toMatch(/--bar:\s*var\(--color-violet\)/);
-    for (const sel of ['html', 'body', '.top']) {
-      expect(rule(sel), sel).toMatch(/background:\s*var\(--bar\)/);
+    expect(rule('.top')).toMatch(/background:\s*var\(--bar\)/);
+    expect(rule('.top')).toMatch(/border-radius:\s*0 0 32px 32px/);
+    for (const sel of ['html', 'body']) {
+      expect(rule(sel), sel).toMatch(/background:\s*var\(--color-bg\)/);
     }
   });
 
