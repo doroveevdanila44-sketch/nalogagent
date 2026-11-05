@@ -36,9 +36,9 @@ export const SHEET_SOURCE = 'Источник';
 export const SHEET_WHATIF = 'Сценарий';
 
 const argb = (hex: string) => `FF${hex.replace('#', '').toUpperCase()}`;
-const FILL_HEAD: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.lake) } };
+const FILL_HEAD: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.lime) } };
 const FILL_INPUT: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.soft) } };
-const FILL_TOTAL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.mint) } };
+const FILL_TOTAL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.bg) } };
 const BORDER: Partial<ExcelJS.Borders> = {
   bottom: { style: 'thin', color: { argb: argb(PALETTE.line) } },
 };
@@ -370,7 +370,7 @@ function addWhatIfSheet(wb: ExcelJS.Workbook, w: WhatIfSnapshot, meta: WorkbookM
   const block = (name: string, rows: { label: string; base: string | null; scenario: string | null }[]): number[] => {
     const nameCell = ws.getCell(row, 1);
     nameCell.value = name;
-    nameCell.font = { bold: true, color: { argb: argb(PALETTE.accent) } };
+    nameCell.font = { bold: true, color: { argb: argb(PALETTE.violet) } };
     row += 1;
     const lines: number[] = [];
     for (const r of rows) {
@@ -462,9 +462,9 @@ function sheetIntro(ws: ExcelJS.Worksheet, title: string, meta: WorkbookMeta, no
   ws.getCell('A1').value = title;
   ws.getCell('A1').font = { bold: true, size: 14, color: { argb: argb(PALETTE.ink) } };
   ws.getCell('A2').value = `Файл для проверки расчёта. Расчёт на ${preciseDateTime(meta.at, meta.tz)}.`;
-  ws.getCell('A2').font = { bold: true, color: { argb: argb(PALETTE.accent) } };
+  ws.getCell('A2').font = { bold: true, color: { argb: argb(PALETTE.violet) } };
   ws.getCell('A3').value = note;
-  ws.getCell('A3').font = { italic: true, color: { argb: argb(PALETTE.muted) } };
+  ws.getCell('A3').font = { italic: true, color: { argb: argb(PALETTE.mute) } };
 }
 
 function entityName(result: CalcResult, id: string | null): string {
@@ -503,7 +503,7 @@ function writeCalc(
       const headRow = t.rows[0]!.row - 1;
       const titleRow = headRow - 1;
       ws.getCell(titleRow, 1).value = t.title;
-      ws.getCell(titleRow, 1).font = { bold: true, color: { argb: argb(PALETTE.accent) } };
+      ws.getCell(titleRow, 1).font = { bold: true, color: { argb: argb(PALETTE.violet) } };
       const head = ws.getRow(headRow);
       head.getCell(1).value = 'Шаг';
       head.getCell(2).value = 'Юрлицо';
@@ -607,7 +607,7 @@ function writeMonths(
             bucket.set(m.key, list);
           } else {
             cell.value = 'нет данных';
-            cell.font = { color: { argb: argb(PALETTE.muted) } };
+            cell.font = { color: { argb: argb(PALETTE.mute) } };
           }
         };
         putStep(5, m.revenueStep, m.revenue, monthRevenue);
@@ -721,12 +721,12 @@ function writeTotal(
     const skipped = result.entities.filter((e) => !e.applicable);
     for (const e of skipped) {
       ws.getCell(row, 1).value = `${e.name}: ${result.taxName.toLowerCase()} для режима «${REGIME_LABEL[e.regime]}» не считается, в итог не входит`;
-      ws.getCell(row, 1).font = { color: { argb: argb(PALETTE.muted) } };
+      ws.getCell(row, 1).font = { color: { argb: argb(PALETTE.mute) } };
       row += 1;
     }
     for (const w of result.warnings.filter((x) => x.kind === 'no_rules' || x.kind === 'no_data' || x.kind === 'no_fact')) {
       ws.getCell(row, 1).value = w.text;
-      ws.getCell(row, 1).font = { color: { argb: argb(PALETTE.muted) } };
+      ws.getCell(row, 1).font = { color: { argb: argb(PALETTE.mute) } };
       row += 1;
     }
     row += 2;
@@ -769,7 +769,7 @@ function writeSource(ws: ExcelJS.Worksheet, results: CalcResult[], meta: Workboo
     ws.getCell(row, 1).value = k;
     ws.getCell(row, 1).font = { bold: true };
     ws.getCell(row, 2).value = v;
-    if (bold) ws.getCell(row, 2).font = { bold: true, color: { argb: argb(PALETTE.accent) } };
+    if (bold) ws.getCell(row, 2).font = { bold: true, color: { argb: argb(PALETTE.violet) } };
     ws.getCell(row, 2).alignment = { wrapText: true, vertical: 'top' };
     row += 1;
   };

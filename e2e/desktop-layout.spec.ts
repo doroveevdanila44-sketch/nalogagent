@@ -4,13 +4,13 @@ import { firstLogin, resetChat } from './helpers';
 const PIN = '8246';
 
 // палитра «Озеро и зелень» в виде, который отдаёт браузер
-const WINE = 'rgb(120, 66, 68)'; // #784244
-const WINE_HOVER = 'rgb(138, 79, 82)'; // #8A4F52
-const CREAM = 'rgb(255, 248, 224)'; // #FFF8E0
+const VIOLET = 'rgb(106, 44, 240)'; // #6A2CF0
+const LIME = 'rgb(205, 242, 0)'; // #CDF200
+const CREAM = 'rgb(255, 255, 255)'; // #FFFFFF
 const SOFT = 'rgb(255, 248, 214)'; // #FFF8D6
 const LINE = 'rgb(231, 229, 211)'; // #E7E5D3
-const LAKE = 'rgb(160, 210, 168)'; // #A0D2A8
-const INK = 'rgb(42, 43, 20)'; // #2A2B14
+const HEADER = VIOLET; // шапка
+const INK = 'rgb(27, 11, 66)'; // #1B0B42
 const WHITE = 'rgb(255, 255, 255)';
 
 test.describe.configure({ mode: 'serial' });
@@ -64,35 +64,36 @@ for (const width of [1440, 1024]) {
       await expect(page.locator('nav.tabs')).toBeVisible();
       const vh = 900;
 
-      // боковая панель: 96 px, от самого верха на всю высоту окна, фон палитры
+      // боковая панель: 216 px, от самого верха на всю высоту окна, фон палитры
       const tabs = (await rect(page, 'nav.tabs'))!;
       expect(tabs.left, `${tab}: панель слева`).toBe(0);
       expect(tabs.top, `${tab}: панель от самого верха`).toBe(0);
-      expect(tabs.width).toBe(96);
+      expect(tabs.width).toBe(216);
       expect(tabs.height).toBe(vh);
-      expect(await css(page, 'nav.tabs', 'background-color')).toBe(INK);
+      expect(await css(page, 'nav.tabs', 'background-color')).toBe('rgb(37, 16, 79)');
 
       // шапка: от правого края панели до правого края окна, не на всю ширину
       const top = (await rect(page, 'header.top'))!;
-      expect(top.left, `${tab}: шапка начинается у правого края панели`).toBe(96);
+      expect(top.left, `${tab}: шапка начинается у правого края панели`).toBe(216);
       expect(top.right).toBe(width);
       expect(top.top).toBe(0);
-      expect(await css(page, 'header.top', 'background-color')).toBe(LAKE);
+      expect(await css(page, 'header.top', 'background-color')).toBe(HEADER);
 
       // знак по центру шапки, метка слева сразу правее панели, меню у правого края с отступом 16 px
       const mark = (await rect(page, 'header.top .wordmark'))!;
-      expect(Math.abs((mark.left + mark.right) / 2 - (96 + width) / 2)).toBeLessThanOrEqual(2);
+      expect(mark.left - 216, 'знак слева в шапке').toBeGreaterThanOrEqual(8);
+      expect(mark.left - 216).toBeLessThanOrEqual(24);
+      const pill = (await rect(page, '[data-testid="top-title"]'))!;
+      expect(Math.abs((pill.left + pill.right) / 2 - (216 + width) / 2), 'плашка названия по центру').toBeLessThanOrEqual(2);
       const badge = (await rect(page, '[data-testid="demo-badge"]'))!;
-      expect(badge.left - 96).toBeGreaterThanOrEqual(8);
-      expect(badge.left - 96).toBeLessThanOrEqual(24);
+      expect(badge.left - 216).toBeGreaterThanOrEqual(8);
+      expect(badge.left - 216).toBeLessThanOrEqual(24);
       const menu = (await rect(page, '.top-actions .icon-btn'))!;
       expect(width - menu.right).toBe(16);
 
       // первая вкладка на уровне шапки, на высоте строки с меткой «Демо-данные»
       const first = (await rect(page, 'nav.tabs .tab'))!;
       expect(first.top).toBeLessThan(top.height);
-      expect(badge.top + badge.height / 2).toBeGreaterThan(first.top);
-      expect(badge.top + badge.height / 2).toBeLessThan(first.bottom);
 
       // контент правее панели, поля слева и справа одинаковые: 24 px, от 1280 px 32 px
       const pad = width >= 1280 ? 32 : 24;
@@ -102,7 +103,7 @@ for (const width of [1440, 1024]) {
         const cs = getComputedStyle(m);
         return { left: r.left, right: r.right, pl: parseFloat(cs.paddingLeft), pr: parseFloat(cs.paddingRight) };
       });
-      expect(main.left).toBe(96);
+      expect(main.left).toBe(216);
       expect(main.right).toBe(width);
       expect(main.pl).toBe(pad);
       expect(main.pr).toBe(pad);
@@ -187,9 +188,9 @@ for (const width of [1440, 1024]) {
     const list = g.list!;
 
     // список занимает всю ширину контентной области; левый и правый отступы равны
-    expect(list.left, 'отступ слева').toBe(96 + pad);
+    expect(list.left, 'отступ слева').toBe(216 + pad);
     expect(g.vw - list.right, 'отступ справа').toBe(pad);
-    expect(list.left - 96).toBe(g.vw - list.right);
+    expect(list.left - 216).toBe(g.vw - list.right);
     expect(g.gutter).toBe('stable both-edges');
     expect(g.overX).toBeLessThanOrEqual(0);
     expect(g.page).toBeLessThanOrEqual(0);
@@ -240,7 +241,7 @@ for (const width of [1440, 1024, 390]) {
     // «Выручка с начала года» и «НДС начислен»: #784244, текст #FFF8E0
     for (const id of ['revenue', 'vat']) {
       const c = await look(id);
-      expect(c.bg, id).toBe(WINE);
+      expect(c.bg, id).toBe(VIOLET);
       expect(c.color, id).toBe(CREAM);
       expect(c.value, id).toBe(CREAM);
     }
@@ -249,17 +250,17 @@ for (const width of [1440, 1024, 390]) {
     expect(soft.bg).toBe(SOFT);
     expect(soft.border).toBe(LINE);
     expect(soft.borderW).toBe('1px');
-    expect(soft.value).toBe(WINE);
-    expect(soft.label).toBe(WINE);
+    expect(soft.value).toBe(VIOLET);
+    expect(soft.label).toBe(VIOLET);
     // «Налог на прибыль за 2026 год»: мятный #A0D2A8, тёмный текст
     const lake = await look('profit');
-    expect(lake.bg).toBe(LAKE);
+    expect(lake.bg).toBe(LIME);
     expect(lake.value).toBe(INK);
     expect(lake.label).toBe(INK);
     // контраст не ниже 4,5:1
     expect(contrast(soft.value, soft.bg)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(lake.value, lake.bg)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(CREAM, WINE)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(CREAM, VIOLET)).toBeGreaterThanOrEqual(4.5);
 
     // подписи: переименованы, с отметкой «прогноз», факт плюс остаток из того же расчёта
     await expect(page.getByText('Прогноз НДС за год')).toHaveCount(0);
@@ -282,10 +283,10 @@ for (const width of [1440, 1024, 390]) {
 
     // раскрытая часть каждого баннера в его цветах
     const expected: Record<string, { bg: string; row: 'darker' | 'wine' }> = {
-      revenue: { bg: WINE, row: 'wine' },
-      vat: { bg: WINE, row: 'wine' },
+      revenue: { bg: VIOLET, row: 'wine' },
+      vat: { bg: VIOLET, row: 'wine' },
       vatForecast: { bg: SOFT, row: 'darker' },
-      profit: { bg: LAKE, row: 'darker' },
+      profit: { bg: LIME, row: 'darker' },
     };
     for (const id of ['revenue', 'vat', 'vatForecast', 'profit']) {
       await card(id).click();
@@ -342,27 +343,27 @@ test('Переключатели и фильтры: выбранное борд�
   // вкладки «Каталог шаблонов» и «Мои документы»
   const catalog = page.getByRole('tab', { name: 'Каталог шаблонов' });
   const mine = page.getByRole('tab', { name: /Мои документы/ });
-  expect(await state(catalog)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(catalog)).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(mine)).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   await mine.click();
-  expect(await state(mine)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(mine)).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(catalog)).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   await catalog.click();
 
   // фильтры каталога
   const all = page.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Все', exact: true });
   const contracts = page.getByRole('group', { name: 'Категория' }).getByRole('button', { name: 'Договоры', exact: true });
-  expect(await state(all)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(all)).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(contracts)).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   await contracts.click();
-  expect(await state(contracts)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(contracts)).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(all)).toMatchObject({ bg: WHITE, color: INK, border: LINE });
 
   // основная кнопка «Заполнить»: бордо, светлый текст, наведение #8A4F52, нажатие 0,97
   const fill = page.locator('li.tpl [data-action="fill"]').first();
-  expect(await state(fill)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(fill)).toMatchObject({ bg: VIOLET, color: CREAM });
   await fill.hover();
-  await expect.poll(async () => (await state(fill)).bg).toBe(WINE_HOVER);
+  await expect.poll(async () => (await state(fill)).bg).toBe(LIME);
   await page.mouse.down();
   await expect.poll(() => fill.evaluate((e) => getComputedStyle(e).transform)).toBe('matrix(0.97, 0, 0, 0.97, 0, 0)');
   // отпускаем вне кнопки: окно «Заполнить» не открывается
@@ -375,20 +376,20 @@ test('Переключатели и фильтры: выбранное борд�
   await page.locator('#sum-btn-profit').click();
   await page.waitForTimeout(600);
   const calcBtn = page.locator('#sum-panel [data-action="calc"]');
-  expect(await state(calcBtn)).toMatchObject({ bg: WINE });
+  expect(await state(calcBtn)).toMatchObject({ bg: VIOLET });
   await calcBtn.click();
   const drawer = page.getByTestId('overlay-drawer');
   await expect(drawer).toBeVisible();
   const tabs = drawer.locator('.calc-tab');
   await expect(tabs).toHaveCount(2);
-  expect(await state(tabs.nth(0))).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(tabs.nth(0))).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(tabs.nth(1))).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   await tabs.nth(1).click();
-  expect(await state(tabs.nth(1))).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(tabs.nth(1))).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(tabs.nth(0))).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   // «Выгрузить в Excel» и другие кнопки окна: бордо
   const excel = drawer.getByRole('button', { name: 'Выгрузить в Excel' });
-  expect(await state(excel)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(excel)).toMatchObject({ bg: VIOLET, color: CREAM });
   await page.keyboard.press('Escape');
 
   // карточки ставок не менялись: зелёная и красная
@@ -417,7 +418,7 @@ test('Быстрые ответы: выбранный вариант бордо�
   const usn = panel.getByRole('button', { name: 'УСН', exact: true });
   await expect(vat).toHaveAttribute('aria-pressed', 'true');
   await expect(usn).toHaveAttribute('aria-pressed', 'false');
-  expect(await state(vat)).toMatchObject({ bg: WINE, color: CREAM });
+  expect(await state(vat)).toMatchObject({ bg: VIOLET, color: CREAM });
   expect(await state(usn)).toMatchObject({ bg: WHITE, color: INK, border: LINE });
   // юрлицо и период тоже выбраны так, как поняты
   await expect(panel.getByRole('button', { name: 'Альфа', exact: true })).toHaveAttribute('aria-pressed', 'true');

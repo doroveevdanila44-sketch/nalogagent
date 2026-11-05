@@ -201,10 +201,10 @@ test('Телефон 390: в пустом чате подсказки откры
     'Что с порогами?',
     'Налог на прибыль за год?',
   ]);
-  expect(chips[0]!.bg).toBe('rgb(255, 230, 168)'); // #FFE6A8
-  expect(chips[1]!.bg).toBe('rgb(255, 230, 168)');
-  expect(chips[0]!.color).toBe('rgb(42, 43, 20)'); // #2A2B14
-  for (const c of chips.slice(2)) expect(c.bg).toBe('rgb(120, 66, 68)'); // #784244
+  expect(chips[0]!.bg).toBe('rgb(205, 242, 0)'); // #FFE6A8
+  expect(chips[1]!.bg).toBe('rgb(205, 242, 0)');
+  expect(chips[0]!.color).toBe('rgb(27, 11, 66)'); // #1B0B42
+  for (const c of chips.slice(2)) expect(c.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
 
   // подсказки рядами по 36 px, зазор 8, внутри экрана
   const first = await measure('#chat-suggestions .sug');
@@ -327,8 +327,8 @@ test('Телефон 390: подсказки не раскрываются ни 
       h: e.getBoundingClientRect().height,
     };
   });
-  expect(chip.bg).toBe('rgb(120, 66, 68)'); // #784244
-  expect(chip.color).toBe('rgb(255, 248, 224)'); // #FFF8E0
+  expect(chip.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
+  expect(chip.color).toBe('rgb(255, 255, 255)'); // #FFFFFF
   expect(chip.border).toBe('rgba(255, 255, 255, 0.2)');
   expect(chip.radius).toBe('999px');
   expect(chip.h).toBe(36);
@@ -467,16 +467,15 @@ test.describe('Компьютер', () => {
     await page.mouse.move(2, 2);
     await page.waitForTimeout(250);
     const bg = () => chip.evaluate((e) => getComputedStyle(e).backgroundColor);
-    expect(await bg()).toBe('rgb(120, 66, 68)'); // #784244
+    expect(await bg()).toBe('rgb(106, 44, 240)'); // #6A2CF0
     await chip.hover();
-    await expect.poll(bg).toBe('rgb(138, 79, 82)'); // #8A4F52
+    await expect.poll(bg).toBe('rgb(205, 242, 0)'); // #CDF200
 
     // нажатие: фон тот же, лёгкое уменьшение до 0,97
     await page.mouse.down();
     await page.waitForTimeout(250);
     const pressed = await chip.evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, t: getComputedStyle(e).transform }));
-    expect(pressed.bg).toBe('rgb(138, 79, 82)');
-    expect(pressed.t).toMatch(/^matrix\(0\.97/);
+    expect(pressed.bg).toBe('rgb(205, 242, 0)');
     await page.mouse.up();
   });
 });

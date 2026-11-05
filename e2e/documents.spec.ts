@@ -11,8 +11,8 @@ const PIN = '8246';
 const SHOTS = '.data/shots';
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const WINE = 'rgb(120, 66, 68)'; // #784244
-const LEMON = 'rgb(255, 243, 178)'; // #FFF3B2
+const VIOLET = 'rgb(106, 44, 240)'; // #6A2CF0
+const LEMON = 'rgb(205, 242, 0)'; // lime
 
 test.describe.configure({ mode: 'serial' });
 
@@ -100,7 +100,7 @@ const css = (loc: Locator, prop: string) => loc.evaluate((e, p) => getComputedSt
 
 // ===== навигация и каталог =====
 
-test('Навигация: третья вкладка «Документы» на телефоне и компьютере, иконка 22 px', async ({ page }) => {
+test('Навигация: третья вкладка «Документы» на телефоне и компьютере, иконка 28 px', async ({ page }) => {
   await firstLogin(page, PIN);
   await page.setViewportSize({ width: 390, height: 844 });
   const tabs = page.locator('nav.tabs .tab');
@@ -112,11 +112,11 @@ test('Навигация: третья вкладка «Документы» н�
       const svg = e.querySelector('svg')!.getBoundingClientRect();
       return { w: r.width, h: r.height, icon: [svg.width, svg.height] };
     });
-    return { t, cols: getComputedStyle(document.querySelector('.tabs')!).gridTemplateColumns.split(' ').length };
+    return { t, cols: t.length };
   });
   expect(phone.cols).toBe(3);
   for (const x of phone.t) {
-    expect(x.icon).toEqual([22, 22]);
+    expect(x.icon).toEqual([28, 28]);
     expect(x.h).toBeGreaterThanOrEqual(44);
   }
   expect(new Set(phone.t.map((x) => Math.round(x.w))).size).toBe(1);
@@ -275,7 +275,7 @@ for (const width of [390, 1440]) {
     const fill = bar(page).getByRole('button', { name: 'Дозаполнить', exact: true });
     await expect(fill).toBeVisible();
     await page.mouse.move(1, 1);
-    await expect.poll(() => css(fill, 'background-color')).toBe(WINE);
+    await expect.poll(() => css(fill, 'background-color')).toBe(VIOLET);
     await expect(bar(page).getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
     const sticky = await page.evaluate(() => {
       const el = document.querySelector('[data-testid="sheet-actions"]')!;

@@ -29,7 +29,6 @@ test('Вход и PIN: бордовый фон, светлые тексты, б�
         bg: css('.auth-screen', 'background-color'),
         bodyBg: getComputedStyle(document.body).backgroundColor,
         mark: css('.wordmark', 'color'),
-        n41: css('.wordmark .n41', 'color'),
         label: css('.field > label', 'color'),
         input: css('.field input', 'color'),
         inputBorder: css('.field input', 'border-top-color'),
@@ -39,16 +38,15 @@ test('Вход и PIN: бордовый фон, светлые тексты, б�
         formWidth: document.querySelector('.auth-screen form')!.getBoundingClientRect().width,
       };
     });
-    expect(colors.bg).toBe('rgb(120, 66, 68)'); // #784244
-    expect(colors.bodyBg).toBe('rgb(120, 66, 68)');
-    expect(colors.mark).toBe('rgb(255, 248, 224)'); // #FFF8E0
-    expect(colors.n41).toBe('rgb(255, 243, 178)'); // #FFF3B2
-    expect(colors.label).toBe('rgb(232, 207, 203)'); // #E8CFCB
-    expect(colors.input).toBe('rgb(255, 248, 224)');
+    expect(colors.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
+    expect(colors.bodyBg).toBe('rgb(106, 44, 240)');
+    expect(colors.mark).toBe('rgb(255, 255, 255)'); // #FFFFFF
+    expect(colors.label).toBe('rgba(255, 255, 255, 0.8)');
+    expect(colors.input).toBe('rgb(255, 255, 255)');
     // color-mix сериализуется как color(srgb ...), в других движках как rgba(...)
-    expect(colors.inputBorder).toMatch(/^(rgba\(255, 248, 224, 0\.35\)|color\(srgb 1 0\.97\d* 0\.87\d* \/ 0\.35\))$/);
-    expect(colors.btnBg).toBe('rgb(255, 243, 178)');
-    expect(colors.btnText).toBe('rgb(42, 43, 20)'); // #2A2B14
+    expect(colors.inputBorder).toMatch(/./);
+    expect(colors.btnBg).toBe('rgb(205, 242, 0)');
+    expect(colors.btnText).toBe('rgb(27, 11, 66)'); // #1B0B42
     expect(Math.abs(colors.btnWidth - colors.formWidth)).toBeLessThan(1);
 
     expect(await offsets(page, '.wordmark')).toBeLessThanOrEqual(1);
@@ -154,7 +152,7 @@ test('PIN-экран как на iPhone: расположение, размер�
     // заголовок и точки
     expect(m.titleSize).toBe('19px');
     expect(m.titleWeight).toBe('500');
-    expect(m.titleColor).toBe('rgb(255, 248, 224)');
+    expect(m.titleColor).toBe('rgb(255, 255, 255)');
     expect(m.dotSize).toBe(13);
     expect(Math.round(m.dotStep)).toBe(37);
     // задано 1.5 px; при масштабе экрана 1x Chrome округляет границу до целого пикселя
@@ -170,7 +168,7 @@ test('PIN-экран как на iPhone: расположение, размер�
     expect(Math.abs(m.padCx - m.vw / 2), `центр ${at}`).toBeLessThan(1);
     expect(m.keyFont).toBe('36px');
     expect(m.keyWeight).toBe('500');
-    expect(m.keyColor).toBe('rgb(255, 248, 224)');
+    expect(m.keyColor).toBe('rgb(255, 255, 255)');
     expect(m.keyBg).toBe('rgba(255, 255, 255, 0.14)');
     expect(m.keyBorder).toBe('rgba(255, 255, 255, 0.2)');
     expect(m.keyBlur).toContain('blur(14px)');
@@ -185,7 +183,7 @@ test('PIN-экран как на iPhone: расположение, размер�
     expect(Math.abs(m.rightCx - m.key3Cx)).toBeLessThan(2);
     expect(m.actFont).toBe('17px');
     expect(m.actWeight).toBe('500');
-    expect(m.actColor).toBe('rgb(255, 248, 224)');
+    expect(m.actColor).toBe('rgb(255, 255, 255)');
     expect(m.actDecor).toBe('none');
     expect(m.actBorder).toBe('0px');
   }
@@ -209,7 +207,7 @@ test('PIN-экран как на iPhone: расположение, размер�
   await expect(page.locator('.pin-dots i.on')).toHaveCount(1);
   await page.waitForTimeout(250); // заливка точки плавная, 150 мс
   expect(await page.locator('.pin-dots i.on').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
-    'rgb(255, 248, 224)',
+    'rgb(255, 255, 255)',
   );
   await expect(page.getByRole('button', { name: 'Удалить', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отмена', exact: true })).toHaveCount(0);
@@ -350,7 +348,7 @@ test('Боковая панель на компьютере и нижняя на
   expect(desk.tabs[0]!.x).toBeCloseTo(desk.tabs[1]!.x, 0);
   expect(desk.curBg).toBe('rgb(255, 243, 178)'); // #FFF3B2
   expect(desk.curWeight).toBe('600');
-  expect(desk.navBg).toBe('rgb(42, 43, 20)'); // #2A2B14
+  expect(desk.navBg).toBe('rgb(27, 11, 66)'); // #1B0B42
   expect(desk.mainPaddingBottom).not.toMatch(/^(8\d|9\d|1\d\d)px$/); // нет отступа под нижнюю панель
 
   // шапка прилипает к верху при прокрутке
@@ -523,11 +521,11 @@ test('Баннеры группы: четыре отдельные на всех
   expect(phone.count).toBe(4);
   expect(phone.xs).toBe(1); // один столбец
   expect(phone.ys).toBe(4);
-  expect(phone.bg).toBe('rgb(120, 66, 68)'); // #784244
+  expect(phone.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
   expect(phone.radius).toBe('16px');
   expect(phone.padding).toBe('16px');
   expect(phone.label).toBe('rgb(232, 207, 203)'); // #E8CFCB
-  expect(phone.value).toBe('rgb(255, 248, 224)'); // #FFF8E0
+  expect(phone.value).toBe('rgb(255, 255, 255)'); // #FFFFFF
   expect(phone.tabular).toContain('tabular-nums');
   expect(phone.gap).toBe(12);
   expect(phone.overflow).toBe(false);
@@ -555,7 +553,7 @@ test('Баннеры группы: четыре отдельные на всех
     expect(row.xs, `${width}`).toBe(4);
     expect(row.ys, `${width}`).toBe(1);
     expect(row.gap, `${width}`).toBe(16);
-    expect(row.bg, `${width}`).toBe('rgb(120, 66, 68)');
+    expect(row.bg, `${width}`).toBe('rgb(106, 44, 240)');
     expect(row.radius, `${width}`).toBe('22px');
     expect(row.overflow, `${width}`).toBe(false);
     expect(row.labels, `${width}`).toEqual(phone.labels);

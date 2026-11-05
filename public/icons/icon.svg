@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#A0D2A8"/>
-  <g fill="none" stroke-width="38" stroke-linecap="butt">
-    <path d="M168 140 V292 H300" stroke="#784244" stroke-linejoin="miter"/>
-    <path d="M262 140 V374" stroke="#784244"/>
-    <path d="M326 192 L376 142 V374" stroke="#784244" stroke-linejoin="bevel"/>
+  <rect width="512" height="512" fill="#6A2CF0"/>
+  <g fill="none" stroke-width="48" stroke-linecap="butt" stroke-linejoin="miter" transform="skewX(-10) translate(46 0)">
+    <path d="M178 394 V138 H292 A82 82 0 0 1 292 302 H178" stroke="#CDF200"/>
   </g>
 </svg>

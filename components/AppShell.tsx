@@ -267,15 +267,28 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     window.location.assign('/login');
   }, []);
 
+  // Название текущей вкладки в шапке (DESIGN.md, 10.3). Страница «Что проверено» открывается из меню и
+  // вкладкой не является, поэтому у неё своё название.
+  const titleOf = (path: string): string => {
+    if (path === '/agent' || path.startsWith('/agent/')) return 'Агент';
+    if (path === '/dashboard' || path.startsWith('/dashboard/')) return 'Дашборд';
+    if (path === '/documents' || path.startsWith('/documents/')) return 'Документы';
+    if (path === '/statuses' || path.startsWith('/statuses/')) return 'Что проверено';
+    return '';
+  };
+  const title = titleOf(pathname);
+
+  // Плитки тачбара: только иконки, подпись скрыта визуально и остаётся для экранных читалок (DESIGN.md, 10.2)
   const tab = (href: string, label: string, icon: ReactNode) => (
     <Link
       href={href}
       className="tab"
+      aria-label={label}
       aria-current={pathname === href || pathname.startsWith(`${href}/`) ? 'page' : undefined}
       prefetch={false}
     >
       {icon}
-      {label}
+      <span className="tab-label">{label}</span>
     </Link>
   );
 
@@ -283,12 +296,13 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     <>
       <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
         <header className="top" ref={headerRef}>
-          {/* Метка демо: один раз в шапке, на всех экранах после входа */}
-          <span className="demo-badge" data-testid="demo-badge">
-            Демо-данные
-          </span>
-          <div className="wrap top-in">
+          <div className="top-in">
             <Wordmark />
+            {title !== '' && (
+              <span className="top-title" data-testid="top-title">
+                {title}
+              </span>
+            )}
             <div className="top-actions">
               <button
                 type="button"
@@ -306,6 +320,10 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
               </button>
             </div>
           </div>
+          {/* Метка демо: один раз в шапке, на всех экранах после входа */}
+          <span className="demo-badge" data-testid="demo-badge">
+            Демо-данные
+          </span>
           {!online && (
             <div className="offline-banner" role="status">
               Нет сети

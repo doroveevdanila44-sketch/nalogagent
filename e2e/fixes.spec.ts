@@ -202,24 +202,24 @@ for (const width of [360, 390]) {
           theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
         };
       }, width);
-    const LAKE = 'rgb(160, 210, 168)';
-    const WINE = 'rgb(120, 66, 68)';
+    const HEADER = 'rgb(106, 44, 240)';
+    const VIOLET = 'rgb(106, 44, 240)';
 
     // вход: бордо целиком, theme-color бордо
     await page.goto('/login');
     await expect(page.locator('.auth-screen')).toBeVisible();
-    expect(await paint()).toMatchObject({ html: WINE, body: WINE, top: WINE, theme: '#784244' });
+    expect(await paint()).toMatchObject({ html: VIOLET, body: VIOLET, top: VIOLET, theme: '#6A2CF0' });
 
     // приложение: цвет шапки под вырезом и за краем оболочки, theme-color озеро
     await firstLogin(page, PIN);
-    await expect.poll(async () => (await paint()).header).toBe(LAKE);
+    await expect.poll(async () => (await paint()).header).toBe(HEADER);
     expect(await paint()).toMatchObject({
-      html: LAKE,
-      body: LAKE,
-      header: LAKE,
+      html: HEADER,
+      body: HEADER,
+      header: HEADER,
       headerPad: '47px',
-      top: LAKE,
-      theme: '#A0D2A8',
+      top: HEADER,
+      theme: '#6A2CF0',
     });
 
   });

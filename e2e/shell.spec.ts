@@ -82,7 +82,7 @@ async function expectShellStill(page: Page, label: string, opts: { tabs: boolean
   expect(header0!.y, `${label}: шапка у самого верха`).toBeLessThanOrEqual(0.5);
   if (tabs0) {
     // низ нижней панели совпадает с низом окна
-    expect(Math.abs(tabs0.y + tabs0.h - before.innerHeight), `${label}: панель у низа окна`).toBeLessThanOrEqual(1);
+    expect(Math.abs(before.innerHeight - (tabs0.y + tabs0.h) - 16), `${label}: плитки парят на 16 px от низа`).toBeLessThanOrEqual(1);
   }
 
   for (const top of [120, 400, 900, 5000, 0]) {
