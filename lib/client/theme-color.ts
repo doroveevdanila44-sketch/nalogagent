@@ -1,6 +1,9 @@
 import { useLayoutEffect } from 'react';
 import { PALETTE, THEME } from '@/lib/theme';
 
+/** Светлый фон страницы в приложении: под панелью вкладок и за скруглёнными углами шапки. */
+export const PAGE_BG_APP: string = PALETTE.bg;
+
 /** Озеро шапки: все экраны после входа. Совпадает с theme_color манифеста */
 export const THEME_APP: string = THEME.app;
 /** Бордо экранов входа, PIN и блокировки по простою */
@@ -14,7 +17,7 @@ export const THEME_AUTH: string = THEME.auth;
  * приложения без смены маршрута, поэтому цвет меняется из кода. Под часами лежит шапка с отступом
  * safe-area-inset-top и тем же цветом.
  */
-export function applyThemeColor(color: string): void {
+export function applyThemeColor(color: string, pageBg: string = color): void {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
   if (metas.length === 0) {
     const meta = document.createElement('meta');
@@ -26,7 +29,7 @@ export function applyThemeColor(color: string): void {
   }
   // Вход и PIN целиком фиолетовые. В приложении фиолетова только шапка (она сама лежит под часами),
   // а за краями оболочки, внизу под панелью вкладок и за скруглёнными углами шапки, светлый фон.
-  const page = color === THEME.auth ? color : PALETTE.bg;
+  const page = pageBg;
   document.documentElement.style.backgroundColor = page;
   document.body.style.backgroundColor = page;
 }
@@ -44,11 +47,11 @@ function clearPageBackground(): void {
  * Метатег при размонтировании не возвращается: следующий экран сам выставит свой цвет. Фон html и
  * body возвращается стилям страницы.
  */
-export function useThemeColor(color: string): void {
+export function useThemeColor(color: string, pageBg: string = color): void {
   useLayoutEffect(() => {
-    applyThemeColor(color);
+    applyThemeColor(color, pageBg);
     const reapply = () => {
-      if (document.visibilityState === 'visible') applyThemeColor(color);
+      if (document.visibilityState === 'visible') applyThemeColor(color, pageBg);
     };
     document.addEventListener('visibilitychange', reapply);
     window.addEventListener('pageshow', reapply);
@@ -57,5 +60,5 @@ export function useThemeColor(color: string): void {
       window.removeEventListener('pageshow', reapply);
       clearPageBackground();
     };
-  }, [color]);
+  }, [color, pageBg]);
 }

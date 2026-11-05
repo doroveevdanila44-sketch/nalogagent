@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
-import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
+import { PAGE_BG_APP, THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
@@ -35,7 +35,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const [tourMode, setTourMode] = useState<'short' | 'full'>('short');
   const onboardingChecked = useRef(false);
   // Полоса под часами: бордо на экране блокировки и смены PIN, озеро на остальных
-  useThemeColor(locked || sheet === 'changePin' ? THEME_AUTH : THEME_APP);
+  const authLook = locked || sheet === 'changePin';
+  useThemeColor(authLook ? THEME_AUTH : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);

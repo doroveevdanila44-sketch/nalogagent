@@ -241,7 +241,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    height: var(--vvh, 100dvh);
+    height: 100dvh;
     overflow: hidden;
     position: relative;
     /* страница приложения лиловая (--bg), карточки на ней белые; html и body за ней цвета шапки */
@@ -252,6 +252,7 @@
      видимой части, и чат не виден за значками статус-бара. Сдвиг через top, а не transform: у
      fixed-окон внутри оболочки (меню, панель расчёта, обучение) остаётся прежний контейнер. */
   html[data-kb='open'] .app-shell {
+    height: var(--vvh, 100dvh);
     position: relative;
     top: var(--vv-top, 0px);
   }
