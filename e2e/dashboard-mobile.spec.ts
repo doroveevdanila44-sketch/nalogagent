@@ -822,7 +822,7 @@ test.describe('Компьютер', () => {
           h: Math.round(b.height),
           topW: Math.round(top.width),
           vw: window.innerWidth,
-          markLeft: Math.round(mark.left),
+          markCenter: Math.round(mark.left + mark.width / 2),
           cy: Math.round(b.top + b.height / 2),
           headH: Math.round(top.height),
         };
@@ -832,7 +832,7 @@ test.describe('Компьютер', () => {
       expect(m.w).toBe(44);
       expect(m.h).toBe(44);
       expect(m.topW).toBe(m.vw);
-      expect(m.markLeft).toBe(inset);
+      expect(m.markCenter).toBe(Math.round(m.vw / 2));
       expect(Math.abs(m.cy - m.headH / 2)).toBeLessThanOrEqual(1); // кнопка по центру строки шапки
     }
 

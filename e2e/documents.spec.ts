@@ -165,7 +165,7 @@ for (const width of [390, 1440]) {
     }
     await expect(page.locator('.tpl-cat, .tpl-meta')).toHaveCount(0);
     await expect(page.getByText('Образец, проверить юристом')).toHaveCount(0);
-    expect(await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1)).toBe(1);
+    expect(await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1)).toBe(0);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${SHOTS}/doc-catalog-${width}.png`, fullPage: true });
 

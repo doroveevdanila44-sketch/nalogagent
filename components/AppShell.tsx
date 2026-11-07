@@ -25,6 +25,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const router = useRouter();
   const [locked, setLocked] = useState(false);
   const [online, setOnline] = useState(true);
+  const [headerHidden, setHeaderHidden] = useState(false);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
@@ -33,11 +34,13 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   // первый показ идёт восемью шагами, «Показать подсказки заново» из меню открывает все подсказки
   const [tourMode, setTourMode] = useState<'short' | 'full'>('short');
   const onboardingChecked = useRef(false);
-  // Полоса под часами: бордо на экране блокировки и смены PIN, озеро на остальных
   const authLook = locked || sheet === 'changePin';
-  useThemeColor(authLook ? THEME_AUTH : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
+  const canHideHeader = online && !locked && sheet === 'none' && !tourOpen;
+  const hideHeader = canHideHeader && headerHidden;
+  useThemeColor(authLook ? THEME_AUTH : hideHeader ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // CSRF-токен текущей сессии: layout-эффекты выполняются раньше эффектов дочерних компонентов
@@ -155,8 +158,53 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   useLayoutEffect(() => {
     if (lastSection.current === section) return;
     lastSection.current = section;
-    document.querySelector<HTMLElement>('.app-main')?.scrollTo({ top: 0, behavior: 'instant' });
+    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [section]);
+
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    setHeaderHidden(false);
+    if (!canHideHeader) return;
+
+    const mobile = window.matchMedia('(max-width:899px)');
+    const lastY = new WeakMap<HTMLElement, number>([[main, main.scrollTop]]);
+    const chat = main.querySelector<HTMLElement>('.chat-scroll');
+    if (chat) lastY.set(chat, chat.scrollTop);
+
+    const onScroll = (event: Event) => {
+      const source = event.target;
+      if (!mobile.matches || !(source instanceof HTMLElement)) return;
+      if (source !== main && !source.matches('.chat-scroll')) return;
+
+      const y = Math.max(0, Math.min(source.scrollTop, source.scrollHeight - source.clientHeight));
+      if (y <= 4 || headerRef.current?.querySelector(':focus-visible')) {
+        lastY.set(source, y);
+        setHeaderHidden(false);
+        return;
+      }
+
+      const delta = y - (lastY.get(source) ?? 0);
+      if (Math.abs(delta) < 8) return;
+      lastY.set(source, y);
+      setHeaderHidden(delta > 0);
+    };
+
+    const reset = () => {
+      lastY.set(main, main.scrollTop);
+      const list = main.querySelector<HTMLElement>('.chat-scroll');
+      if (list) lastY.set(list, list.scrollTop);
+      setHeaderHidden(false);
+    };
+    main.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    mobile.addEventListener('change', reset);
+    window.addEventListener('pageshow', reset);
+    return () => {
+      main.removeEventListener('scroll', onScroll, true);
+      mobile.removeEventListener('change', reset);
+      window.removeEventListener('pageshow', reset);
+    };
+  }, [canHideHeader, pathname]);
 
   // Высота шапки (она растёт, когда показан баннер «Нет сети»): боковая панель и нижние элементы
   // привязаны к ней через CSS-переменную --header-h
@@ -283,13 +331,11 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
-      <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+      <div className="app-shell" data-header-hidden={hideHeader || undefined} hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+        <div className="scroll-status" aria-hidden="true" />
         <header className="top rr-header" ref={headerRef}>
           <div className="top-in rr-header-row">
-            <div className="top-brand">
-              <span className="wordmark rr-wordmark">РОБОРАБ</span>
-              <span className="demo-badge" data-testid="demo-badge">Демо-данные</span>
-            </div>
+            <span className="wordmark rr-wordmark">РОБОРАБ</span>
             <div className="top-actions">
               <button
                 type="button"
@@ -315,7 +361,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
         </header>
 
         <div className="app-body">
-          <main className="wrap app-main">{children}</main>
+          <main className="wrap app-main" ref={mainRef}>{children}</main>
         </div>
 
         <nav className="tabs rr-dock rr-rail" aria-label="Разделы">

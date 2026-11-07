@@ -19,7 +19,7 @@ async function sql(text: string): Promise<void> {
 
 /**
  * Видимый текст страницы без скриптов и стилей, вместе со скрытым и свёрнутым (textContent), и
- * видимый глазом (innerText). Слова «демо» считаются в обоих: допустимо одно, в метке шапки.
+ * видимый глазом (innerText). Проверяем, что слово «демо» убрано из интерфейса.
  */
 const demoCount = (page: Page) =>
   page.evaluate(() => {
@@ -41,17 +41,13 @@ const demoCount = (page: Page) =>
       snippets: [...(document.body.innerText ?? '').matchAll(/демо/gi)].map((m) =>
         (document.body.innerText ?? '').slice(Math.max(0, (m.index ?? 0) - 40), (m.index ?? 0) + 40).replace(/\s+/g, ' '),
       ),
-      badge: document.querySelectorAll('header.top [data-testid="demo-badge"]').length,
-      badgeText: document.querySelector('header.top [data-testid="demo-badge"]')?.textContent ?? '',
     };
   });
 
-/** Слово «демо» в видимом тексте одно: метка «Демо-данные» в шапке. */
-async function expectOneDemo(page: Page, label: string): Promise<void> {
+async function expectNoDemo(page: Page, label: string): Promise<void> {
   const c = await demoCount(page);
-  expect(c.badgeText, label).toBe('Демо-данные');
-  expect(c.visible, `${label}: видимый текст: ${JSON.stringify(c.snippets)}`).toBe(1);
-  expect(c.text, `${label}: весь текст страницы`).toBe(1);
+  expect(c.visible, `${label}: видимый текст: ${JSON.stringify(c.snippets)}`).toBe(0);
+  expect(c.text, `${label}: весь текст страницы`).toBe(0);
 }
 
 async function goTo(page: Page, tab: 'Агент' | 'Дашборд' | 'Документы') {
@@ -60,7 +56,7 @@ async function goTo(page: Page, tab: 'Агент' | 'Дашборд' | 'Доку
 }
 
 for (const width of [390, 1440]) {
-  test(`Слово «демо» один раз на каждом экране и в окнах: только метка «Демо-данные» в шапке, ${width} px`, async ({ page }) => {
+  test(`Слово «демо» убрано из экранов и окон, ${width} px`, async ({ page }) => {
     test.setTimeout(240_000);
     await resetChat();
     await sql('delete from documents');
@@ -70,7 +66,7 @@ for (const width of [390, 1440]) {
 
     // агент: пустой экран и после ответа с расчётом
     await expect(page.getByLabel('Вопрос агенту')).toBeVisible();
-    await expectOneDemo(page, 'агент, пусто');
+    await expectNoDemo(page, 'агент, пусто');
 
     const input = page.getByLabel('Вопрос агенту');
     await input.fill('НДС по Альфе за февраль');
@@ -84,20 +80,20 @@ for (const width of [390, 1440]) {
       /^Выгрузка из 1С · обновлено \d{2}\.\d{2}, \d{2}:\d{2} · (факт|прогноз|факт и прогноз)$/,
     );
     await answer.locator('summary', { hasText: 'Как посчитано' }).click();
-    await expectOneDemo(page, 'агент, ответ');
+    await expectNoDemo(page, 'агент, ответ');
 
     // вопрос вне данных: «Данные есть …» без слова «демо»
     await input.fill('налог за 2024 год');
     if (width >= 760) await input.press('Enter');
     else await page.getByRole('button', { name: 'Отправить', exact: true }).click();
     await expect(page.locator('.typing')).toHaveCount(0);
-    await expectOneDemo(page, 'агент, ответ вне данных');
+    await expectNoDemo(page, 'агент, ответ вне данных');
 
     // окна под ответом: расчёт, проверка, передача
     for (const action of ['calc', 'check', 'send'] as const) {
       await answer.locator(`[data-action="${action}"]`).click();
       await expect(page.locator('[data-testid^="overlay-"]').first()).toBeVisible();
-      await expectOneDemo(page, `окно ${action}`);
+      await expectNoDemo(page, `окно ${action}`);
       await page.keyboard.press('Escape');
       await expect(page.locator('[data-testid^="overlay-"]')).toHaveCount(0);
     }
@@ -111,19 +107,19 @@ for (const width of [390, 1440]) {
     // дашборд: баннеры, карточки, окно расчёта
     await goTo(page, 'Дашборд');
     await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
-    await expectOneDemo(page, 'дашборд');
+    await expectNoDemo(page, 'дашборд');
     await page.locator('.sum-card').nth(1).click();
     await page.waitForTimeout(500);
     const detail = width >= 1024 ? page.locator('#sum-panel') : page.locator('.sum-item.open .acc');
     await detail.locator('[data-action="calc"]').click();
     await expect(page.getByTestId('overlay-drawer')).toBeVisible();
-    await expectOneDemo(page, 'дашборд, расчёт');
+    await expectNoDemo(page, 'дашборд, расчёт');
     await page.keyboard.press('Escape');
 
     // документы: каталог, лист с пропусками, меню, окна
     await goTo(page, 'Документы');
     await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
-    await expectOneDemo(page, 'документы');
+    await expectNoDemo(page, 'документы');
     expect(await page.evaluate(() => (document.body.innerText ?? '').includes('Образец, проверить юристом'))).toBe(false);
 
     await page.locator('[data-template="report_vat_certificate"] [data-action="fill"]').click();
@@ -131,22 +127,22 @@ for (const width of [390, 1440]) {
     await start.getByLabel('Вид периода').selectOption({ label: 'Месяц' });
     await start.getByRole('button', { name: 'Заполнить', exact: true }).click();
     await expect(page.getByTestId('sheet')).toBeVisible();
-    await expectOneDemo(page, 'лист документа');
+    await expectNoDemo(page, 'лист документа');
     // реквизиты в тексте без пометки «(демо)»
     expect(await page.getByTestId('sheet').innerText()).not.toMatch(/демо/i);
 
     await page.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: 'Проверить самому' }).click();
     await expect(page.getByTestId('overlay-screen')).toBeVisible();
-    await expectOneDemo(page, 'документ, проверить самому');
+    await expectNoDemo(page, 'документ, проверить самому');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: 'История версий' }).click();
-    await expectOneDemo(page, 'документ, история');
+    await expectNoDemo(page, 'документ, история');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: /Комментарии/ }).click();
-    await expectOneDemo(page, 'документ, комментарии');
+    await expectNoDemo(page, 'документ, комментарии');
     await page.keyboard.press('Escape');
 
     // отправка и имитация ответа: подписи без слова «демо»
@@ -157,24 +153,24 @@ for (const width of [390, 1440]) {
     await page.locator('[data-action="submit"]').click();
     const send = page.getByTestId('overlay-modal');
     await expect(send.getByTestId('demo-mail-note')).toHaveText('Письмо не отправляется');
-    await expectOneDemo(page, 'документ, окно отправки');
+    await expectNoDemo(page, 'документ, окно отправки');
     await send.getByRole('radio', { name: /Бухгалтер/ }).check();
     await send.getByRole('button', { name: 'Отправить', exact: true }).click();
     await expect(page.getByTestId('demo-reply')).toBeVisible();
-    await expectOneDemo(page, 'документ на проверке, имитация ответа');
+    await expectNoDemo(page, 'документ на проверке, имитация ответа');
     await page.getByTestId('demo-reply').getByRole('button', { name: 'Замечание' }).click();
-    await expectOneDemo(page, 'документ, замечание');
+    await expectNoDemo(page, 'документ, замечание');
     await page.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: /Комментарии/ }).click();
     await expect(page.getByTestId('comments')).toContainText('имитация');
-    await expectOneDemo(page, 'документ, комментарии после ответа');
+    await expectNoDemo(page, 'документ, комментарии после ответа');
     await page.keyboard.press('Escape');
 
     // статусы из меню: подписи «Письмо не отправляется» здесь нет
     await page.getByRole('button', { name: 'Меню' }).click();
     await page.getByRole('button', { name: 'Что проверено' }).click();
     await expect(page.getByRole('heading', { name: 'Что проверено', level: 1 })).toBeVisible();
-    await expectOneDemo(page, 'статусы');
+    await expectNoDemo(page, 'статусы');
     expect(await page.evaluate(() => (document.body.innerText ?? '').includes('Письмо не отправляется'))).toBe(false);
 
     await sql('delete from documents');

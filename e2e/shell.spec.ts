@@ -67,8 +67,8 @@ const pageState = (page: Page) =>
     })(),
   }));
 
-/** Экран прокручивается, а шапка и нижняя панель не двигаются ни на пиксель. */
-async function expectShellStill(page: Page, label: string, opts: { tabs: boolean }): Promise<void> {
+/** Прокручивается только main, нижние плитки остаются на месте. */
+async function expectShellScroll(page: Page, label: string, opts: { tabs: boolean }): Promise<void> {
   const header0 = await boxOf(page, 'header.top');
   const tabs0 = opts.tabs ? await boxOf(page, 'nav.tabs') : null;
   expect(header0, `${label}: шапка есть`).not.toBeNull();
@@ -76,7 +76,7 @@ async function expectShellStill(page: Page, label: string, opts: { tabs: boolean
   const before = await pageState(page);
   expect(before.htmlOverflow, label).toBe('hidden');
   expect(before.bodyOverflow, label).toBe('hidden');
-  // не fixed и не sticky относительно страницы: обычные элементы колонки
+  // Позиционирование относительно оболочки, которая учитывает клавиатуру.
   expect(before.header, label).not.toMatch(/fixed|sticky/);
   expect(before.tabs, label).not.toMatch(/fixed|sticky/);
   expect(header0!.y, `${label}: шапка у самого верха`).toBeLessThanOrEqual(0.5);
@@ -88,8 +88,7 @@ async function expectShellStill(page: Page, label: string, opts: { tabs: boolean
   for (const top of [120, 400, 900, 5000, 0]) {
     await scrollMain(page, top);
     await page.waitForTimeout(60);
-    const header = await boxOf(page, 'header.top');
-    expect(header, `${label}: шапка при прокрутке ${top}`).toEqual(header0);
+
     if (tabs0) expect(await boxOf(page, 'nav.tabs'), `${label}: панель при прокрутке ${top}`).toEqual(tabs0);
     const s = await pageState(page);
     expect(s.winY + s.docTop + s.bodyTop, `${label}: окно не прокручивается`).toBe(0);
@@ -98,7 +97,7 @@ async function expectShellStill(page: Page, label: string, opts: { tabs: boolean
   }
 }
 
-test('Оболочка: шапка и нижняя панель не двигаются при прокрутке на экранах агента, дашборда, документов и листа', async ({ page }) => {
+test('Оболочка: прокрутка на экранах агента, дашборда, документов и листа', async ({ page }) => {
   test.setTimeout(180_000);
   await resetChat();
   await firstLogin(page, PIN);
@@ -106,12 +105,12 @@ test('Оболочка: шапка и нижняя панель не двига�
 
   // агент: прокручивается только список сообщений, окно и main стоят
   await expect(page.getByLabel('Вопрос агенту')).toBeVisible();
-  await expectShellStill(page, 'агент', { tabs: true });
+  await expectShellScroll(page, 'агент', { tabs: true });
   const input = page.getByLabel('Вопрос агенту');
   await input.fill('НДС по Альфе за февраль');
   await page.getByRole('button', { name: 'Отправить', exact: true }).click();
   await expect(page.locator('.typing')).toHaveCount(0);
-  await expectShellStill(page, 'агент, ответ', { tabs: true });
+  await expectShellScroll(page, 'агент, ответ', { tabs: true });
   const composerBefore = await boxOf(page, '.composer');
   await page.evaluate(() => {
     const list = document.querySelector<HTMLElement>('.chat-scroll')!;
@@ -124,19 +123,32 @@ test('Оболочка: шапка и нижняя панель не двига�
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
   await page.waitForTimeout(400);
   expect(await page.evaluate(() => document.querySelector<HTMLElement>('main.app-main')!.scrollHeight > document.querySelector<HTMLElement>('main.app-main')!.clientHeight)).toBe(true);
-  await expectShellStill(page, 'дашборд', { tabs: true });
+  await expectShellScroll(page, 'дашборд', { tabs: true });
+
+  const header = page.locator('header.top');
+  const status = page.locator('.scroll-status');
+  await scrollMain(page, 300);
+  await expect(header).toBeHidden();
+  await expect(status).toHaveCSS('opacity', '1');
+  await expect(status).toHaveCSS('backdrop-filter', 'blur(9px) saturate(1.3)');
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#f5f2fc$/i);
+  await scrollMain(page, 200);
+  await expect(header).toBeVisible();
+  await expect(status).toHaveCSS('opacity', '0');
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#6a2cf0$/i);
+  expect(await boxOf(page, 'header.top')).toMatchObject({ y: 0 });
 
   // документы: каталог и список
   await page.getByRole('link', { name: 'Документы', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Документы', level: 1 })).toBeVisible();
-  await expectShellStill(page, 'документы', { tabs: true });
+  await expectShellScroll(page, 'документы', { tabs: true });
 
-  // страница документа: нижней панели вкладок нет, шапка стоит; закреплена панель действий листа
+  // страница документа: нижние вкладки скрыты, панель действий листа закреплена
   await page.locator('[data-template="contract_rent_no_crew"] [data-action="fill"]').click();
   const dialog = page.getByRole('dialog', { name: /Заполнить:/ });
   await dialog.getByRole('button', { name: 'Заполнить', exact: true }).click();
   await expect(page.getByTestId('sheet')).toBeVisible();
-  await expectShellStill(page, 'лист документа', { tabs: false });
+  await expectShellScroll(page, 'лист документа', { tabs: false });
   // закреплённая панель действий листа у низа области при любой прокрутке
   const barBefore = await boxOf(page, '[data-testid="sheet-actions"]');
   await scrollMain(page, 700);
@@ -199,7 +211,7 @@ test('Отступы: первый заголовок каждого экран�
   const st = await gap('#h-statuses');
   expect(st.gap, 'статусы').toBeGreaterThanOrEqual(24);
 
-  // шапка не прилипает и заголовок не уходит под неё: при прокрутке он уезжает вместе с областью
+  // Заголовок прокручивается вместе с областью.
   await page.getByRole('link', { name: 'Дашборд', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
   await scrollMain(page, 200);

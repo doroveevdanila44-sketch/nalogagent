@@ -102,18 +102,15 @@ function formulaCount(wb: ExcelJS.Workbook, sheet: string): number {
 
 // ===== компьютер =====
 
-test('Дашборд: строка происхождения под баннерами, карточками и ставками, метка «Демо-данные» в шапке', async ({ page }) => {
+test('Дашборд: строка происхождения под баннерами, карточками и ставками', async ({ page }) => {
   fs.mkdirSync(SHOTS, { recursive: true });
   await firstLogin(page, PIN);
   await toDashboard(page);
 
-  // метка в шапке ровно один раз
-  await expect(page.locator('header.top [data-testid="demo-badge"]')).toHaveCount(1);
-  await expect(page.locator('header.top')).toContainText('Демо-данные');
-  expect(await page.locator('header.top').innerText()).toMatch(/Демо-данные/);
+  await expect(page.locator('header.top')).not.toContainText('Демо-данные');
 
   // у четырёх баннеров строка одинаковая, поэтому она стоит один раз под заголовком группы:
-  // «источник · обновлено · метка», без юрлица, периода и без метки «Демо-данные» (она в шапке)
+  // «источник · обновлено · метка», без юрлица, периода и без метки «Демо-данные»
   const line = /^Выгрузка из 1С · обновлено 10\.10, 18:00 · (факт|прогноз|факт и прогноз)$/;
   const banners = page.locator('.sum-card');
   await expect(banners).toHaveCount(4);
@@ -143,9 +140,8 @@ test('Дашборд: строка происхождения под банне�
   await expect(alfa.locator('[data-testid="source-line"]').first()).not.toContainText('ООО «Альфа»');
   await expect(alfa.locator('[data-testid="source-line"]').first()).not.toContainText('2026');
 
-  // «Демо-данные» в DOM страницы один раз, в шапке
   const occurrences = await page.evaluate(() => (document.body.textContent ?? '').split('Демо-данные').length - 1);
-  expect(occurrences).toBe(1);
+  expect(occurrences).toBe(0);
 
   await page.screenshot({ path: `${SHOTS}/prov-dashboard-desktop.png`, fullPage: false });
 });

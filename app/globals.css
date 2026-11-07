@@ -204,10 +204,8 @@
   }
 
   /* ===== Каркас =====
-     Оболочка это колонка на высоту окна: шапка, область содержимого, нижняя панель вкладок (телефон).
-     Шапка и панель обычные элементы колонки, не fixed и не sticky относительно страницы, поэтому при
-     прокрутке они не двигаются (на iPhone в Safari панель уезжала на середину экрана). Прокручивается
-     одна область, main. Страница (html и body) не прокручивается вообще. Высота оболочки это
+     Оболочка занимает высоту окна. На телефоне шапка уходит вверх поверх содержимого, а нижняя панель
+     закреплена в оболочке. Прокручивается область main или список сообщений. Страница (html и body) не прокручивается вообще. Высота оболочки это
      высота видимой области --vvh (lib/client/keyboard.ts, из window.visualViewport), а не 100vh и
      не 100dvh: Safari на iOS и установленное на экран приложение при открытой клавиатуре
      уменьшают только visualViewport, 100dvh у них не меняется, и поле ввода оказывалось под
@@ -272,12 +270,9 @@
     flex: none;
     z-index: 41;
   }
-  .top-brand {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .top-brand .wordmark {
+  .top-in .wordmark {
+    grid-column: 2;
+    justify-self: center;
     align-self: auto;
     margin: 0;
   }
@@ -2778,13 +2773,6 @@
   }
 
   /* ===== Происхождение цифр и действия над расчётом ===== */
-  .demo-badge {
-    color: rgb(255 255 255 / 0.85);
-    font: 700 10px/1 var(--rr-font);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
   /* Строка происхождения: мелким шрифтом, в одну-две строки на телефоне, без горизонтальной прокрутки */
   .src-line {
     display: block;
@@ -4933,5 +4921,61 @@
   html[data-kb='open'] .tabs.rr-dock,
   html[data-sheet='open'] .tabs.rr-dock {
     display: none;
+  }
+}
+
+
+.top .rr-header-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+
+/* Мобильная шапка не меняет геометрию прокрутки при появлении и скрытии. */
+.scroll-status { display: none; }
+
+@media (max-width: 899px) {
+  .app-shell { --header-clearance: var(--header-h); }
+  .app-shell[data-header-hidden] { --header-clearance: var(--rr-safe-top); }
+  .app-shell > .top { position: absolute; inset: 0 0 auto; }
+  .app-shell .app-main {
+    padding-top: calc(var(--header-h) + 24px);
+    scroll-padding-top: var(--header-clearance);
+  }
+  .app-shell .app-main:has(> .chat-root) { padding-top: 0; }
+  .app-shell .chat-scroll {
+    padding-top: var(--header-h);
+    scroll-padding-top: var(--header-clearance);
+  }
+  .app-shell .sheet-bar { top: var(--header-clearance); }
+  .scroll-status { display: block; }
+  .scroll-status {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 42;
+    height: calc(max(var(--rr-safe-top), 6px) + 46px);
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(to bottom, rgb(255 255 255 / .42), rgb(255 255 255 / .18) 55%, transparent);
+    -webkit-backdrop-filter: blur(9px) saturate(1.3);
+    backdrop-filter: blur(9px) saturate(1.3);
+    -webkit-mask-image: linear-gradient(#000 45%, transparent);
+    mask-image: linear-gradient(#000 45%, transparent);
+    transition: opacity .22s var(--rr-ease);
+  }
+  .app-shell[data-header-hidden] .scroll-status { opacity: 1; }
+  .app-shell > .top {
+    transition: transform .22s var(--rr-ease), visibility 0s;
+  }
+  .app-shell[data-header-hidden] .top {
+    transform: translateY(-100%);
+    visibility: hidden;
+    transition: transform .22s var(--rr-ease), visibility 0s .22s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-shell > .top, .app-shell[data-header-hidden] .top, .scroll-status { transition: none; }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .scroll-status {
+      background: var(--rr-bg);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 }

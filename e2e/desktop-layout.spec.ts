@@ -78,11 +78,11 @@ for (const width of [1440, 1024]) {
       expect(tabs.bottom).toBe(vh);
       expect(await css(page, 'nav.tabs', 'background-color')).toBe(WHITE);
       await expect(page.locator('[data-testid="top-title"]')).toHaveCount(0);
-      await expect(page.locator('header.top [data-testid="demo-badge"]')).toBeVisible();
+      await expect(page.locator('header.top')).not.toContainText('Демо-данные');
 
       const mark = (await rect(page, 'header.top .wordmark'))!;
       const menu = (await rect(page, '.top-actions .icon-btn'))!;
-      expect(mark.left).toBe(24);
+      expect(Math.abs((mark.left + mark.right) / 2 - width / 2)).toBeLessThanOrEqual(1);
       expect(width - menu.right).toBe(24);
 
       // контент правее панели, поля слева и справа одинаковые: 24 px, от 1280 px 32 px
