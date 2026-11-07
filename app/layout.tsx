@@ -5,6 +5,7 @@ import { THEME } from '@/lib/theme';
 import { RoborabViewport } from './roborab-viewport';
 import './globals.css';
 import './roborab-ui.css';
+import './roborab-native-status.css';
 
 /**
  * Два шрифта дизайн-кода РОБОРАБ v3 (docs/DESIGN.md, раздел 3). Montserrat: заголовки, цифры, кнопки,
