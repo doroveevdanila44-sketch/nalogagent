@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { KEYBOARD_THRESHOLD, computeKeyboard, standaloneBottomCredit, type ViewportMetrics } from './viewport';
+import { standaloneDockInset } from '../../app/roborab-viewport';
+import { KEYBOARD_THRESHOLD, computeKeyboard, type ViewportMetrics } from './viewport';
 
 /** iPhone 14 в установленном приложении: окно 390 на 844, клавиатура без панели подсказок 336 px. */
 const IPHONE: ViewportMetrics = {
@@ -95,11 +96,20 @@ describe('сдвиг экранной клавиатуры по visualViewport',
   });
 });
 
-describe('standaloneBottomCredit', () => {
-  it('снимает лишний inset только когда недостающая высота совпадает со статус-баром', () => {
-    expect(standaloneBottomCredit(852, 793, 59, 34)).toBe(34);
-    expect(standaloneBottomCredit(852, 852, 59, 34)).toBe(0);
-    expect(standaloneBottomCredit(852, 499, 59, 34)).toBe(0);
-    expect(standaloneBottomCredit(852, 852, 0, 0)).toBe(0);
+describe('standaloneDockInset', () => {
+  it('снимает устаревший нижний inset, если окно обрезано на высоту статус-бара', () => {
+    expect(standaloneDockInset(852, 793, 59)).toBe('max(0px, calc(env(safe-area-inset-bottom, 0px) - 59px))');
+  });
+
+  it('оставляет место для индикатора при системном статус-баре', () => {
+    expect(standaloneDockInset(852, 793, 0)).toBe('max(34px, env(safe-area-inset-bottom, 0px))');
+  });
+
+  it('использует inset браузера при полном окне и игнорирует геометрию клавиатуры', () => {
+    expect(standaloneDockInset(852, 852, 59)).toBeNull();
+    expect(standaloneDockInset(852, 852, 0)).toBeNull();
+    expect(standaloneDockInset(852, 499, 59)).toBeNull();
+    expect(standaloneDockInset(852, 499, 0)).toBeNull();
+    expect(standaloneDockInset(667, 647, 0)).toBeNull();
   });
 });

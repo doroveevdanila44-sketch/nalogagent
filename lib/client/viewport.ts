@@ -62,9 +62,3 @@ export function computeKeyboard(m: ViewportMetrics): KeyboardGeometry {
     top: open ? px(m.vvOffsetTop) : 0,
   };
 }
-
-/** iOS иногда вычитает высоту статус-бара из окна установленного приложения, сохраняя оба inset. */
-export function standaloneBottomCredit(screenHeight: number, viewportHeight: number, safeTop: number, safeBottom: number): number {
-  const clipped = screenHeight - viewportHeight;
-  return safeTop >= 20 && Math.abs(clipped - safeTop) <= 4 ? Math.min(safeBottom, clipped) : 0;
-}
