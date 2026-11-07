@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { PAGE_BG_APP, THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
+import { copyViewportDiagnostics } from '@/lib/client/viewport-diagnostics';
 import { attachRoborabHeader } from '@/app/roborab-header.js';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
@@ -389,6 +390,11 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             >
               Что проверено
             </button>
+            {typeof navigator !== 'undefined' && 'standalone' in navigator && (
+              <button type="button" className="row" onClick={() => void copyViewportDiagnostics()}>
+                Проверить экран
+              </button>
+            )}
             <button type="button" className="row" data-tour="menu-pin" onClick={() => setSheet('changePin')}>
               Сменить PIN
             </button>
