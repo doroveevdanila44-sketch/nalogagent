@@ -77,7 +77,7 @@ export function attachRoborabHeader(header, status, options = {}) {
 
   function onScroll(event) {
     if (!mobile.matches) return;
-    const source = event.target === document ? document.scrollingElement : event.target;
+    const source = event.target === document || event.target === window ? document.scrollingElement : event.target;
     if (!(source instanceof HTMLElement)) return;
     if (options.scrollSelector ? !source.matches(options.scrollSelector) : source !== document.scrollingElement) return;
 

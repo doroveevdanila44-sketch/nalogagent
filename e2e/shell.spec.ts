@@ -128,13 +128,14 @@ test('Оболочка: прокрутка на экранах агента, д�
   const header = page.locator('header.top');
   const status = page.locator('.rr-scroll-status');
   await page.evaluate(() => document.documentElement.style.setProperty('--rr-safe-top', '59px'));
-  await expect(status).toHaveCSS('height', '54px');
+  await expect(status).toHaveCSS('height', '105px');
   await scrollMain(page, 8);
   await expect.poll(async () => (await boxOf(page, 'header.top'))?.y).toBe(-8);
   await scrollMain(page, 300);
   await expect(header).toBeHidden();
   await expect(status).toHaveCSS('opacity', '1');
   await expect(status).toHaveCSS('backdrop-filter', 'blur(9px) saturate(1.3)');
+  await expect(status).toHaveCSS('mask-image', /45%.*100%/);
   await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#f5f2fc$/i);
   await scrollMain(page, 180);
   await expect(header).toBeVisible();

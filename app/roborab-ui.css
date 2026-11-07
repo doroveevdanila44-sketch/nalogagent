@@ -402,7 +402,7 @@
   :is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])):hover:not(:disabled) { transform: none; }
 }
 
-/* Стекло остаётся в системной зоне. Последние 4px плавно исчезают у её нижнего края. */
+/* Стекло статус-бара по референсу «Маник Бизнес». */
 .rr-scroll-status { display: none; }
 
 @media (max-width: 899px) {
@@ -417,14 +417,14 @@
     position: fixed;
     inset: 0 0 auto;
     z-index: 40;
-    height: max(0px, calc(var(--rr-safe-top) - 5px));
+    height: calc(max(var(--rr-safe-top), 6px) + 46px);
     opacity: 0;
     pointer-events: none;
-    background: linear-gradient(to bottom, rgb(255 255 255 / .42), rgb(255 255 255 / .18) 55%, transparent);
+    background: linear-gradient(to bottom, rgb(255 255 255 / .42) 0, rgb(255 255 255 / .18) 55%, transparent 100%);
     -webkit-backdrop-filter: var(--rr-glass-light-filter);
     backdrop-filter: var(--rr-glass-light-filter);
-    -webkit-mask-image: linear-gradient(#000 calc(100% - 4px), transparent);
-    mask-image: linear-gradient(#000 calc(100% - 4px), transparent);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 45%, transparent 100%);
   }
 
   @media (prefers-reduced-transparency: reduce) {
