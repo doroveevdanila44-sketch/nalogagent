@@ -126,17 +126,22 @@ test('Оболочка: прокрутка на экранах агента, д�
   await expectShellScroll(page, 'дашборд', { tabs: true });
 
   const header = page.locator('header.top');
-  const status = page.locator('.scroll-status');
+  const status = page.locator('.rr-scroll-status');
+  await page.evaluate(() => document.documentElement.style.setProperty('--rr-safe-top', '59px'));
+  await expect(status).toHaveCSS('height', '54px');
+  await scrollMain(page, 8);
+  await expect.poll(async () => (await boxOf(page, 'header.top'))?.y).toBe(-8);
   await scrollMain(page, 300);
   await expect(header).toBeHidden();
   await expect(status).toHaveCSS('opacity', '1');
   await expect(status).toHaveCSS('backdrop-filter', 'blur(9px) saturate(1.3)');
   await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#f5f2fc$/i);
-  await scrollMain(page, 200);
+  await scrollMain(page, 180);
   await expect(header).toBeVisible();
   await expect(status).toHaveCSS('opacity', '0');
   await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#6a2cf0$/i);
-  expect(await boxOf(page, 'header.top')).toMatchObject({ y: 0 });
+  await expect.poll(async () => (await boxOf(page, 'header.top'))?.y).toBe(0);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--rr-safe-top'));
 
   // документы: каталог и список
   await page.getByRole('link', { name: 'Документы', exact: true }).click();

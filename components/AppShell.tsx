@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { PAGE_BG_APP, THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
+import { attachRoborabHeader } from '@/app/roborab-header.js';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
 import { Tour } from './onboarding/Tour';
@@ -25,7 +26,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const router = useRouter();
   const [locked, setLocked] = useState(false);
   const [online, setOnline] = useState(true);
-  const [headerHidden, setHeaderHidden] = useState(false);
+  const [headerGlass, setHeaderGlass] = useState(false);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
@@ -36,10 +37,10 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const onboardingChecked = useRef(false);
   const authLook = locked || sheet === 'changePin';
   const canHideHeader = online && !locked && sheet === 'none' && !tourOpen;
-  const hideHeader = canHideHeader && headerHidden;
-  useThemeColor(authLook ? THEME_AUTH : hideHeader ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
+  useThemeColor(authLook ? THEME_AUTH : canHideHeader && headerGlass ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
+  const statusRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -162,48 +163,14 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   }, [section]);
 
   useLayoutEffect(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    setHeaderHidden(false);
-    if (!canHideHeader) return;
-
-    const mobile = window.matchMedia('(max-width:899px)');
-    const lastY = new WeakMap<HTMLElement, number>([[main, main.scrollTop]]);
-    const chat = main.querySelector<HTMLElement>('.chat-scroll');
-    if (chat) lastY.set(chat, chat.scrollTop);
-
-    const onScroll = (event: Event) => {
-      const source = event.target;
-      if (!mobile.matches || !(source instanceof HTMLElement)) return;
-      if (source !== main && !source.matches('.chat-scroll')) return;
-
-      const y = Math.max(0, Math.min(source.scrollTop, source.scrollHeight - source.clientHeight));
-      if (y <= 4 || headerRef.current?.querySelector(':focus-visible')) {
-        lastY.set(source, y);
-        setHeaderHidden(false);
-        return;
-      }
-
-      const delta = y - (lastY.get(source) ?? 0);
-      if (Math.abs(delta) < 8) return;
-      lastY.set(source, y);
-      setHeaderHidden(delta > 0);
-    };
-
-    const reset = () => {
-      lastY.set(main, main.scrollTop);
-      const list = main.querySelector<HTMLElement>('.chat-scroll');
-      if (list) lastY.set(list, list.scrollTop);
-      setHeaderHidden(false);
-    };
-    main.addEventListener('scroll', onScroll, { capture: true, passive: true });
-    mobile.addEventListener('change', reset);
-    window.addEventListener('pageshow', reset);
-    return () => {
-      main.removeEventListener('scroll', onScroll, true);
-      mobile.removeEventListener('change', reset);
-      window.removeEventListener('pageshow', reset);
-    };
+    const header = headerRef.current;
+    const status = statusRef.current;
+    if (!canHideHeader || !header || !status) return;
+    return attachRoborabHeader(header, status, {
+      scrollSelector: '.app-main, .app-main .chat-scroll',
+      paused: () => document.documentElement.dataset.kb === 'open',
+      onGlass: setHeaderGlass,
+    });
   }, [canHideHeader, pathname]);
 
   // Высота шапки (она растёт, когда показан баннер «Нет сети»): боковая панель и нижние элементы
@@ -331,9 +298,9 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
-      <div className="app-shell" data-header-hidden={hideHeader || undefined} hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
-        <div className="scroll-status" aria-hidden="true" />
-        <header className="top rr-header" ref={headerRef}>
+      <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+        <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
+        <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
           <div className="top-in rr-header-row">
             <span className="wordmark rr-wordmark">РОБОРАБ</span>
             <div className="top-actions">

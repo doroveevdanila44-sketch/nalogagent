@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KEYBOARD_THRESHOLD, computeKeyboard, type ViewportMetrics } from './viewport';
+import { KEYBOARD_THRESHOLD, computeKeyboard, standaloneBottomCredit, type ViewportMetrics } from './viewport';
 
 /** iPhone 14 в установленном приложении: окно 390 на 844, клавиатура без панели подсказок 336 px. */
 const IPHONE: ViewportMetrics = {
@@ -92,5 +92,14 @@ describe('сдвиг экранной клавиатуры по visualViewport',
     const closed = computeKeyboard(with_({ vvHeight: 844, vvOffsetTop: 0, focusedText: false }));
     expect(open.kb).toBeGreaterThan(KEYBOARD_THRESHOLD);
     expect(closed).toEqual({ open: false, vvh: 844, kb: 0, top: 0 });
+  });
+});
+
+describe('standaloneBottomCredit', () => {
+  it('снимает лишний inset только когда недостающая высота совпадает со статус-баром', () => {
+    expect(standaloneBottomCredit(852, 793, 59, 34)).toBe(34);
+    expect(standaloneBottomCredit(852, 852, 59, 34)).toBe(0);
+    expect(standaloneBottomCredit(852, 499, 59, 34)).toBe(0);
+    expect(standaloneBottomCredit(852, 852, 0, 0)).toBe(0);
   });
 });

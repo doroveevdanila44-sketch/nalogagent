@@ -1,4 +1,4 @@
-import { computeKeyboard } from './viewport';
+import { computeKeyboard, standaloneBottomCredit } from './viewport';
 
 /**
  * Экранная клавиатура на телефоне. Слушает window.visualViewport (resize и scroll), фокус в
@@ -28,7 +28,7 @@ const NON_TEXT = new Set(['button', 'submit', 'reset', 'checkbox', 'radio', 'ran
 
 function isTextField(el: Element | null): boolean {
   if (el instanceof HTMLTextAreaElement) return true;
-  if (el instanceof HTMLInputElement) return !NON_TEXT.has(el.type);
+  if (el instanceof HTMLInputElement) return el.inputMode !== 'none' && !NON_TEXT.has(el.type);
   return el instanceof HTMLElement && el.isContentEditable;
 }
 
@@ -50,6 +50,8 @@ export function watchKeyboard(): () => void {
   const root = document.documentElement;
   const vv = window.visualViewport;
   const coarse = window.matchMedia('(pointer: coarse)');
+  const standalone = window.matchMedia('(display-mode: standalone)');
+  const iosStandalone = (window.navigator as (Navigator & { standalone?: boolean }) | undefined)?.standalone;
   let baseInner = window.innerHeight;
   let open = false;
   const timers = new Set<number>();
@@ -77,6 +79,20 @@ export function watchKeyboard(): () => void {
       coarse: coarse.matches,
     });
 
+    // Фиксируем высоту установленного окна после закрытия клавиатуры. Промежуточный resize при blur
+    // не должен поднять нижнюю панель. Лишний нижний inset снимаем только при характерном сбое iOS.
+    if (iosStandalone !== undefined && (standalone.matches || iosStandalone)) {
+      if (!g.open && g.vvh !== null && g.vvh >= innerH - 80 && (vv?.offsetTop ?? 0) < 2) {
+        const visibleHeight = Math.min(innerH, g.vvh);
+        const styles = window.getComputedStyle(root);
+        const safeTop = Number.parseFloat(styles.getPropertyValue('--safe-top')) || 0;
+        const safeBottom = Number.parseFloat(styles.getPropertyValue('--safe-bottom')) || 0;
+        const fullPortrait = window.screen.height > window.screen.width && Math.abs(window.screen.width - window.innerWidth) <= 2;
+        const credit = fullPortrait ? standaloneBottomCredit(window.screen.height, visibleHeight, safeTop, safeBottom) : 0;
+        root.style.setProperty('--standalone-height', `${visibleHeight}px`);
+        root.style.setProperty('--rr-safe-bottom-credit', `${credit}px`);
+      }
+    }
     if (g.vvh === null) root.style.removeProperty('--vvh');
     else root.style.setProperty('--vvh', `${g.vvh}px`);
     root.style.setProperty('--kb', `${g.kb}px`);
@@ -145,5 +161,7 @@ export function watchKeyboard(): () => void {
     root.style.removeProperty('--vvh');
     root.style.removeProperty('--kb');
     root.style.removeProperty('--vv-top');
+    root.style.removeProperty('--standalone-height');
+    root.style.removeProperty('--rr-safe-bottom-credit');
   };
 }

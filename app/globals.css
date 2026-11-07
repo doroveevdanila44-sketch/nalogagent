@@ -210,8 +210,8 @@
      не 100dvh: Safari на iOS и установленное на экран приложение при открытой клавиатуре
      уменьшают только visualViewport, 100dvh у них не меняется, и поле ввода оказывалось под
      клавиатурой. 100dvh остаётся запасным значением, пока скрипт не отработал или visualViewport нет. */
-  html:has(.app-shell),
-  html:has(.app-shell) body {
+  html:has(.app-shell, .auth-screen),
+  html:has(.app-shell, .auth-screen) body {
     height: 100%;
     overflow: hidden;
   }
@@ -222,7 +222,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    height: 100dvh;
+    height: var(--standalone-height, 100dvh);
     overflow: hidden;
     position: relative;
     /* страница приложения лиловая (--bg), карточки на ней белые; html и body за ней цвета шапки */
@@ -2300,17 +2300,28 @@
     --a-accent: var(--color-lime);
     --a-line: color-mix(in srgb, var(--color-white) 35%, transparent);
     width: 100%;
-    min-height: 100dvh;
+    height: var(--standalone-height, 100dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: safe center;
     gap: 28px;
     /* симметричные поля: блок строго по центру */
-    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom) - var(--rr-safe-bottom-credit, 0px));
     background: var(--color-violet);
     color: var(--a-ink);
   }
+  html[data-kb='open'] .auth-screen:not(.auth-overlay) {
+    position: relative;
+    top: var(--vv-top, 0px);
+    height: var(--vvh, 100dvh);
+    padding-bottom: 16px;
+    gap: 16px;
+  }
+  .auth-screen > * { flex-shrink: 0; }
+
   /* Область под часами и батареей закрашена тем же бордо, что экран: цвет шапки не мелькает,
      даже если страница прокручена или фон html ещё не сменился */
   .auth-screen::before {
@@ -2415,13 +2426,18 @@
     justify-content: flex-start;
   }
   .pin-screen {
-    /* размер клавиши: от 64 px, 19,5% ширины, не больше 82 px; на низких экранах ограничен высотой */
-    --key: min(clamp(64px, 19.5vw, 82px), 10.8dvh);
+    --key: min(clamp(48px, 19.5vw, 82px), 10.8dvh);
+    --pin-gap: clamp(10px, 2dvh, 19px);
     position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(8px, 1.5dvh, 16px);
     width: 100%;
     max-width: 360px;
-    height: 100dvh;
+    min-height: 100%;
     margin-inline: auto;
+    padding: calc(var(--safe-top) + 20px) 12px calc(var(--safe-bottom) - var(--rr-safe-bottom-credit, 0px) + 16px);
     color: var(--color-white);
     animation: pin-in 220ms ease both;
   }
@@ -2439,23 +2455,7 @@
       transform: translateY(6px);
     }
   }
-  /* знак небольшой, около 20 px высотой, у верхнего края под safe-area плюс 24 px */
-  .pin-mark {
-    position: absolute;
-    top: calc(var(--safe-top) + 24px);
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: center;
-  }
-  /* заголовок по центру на высоте около 18% экрана */
   .pin-head {
-    position: absolute;
-    top: 18dvh;
-    left: 0;
-    right: 0;
-    transform: translateY(-50%);
-    padding-inline: 8px;
     text-align: center;
   }
   .pin-title {
@@ -2476,13 +2476,7 @@
   .auth-screen .pin-sub {
     color: var(--color-on-dark);
   }
-  /* точки на высоте около 25%: диаметр 13 px, расстояние между центрами 37 px */
   .pin-dots {
-    position: absolute;
-    top: 25dvh;
-    left: 0;
-    right: 0;
-    transform: translateY(-50%);
     display: flex;
     justify-content: center;
     gap: 24px;
@@ -2505,32 +2499,22 @@
   @keyframes shake {
     15%,
     55% {
-      transform: translate(-9px, -50%);
+      transform: translateX(-9px);
     }
     35%,
     75% {
-      transform: translate(9px, -50%);
+      transform: translateX(9px);
     }
   }
   .pin-error {
-    position: absolute;
-    top: calc(25dvh + 20px);
-    left: 0;
-    right: 0;
-    padding-inline: 20px;
     text-align: center;
-    min-height: 20px;
   }
-  /* клавиатура 3 на 4 с высоты около 34%: 0 в середине нижнего ряда, по бокам пусто */
+  .pin-error:empty { display: none; }
   .pad {
-    position: absolute;
-    top: 34dvh;
-    left: 50%;
-    transform: translateX(-50%);
     display: grid;
     grid-template-columns: repeat(3, var(--key));
     grid-auto-rows: var(--key);
-    gap: 19px 25px;
+    gap: var(--pin-gap) 25px;
     justify-content: center;
   }
   .key {
@@ -2572,10 +2556,7 @@
   }
   /* нижняя строка действий: выровнена по колонкам кнопок 1 и 3, у нижнего края */
   .pin-actions {
-    position: absolute;
-    bottom: calc(var(--safe-bottom) + 34px);
-    left: 50%;
-    transform: translateX(-50%);
+    margin-top: auto;
     display: grid;
     grid-template-columns: repeat(3, var(--key));
     column-gap: 25px;
@@ -2624,42 +2605,10 @@
     padding: 0 8px;
   }
 
-  /* Совсем низкие экраны (горизонтальный телефон): обычный поток и прокрутка вместо наложения */
   @media (max-height: 520px) {
     .pin-screen {
       --key: 52px;
-      height: auto;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: calc(var(--safe-top) + 16px) 0 calc(var(--safe-bottom) + 16px);
-    }
-    .pin-mark,
-    .pin-head,
-    .pin-dots,
-    .pin-error,
-    .pad,
-    .pin-actions {
-      position: static;
-      transform: none;
-    }
-    .pin-dots.shake {
-      animation-name: shake-flow;
-    }
-    @keyframes shake-flow {
-      15%,
-      55% {
-        transform: translateX(-9px);
-      }
-      35%,
-      75% {
-        transform: translateX(9px);
-      }
-    }
-    .pin-actions {
-      margin-top: 4px;
+      --pin-gap: 10px;
     }
   }
 
@@ -4868,11 +4817,9 @@
 
 
 /* Мобильная шапка не меняет геометрию прокрутки при появлении и скрытии. */
-.scroll-status { display: none; }
-
 @media (max-width: 899px) {
   .app-shell { --header-clearance: var(--header-h); }
-  .app-shell[data-header-hidden] { --header-clearance: var(--rr-safe-top); }
+  .app-shell:has(> .top[data-rr-header-hidden]) { --header-clearance: var(--rr-safe-top); }
   .app-shell > .top { position: absolute; inset: 0 0 auto; }
   .app-shell .app-main {
     padding-top: calc(var(--header-h) + 24px);
@@ -4884,38 +4831,5 @@
     scroll-padding-top: var(--header-clearance);
   }
   .app-shell .sheet-bar { top: var(--header-clearance); }
-  .scroll-status { display: block; }
-  .scroll-status {
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: 42;
-    height: calc(max(var(--rr-safe-top), 6px) + 46px);
-    pointer-events: none;
-    opacity: 0;
-    background: linear-gradient(to bottom, rgb(255 255 255 / .42), rgb(255 255 255 / .18) 55%, transparent);
-    -webkit-backdrop-filter: var(--rr-glass-light-filter);
-    backdrop-filter: var(--rr-glass-light-filter);
-    -webkit-mask-image: linear-gradient(#000 45%, transparent);
-    mask-image: linear-gradient(#000 45%, transparent);
-    transition: opacity .22s var(--rr-ease);
-  }
-  .app-shell[data-header-hidden] .scroll-status { opacity: 1; }
-  .app-shell > .top {
-    transition: transform .22s var(--rr-ease), visibility 0s;
-  }
-  .app-shell[data-header-hidden] .top {
-    transform: translateY(-100%);
-    visibility: hidden;
-    transition: transform .22s var(--rr-ease), visibility 0s .22s;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .app-shell > .top, .app-shell[data-header-hidden] .top, .scroll-status { transition: none; }
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .scroll-status {
-      background: var(--rr-bg);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
-    }
-  }
+  .app-shell > .rr-scroll-status { position: absolute; }
 }
