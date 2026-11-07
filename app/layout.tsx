@@ -39,9 +39,9 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
   },
-  // Установленный НДС использует системный статус-бар iOS, чтобы не терять область у нижнего края.
-  appleWebApp: { capable: true, title: 'НДС' },
-  other: { 'apple-mobile-web-app-capable': 'yes', 'mobile-web-app-capable': 'yes' },
+  // Режим установленного приложения совпадает с eyesfitness. iOS сохраняет его при добавлении ярлыка.
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'НДС' },
+  other: { 'apple-mobile-web-app-capable': 'yes' },
   formatDetection: { telephone: false },
 };
 
