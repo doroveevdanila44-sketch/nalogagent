@@ -81,8 +81,8 @@ async function expectShellStill(page: Page, label: string, opts: { tabs: boolean
   expect(before.tabs, label).not.toMatch(/fixed|sticky/);
   expect(header0!.y, `${label}: шапка у самого верха`).toBeLessThanOrEqual(0.5);
   if (tabs0) {
-    // низ нижней панели совпадает с низом окна
-    expect(Math.abs(before.innerHeight - (tabs0.y + tabs0.h) - 16), `${label}: плитки парят на 16 px от низа`).toBeLessThanOrEqual(1);
+    const tile = (await boxOf(page, "nav.tabs .tab"))!;
+    expect(Math.abs(before.innerHeight - (tile.y + tile.h) - 16), `${label}: плитки парят на 16 px от низа`).toBeLessThanOrEqual(1);
   }
 
   for (const top of [120, 400, 900, 5000, 0]) {
@@ -223,12 +223,12 @@ test.describe('на компьютере', () => {
       const el = document.querySelector('#h-group')!.getBoundingClientRect();
       const side = document.querySelector('nav.tabs')!.getBoundingClientRect();
       const main = document.querySelector<HTMLElement>('main.app-main')!;
-      return { gap: el.top - head.bottom, sideLeft: side.left, sideTop: side.top, sideW: side.width, sideH: side.height, vh: window.innerHeight, mainScrolls: main.scrollHeight > main.clientHeight };
+      return { gap: el.top - head.bottom, sideLeft: side.left, sideTop: side.top, headerBottom: head.bottom, sideW: side.width, sideH: side.height, vh: window.innerHeight, mainScrolls: main.scrollHeight > main.clientHeight };
     });
     expect(m.gap).toBeGreaterThanOrEqual(32);
     expect(m.sideLeft).toBe(0);
-    expect(m.sideTop).toBe(0);
-    expect(m.sideH).toBe(m.vh);
+    expect(m.sideTop).toBe(m.headerBottom);
+    expect(m.sideH).toBe(m.vh - m.headerBottom);
     const header0 = await boxOf(page, 'header.top');
     const side0 = await boxOf(page, 'nav.tabs');
     expect(m.mainScrolls).toBe(true);

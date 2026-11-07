@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
 import { PAGE_BG_APP, THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
-import { Wordmark } from './Wordmark';
 import { PinPad, type PinResult } from './auth/PinPad';
 import { ChangePin } from './auth/ChangePin';
 import { Tour } from './onboarding/Tour';
@@ -268,63 +267,46 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     window.location.assign('/login');
   }, []);
 
-  // Название текущей вкладки в шапке (DESIGN.md, 10.3). Страница «Что проверено» открывается из меню и
-  // вкладкой не является, поэтому у неё своё название.
-  const titleOf = (path: string): string => {
-    if (path === '/agent' || path.startsWith('/agent/')) return 'Агент';
-    if (path === '/dashboard' || path.startsWith('/dashboard/')) return 'Дашборд';
-    if (path === '/documents' || path.startsWith('/documents/')) return 'Документы';
-    if (path === '/statuses' || path.startsWith('/statuses/')) return 'Что проверено';
-    return '';
-  };
-  const title = titleOf(pathname);
-
   // Плитки тачбара: только иконки, подпись скрыта визуально и остаётся для экранных читалок (DESIGN.md, 10.2)
   const tab = (href: string, label: string, icon: ReactNode) => (
     <Link
       href={href}
-      className="tab"
+      className="tab rr-tab"
       aria-label={label}
       aria-current={pathname === href || pathname.startsWith(`${href}/`) ? 'page' : undefined}
       prefetch={false}
     >
       {icon}
-      <span className="tab-label">{label}</span>
+      <span className="tab-label rr-tab-label">{label}</span>
     </Link>
   );
 
   return (
     <>
       <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
-        <header className="top" ref={headerRef}>
-          <div className="top-in">
-            <Wordmark />
-            {title !== '' && (
-              <span className="top-title" data-testid="top-title">
-                {title}
-              </span>
-            )}
+        <header className="top rr-header" ref={headerRef}>
+          <div className="top-in rr-header-row">
+            <div className="top-brand">
+              <span className="wordmark rr-wordmark">РОБОРАБ</span>
+              <span className="demo-badge" data-testid="demo-badge">Демо-данные</span>
+            </div>
             <div className="top-actions">
               <button
                 type="button"
-                className="icon-btn"
+                className="icon-btn rr-header-action"
                 data-tour="menu-button"
                 aria-label="Меню"
                 aria-haspopup="dialog"
                 onClick={() => setSheet('menu')}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="5.5" r="1.2" />
-                  <circle cx="12" cy="12" r="1.2" />
-                  <circle cx="12" cy="18.5" r="1.2" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="12" cy="19" r="1" />
                 </svg>
               </button>
             </div>
           </div>
-          {/* Метка демо: один раз в шапке, на всех экранах после входа */}
-          <span className="demo-badge" data-testid="demo-badge">
-            Демо-данные
-          </span>
           {!online && (
             <div className="offline-banner" role="status">
               Нет сети
@@ -336,22 +318,19 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
           <main className="wrap app-main">{children}</main>
         </div>
 
-        <nav className="tabs" aria-label="Разделы">
+        <nav className="tabs rr-dock rr-rail" aria-label="Разделы">
           {tab(
             '/agent',
             'Агент',
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
             </svg>,
           )}
           {tab(
             '/dashboard',
             'Дашборд',
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3.5" y="3.5" width="7" height="9" rx="1.5" />
-              <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
-              <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
-              <rect x="3.5" y="15.5" width="7" height="5" rx="1.5" />
+              <path d="M6 20V14M12 20V10M18 20V4" />
             </svg>,
           )}
           {tab(

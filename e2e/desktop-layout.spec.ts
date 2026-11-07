@@ -52,10 +52,10 @@ function contrast(a: string, b: string): number {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
-// ===== раскладка от 760 px =====
+// ===== раскладка от 900 px =====
 
 for (const width of [1440, 1024]) {
-  test(`Раскладка ${width} px: панель на всю высоту от верха, шапка правее панели, поля контента равны`, async ({ page }) => {
+  test(`Раскладка ${width} px: общая шапка на всю ширину, боковая панель под ней, поля контента равны`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await firstLogin(page, PIN);
 
@@ -64,36 +64,26 @@ for (const width of [1440, 1024]) {
       await expect(page.locator('nav.tabs')).toBeVisible();
       const vh = 900;
 
-      // боковая панель: 216 px, от самого верха на всю высоту окна, фон палитры
-      const tabs = (await rect(page, 'nav.tabs'))!;
-      expect(tabs.left, `${tab}: панель слева`).toBe(0);
-      expect(tabs.top, `${tab}: панель от самого верха`).toBe(0);
-      expect(tabs.width).toBe(216);
-      expect(tabs.height).toBe(vh);
-      expect(await css(page, 'nav.tabs', 'background-color')).toBe('rgb(37, 16, 79)');
-
-      // шапка: от правого края панели до правого края окна, не на всю ширину
       const top = (await rect(page, 'header.top'))!;
-      expect(top.left, `${tab}: шапка начинается у правого края панели`).toBe(216);
+      expect(top.left).toBe(0);
       expect(top.right).toBe(width);
       expect(top.top).toBe(0);
       expect(await css(page, 'header.top', 'background-color')).toBe(HEADER);
+      expect(await css(page, 'header.top', 'border-bottom-left-radius')).toBe('28px');
 
-      // знак по центру шапки, метка слева сразу правее панели, меню у правого края с отступом 16 px
+      const tabs = (await rect(page, 'nav.tabs'))!;
+      expect(tabs.left).toBe(0);
+      expect(tabs.top).toBe(top.bottom);
+      expect(tabs.width).toBe(236);
+      expect(tabs.bottom).toBe(vh);
+      expect(await css(page, 'nav.tabs', 'background-color')).toBe(WHITE);
+      await expect(page.locator('[data-testid="top-title"]')).toHaveCount(0);
+      await expect(page.locator('header.top [data-testid="demo-badge"]')).toBeVisible();
+
       const mark = (await rect(page, 'header.top .wordmark'))!;
-      expect(mark.left - 216, 'знак слева в шапке').toBeGreaterThanOrEqual(8);
-      expect(mark.left - 216).toBeLessThanOrEqual(24);
-      const pill = (await rect(page, '[data-testid="top-title"]'))!;
-      expect(Math.abs((pill.left + pill.right) / 2 - (216 + width) / 2), 'плашка названия по центру').toBeLessThanOrEqual(2);
-      const badge = (await rect(page, '[data-testid="demo-badge"]'))!;
-      expect(badge.left - 216).toBeGreaterThanOrEqual(8);
-      expect(badge.left - 216).toBeLessThanOrEqual(24);
       const menu = (await rect(page, '.top-actions .icon-btn'))!;
-      expect(width - menu.right).toBe(16);
-
-      // первая вкладка на уровне шапки, на высоте строки с меткой «Демо-данные»
-      const first = (await rect(page, 'nav.tabs .tab'))!;
-      expect(first.top).toBeLessThan(top.height);
+      expect(mark.left).toBe(24);
+      expect(width - menu.right).toBe(24);
 
       // контент правее панели, поля слева и справа одинаковые: 24 px, от 1280 px 32 px
       const pad = width >= 1280 ? 32 : 24;
@@ -103,7 +93,7 @@ for (const width of [1440, 1024]) {
         const cs = getComputedStyle(m);
         return { left: r.left, right: r.right, pl: parseFloat(cs.paddingLeft), pr: parseFloat(cs.paddingRight) };
       });
-      expect(main.left).toBe(216);
+      expect(main.left).toBe(236);
       expect(main.right).toBe(width);
       expect(main.pl).toBe(pad);
       expect(main.pr).toBe(pad);
@@ -138,7 +128,7 @@ test('Телефон 390 px: прежняя раскладка, шапка на 
     expect(main.left).toBe(0);
     expect(main.right).toBe(390);
     expect(main.pl).toBe(16);
-    expect(await css(page, 'nav.tabs', 'background-color')).toBe(INK);
+    expect(await css(page, 'nav.tabs', 'background-color')).toBe('rgba(0, 0, 0, 0)');
   }
 });
 
@@ -188,9 +178,9 @@ for (const width of [1440, 1024]) {
     const list = g.list!;
 
     // список занимает всю ширину контентной области; левый и правый отступы равны
-    expect(list.left, 'отступ слева').toBe(216 + pad);
+    expect(list.left, 'отступ слева').toBe(236 + pad);
     expect(g.vw - list.right, 'отступ справа').toBe(pad);
-    expect(list.left - 216).toBe(g.vw - list.right);
+    expect(list.left - 236).toBe(g.vw - list.right);
     expect(g.gutter).toBe('stable both-edges');
     expect(g.overX).toBeLessThanOrEqual(0);
     expect(g.page).toBeLessThanOrEqual(0);

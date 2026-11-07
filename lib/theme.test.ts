@@ -6,6 +6,7 @@ import { ENTITY_COLORS, PALETTE, THEME, entityColor } from './theme';
 
 const root = process.cwd();
 const read = (rel: string) => fs.readFileSync(path.resolve(root, rel), 'utf8');
+const shellCss = read('app/roborab-ui.css');
 
 /** Токены CSS (@theme), у которых в дизайн-коде РОБОРАБ v3 есть сплошной HEX */
 const CSS_HEX_TOKEN = {
@@ -145,17 +146,18 @@ describe('полоса под часами и шапка', () => {
     return m![1]!;
   };
 
-  it('шапка фиолетовая (--bar) со скруглением снизу, html и body в приложении светлые', () => {
-    expect(css).toMatch(/--bar:\s*var\(--color-violet\)/);
-    expect(rule('.top')).toMatch(/background:\s*var\(--bar\)/);
-    expect(rule('.top')).toMatch(/border-radius:\s*0 0 32px 32px/);
+  it('общая фиолетовая шапка со скруглением снизу, html и body в приложении светлые', () => {
+    expect(shellCss).toMatch(/--rr-violet:\s*#6a2cf0/i);
+    expect(shellCss).toMatch(/--rr-header-radius:\s*28px/);
+    expect(shellCss).toMatch(/\.rr-header\s*\{[^}]*background:\s*var\(--rr-violet\)/);
+    expect(read('components/AppShell.tsx')).not.toContain('top-title');
     for (const sel of ['html', 'body']) {
       expect(rule(sel), sel).toMatch(/background:\s*var\(--color-bg\)/);
     }
   });
 
   it('у шапки свой padding-top под вырез и часы', () => {
-    expect(rule('.top')).toMatch(/padding-top:\s*env\(safe-area-inset-top/);
+    expect(shellCss).toMatch(/\.rr-header\s*\{[^}]*padding-block-start:\s*var\(--rr-safe-top\)/);
   });
 
   it('на экранах входа и PIN html и body фиолетовые, а страница приложения лиловая (--bg)', () => {
@@ -241,19 +243,19 @@ describe('форма и поверхности (DESIGN.md, раздел 4)', () 
     for (const sel of ['.btn', '.act', '.composer button', '.chip', '.pill']) {
       const m = new RegExp(`(?:^|\\n)\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
       expect(m, sel).not.toBeNull();
-      expect(m![1], sel).toMatch(/border-radius:\s*999px/);
+      expect(m![1], sel).toMatch(/border-radius:\s*(?:999px|var\(--rr-control-radius\))/);
     }
     const field = /\n\s*\.field input \{([^}]*)\}/.exec(css);
     expect(field![1]).toMatch(/border-radius:\s*20px/);
   });
 
   it('тачбар на телефоне: плитки высотой 68 px со стеклом, отступ 16 px, только иконки', () => {
-    expect(css).toMatch(/--nav-h:\s*68px/);
-    expect(css).toMatch(/backdrop-filter:\s*blur\(20px\) saturate\(1\.7\)/);
-    expect(css).toMatch(/rgb\(255 255 255 \/ 0\.5\)/);
-    expect(css).toMatch(/rgb\(255 255 255 \/ 0\.94\)/);
-    const tabs = /\n\s*\.tabs \{([^}]*)\}/.exec(css)![1]!;
-    expect(tabs).toMatch(/bottom:\s*calc\(16px \+ var\(--safe-bottom\)\)/);
-    expect(css).toMatch(/\.tab-label \{[^}]*clip:\s*rect\(0 0 0 0\)/);
+    expect(shellCss).toMatch(/--rr-dock-size:\s*68px/);
+    expect(shellCss).toMatch(/--rr-dock-inset:\s*16px/);
+    expect(shellCss).toMatch(/--rr-glass-filter:\s*blur\(20px\) saturate\(1\.7\)/);
+    expect(shellCss).toMatch(/rgb\(255 255 255 \/ 0\.5\)/);
+    expect(shellCss).toMatch(/rgb\(255 255 255 \/ 0\.94\)/);
+    expect(shellCss).toMatch(/\.rr-tab-label \{[^}]*clip-path:\s*inset\(50%\)/);
+    expect(css).toMatch(/--tabs-h:\s*var\(--rr-dock-space\)/);
   });
 });

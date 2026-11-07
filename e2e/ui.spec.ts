@@ -336,19 +336,18 @@ test('Боковая панель на компьютере и нижняя на
     };
   });
   expect(desk.nav.x).toBe(0);
-  expect(desk.nav.w).toBeGreaterThanOrEqual(90);
-  expect(desk.nav.w).toBeLessThanOrEqual(100);
-  expect(desk.nav.y).toBe(0); // панель от самого верха окна
-  expect(Math.abs(desk.nav.b - desk.vh)).toBeLessThanOrEqual(1); // до низа окна
-  expect(desk.top.x).toBe(desk.nav.w); // шапка начинается у правого края панели
-  expect(desk.top.w).toBe(1440 - desk.nav.w); // и идёт до правого края окна
-  expect(desk.main.x).toBeGreaterThanOrEqual(desk.nav.w); // контент правее панели
+  expect(desk.nav.w).toBe(236);
+  expect(desk.nav.y).toBe(desk.top.b);
+  expect(Math.abs(desk.nav.b - desk.vh)).toBeLessThanOrEqual(1);
+  expect(desk.top.x).toBe(0);
+  expect(desk.top.w).toBe(1440);
+  expect(desk.main.x).toBeGreaterThanOrEqual(desk.nav.w);
   expect(desk.composer.x).toBeGreaterThanOrEqual(desk.nav.w - 1);
-  expect(desk.tabs[1]!.y).toBeGreaterThan(desk.tabs[0]!.y); // столбиком
+  expect(desk.tabs[1]!.y).toBeGreaterThan(desk.tabs[0]!.y);
   expect(desk.tabs[0]!.x).toBeCloseTo(desk.tabs[1]!.x, 0);
-  expect(desk.curBg).toBe('rgb(255, 243, 178)'); // #FFF3B2
-  expect(desk.curWeight).toBe('600');
-  expect(desk.navBg).toBe('rgb(27, 11, 66)'); // #1B0B42
+  expect(desk.curBg).toBe('rgb(106, 44, 240)');
+  expect(desk.curWeight).toBe('800');
+  expect(desk.navBg).toBe('rgb(255, 255, 255)');
   expect(desk.mainPaddingBottom).not.toMatch(/^(8\d|9\d|1\d\d)px$/); // нет отступа под нижнюю панель
 
   // шапка прилипает к верху при прокрутке
@@ -361,11 +360,11 @@ test('Боковая панель на компьютере и нижняя на
   const navAfter = await page.evaluate(() => document.querySelector('.tabs')!.getBoundingClientRect().left);
   expect(navAfter).toBe(0);
 
-  // планшет 768: уже боковая панель
+  // планшет 768: тачбар внизу, как на телефоне
   await page.setViewportSize({ width: 768, height: 1024 });
   await page.waitForTimeout(150);
   const tab = await page.evaluate(() => document.querySelector('.tabs')!.getBoundingClientRect().width);
-  expect(tab).toBeLessThanOrEqual(100);
+  expect(tab).toBe(768);
 
   // телефон: панель внизу, на всю ширину
   await page.setViewportSize({ width: 390, height: 844 });

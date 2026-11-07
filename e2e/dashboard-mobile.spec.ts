@@ -805,7 +805,7 @@ test.describe('Компьютер', () => {
     await expect(page.locator('#sum-panel')).toHaveCount(0);
   });
 
-  test('Меню из трёх точек у правого края окна: 16 px от края на компьютере, выпадающее меню по правому краю', async ({
+  test('Меню из трёх точек у правого края окна: отступ оболочки, выпадающее меню по правому краю', async ({
     page,
   }) => {
     await firstLogin(page, PIN);
@@ -822,17 +822,17 @@ test.describe('Компьютер', () => {
           h: Math.round(b.height),
           topW: Math.round(top.width),
           vw: window.innerWidth,
-          markCx: Math.round(mark.left + mark.width / 2),
+          markLeft: Math.round(mark.left),
           cy: Math.round(b.top + b.height / 2),
           headH: Math.round(top.height),
         };
       });
-      expect(m.right, `${width}`).toBe(16);
+      const inset = width >= 900 ? 24 : 12;
+      expect(m.right, `${width}`).toBe(inset);
       expect(m.w).toBe(44);
       expect(m.h).toBe(44);
-      // шапка правее боковой панели (96 px) до правого края окна, знак по центру шапки
-      expect(m.topW).toBe(m.vw - 96);
-      expect(Math.abs(m.markCx - (96 + m.vw) / 2)).toBeLessThanOrEqual(1);
+      expect(m.topW).toBe(m.vw);
+      expect(m.markLeft).toBe(inset);
       expect(Math.abs(m.cy - m.headH / 2)).toBeLessThanOrEqual(1); // кнопка по центру строки шапки
     }
 

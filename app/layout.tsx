@@ -3,6 +3,7 @@ import { Manrope, Montserrat } from 'next/font/google';
 import { KeyboardViewport } from '@/components/KeyboardViewport';
 import { THEME } from '@/lib/theme';
 import './globals.css';
+import './roborab-ui.css';
 
 /**
  * Два шрифта дизайн-кода РОБОРАБ v3 (docs/DESIGN.md, раздел 3). Montserrat: заголовки, цифры, кнопки,
