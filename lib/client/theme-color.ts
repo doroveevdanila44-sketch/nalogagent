@@ -10,14 +10,10 @@ export const THEME_APP: string = THEME.app;
 export const THEME_AUTH: string = THEME.auth;
 
 /**
- * Записывает цвет в <meta name="theme-color"> и красит страницу под часами: фон <html> (виден под
- * вырезом при установленном приложении с black-translucent и при оттягивании страницы) и, на экранах
- * входа и в приложении, фон <body>: в приложении оба цвета шапки, белая только оболочка
- * (.app-shell). Метатег Next.js выводит один раз на маршрут, а экран блокировки открывается поверх
- * приложения без смены маршрута, поэтому цвет меняется из кода. Под часами лежит шапка с отступом
- * safe-area-inset-top и тем же цветом.
+ * Обновляет theme-color. Фон html и body меняется только для экранов входа и PIN.
+ * Для обычной шапки системный цвет обновляет общий сценарий прокрутки.
  */
-export function applyThemeColor(color: string, pageBg: string = color): void {
+export function applyThemeColor(color: string, pageBg: string | null = color): void {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
   if (metas.length === 0) {
     const meta = document.createElement('meta');
@@ -27,11 +23,10 @@ export function applyThemeColor(color: string, pageBg: string = color): void {
   } else {
     for (const meta of metas) meta.setAttribute('content', color);
   }
-  // Вход и PIN целиком фиолетовые. В приложении фиолетова только шапка (она сама лежит под часами),
-  // а за краями оболочки, внизу под панелью вкладок и за скруглёнными углами шапки, светлый фон.
-  const page = pageBg;
-  document.documentElement.style.backgroundColor = page;
-  document.body.style.backgroundColor = page;
+  if (pageBg !== null) {
+    document.documentElement.style.backgroundColor = pageBg;
+    document.body.style.backgroundColor = pageBg;
+  }
 }
 
 /** Возвращает фон <html> и <body> стилям страницы: экран без этого хука красят таблицы стилей. */
@@ -47,8 +42,9 @@ function clearPageBackground(): void {
  * Метатег при размонтировании не возвращается: следующий экран сам выставит свой цвет. Фон html и
  * body возвращается стилям страницы.
  */
-export function useThemeColor(color: string, pageBg: string = color): void {
+export function useThemeColor(color: string | null, pageBg: string | null = color): void {
   useLayoutEffect(() => {
+    if (color === null) return;
     applyThemeColor(color, pageBg);
     const reapply = () => {
       if (document.visibilityState === 'visible') applyThemeColor(color, pageBg);
@@ -58,7 +54,7 @@ export function useThemeColor(color: string, pageBg: string = color): void {
     return () => {
       document.removeEventListener('visibilitychange', reapply);
       window.removeEventListener('pageshow', reapply);
-      clearPageBackground();
+      if (pageBg !== null) clearPageBackground();
     };
   }, [color, pageBg]);
 }
