@@ -4826,5 +4826,44 @@
     scroll-padding-top: var(--header-clearance);
   }
   .app-shell .sheet-bar { top: var(--header-clearance); }
-  .app-shell > .rr-scroll-status { position: absolute; }
+}
+
+/* В установленном приложении страницы прокручиваются как в Beauty Box. Чат оставляет свой список. */
+@media (max-width: 899px) and (display-mode: standalone) {
+  html:not(:has(.auth-screen)):has(.app-viewport[data-document-scroll]:not([hidden])),
+  body:not(:has(.auth-screen)):has(.app-viewport[data-document-scroll]:not([hidden])) {
+    height: auto;
+    overflow: visible;
+    scroll-padding-top: var(--header-h);
+  }
+
+  .app-viewport[data-document-scroll]:not([hidden]) {
+    height: auto;
+    min-height: 100dvh;
+    top: auto;
+    overflow: visible;
+  }
+
+  .app-viewport[data-document-scroll] > .app-shell {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-viewport[data-document-scroll] .app-main {
+    overflow: visible;
+    padding-top: 24px;
+  }
+
+  .app-viewport[data-document-scroll] .app-shell > .top {
+    position: sticky;
+    inset: 0 0 auto;
+  }
+
+  .app-viewport > .tabs.rr-dock { position: fixed; }
+}
+
+/* Стекло привязано к окну. В режиме клавиатуры видимая область может сместиться. */
+@media (max-width: 899px) {
+  .app-viewport > .rr-scroll-status { top: var(--vv-top, 0px); }
 }

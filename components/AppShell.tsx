@@ -152,14 +152,15 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     }
   }, []);
 
-  // Прокручивается область main, а не окно, и она одна на все разделы: при переходе в другой раздел
-  // (дашборд, документы, агент) содержимое открывается с начала. Список и лист документов внутри
-  // раздела «Документы» сохраняют положение сами (DocumentsShell).
+  // При смене раздела сбрасываем обе возможные области прокрутки.
+  // Внутри раздела «Документы» положением управляет DocumentsShell.
   const section = pathname.split('/')[1] ?? '';
+  const documentScroll = section !== 'agent';
   const lastSection = useRef(section);
   useLayoutEffect(() => {
     if (lastSection.current === section) return;
     lastSection.current = section;
+    window.scrollTo({ top: 0, behavior: 'instant' });
     mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   }, [section]);
 
@@ -168,7 +169,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     const status = statusRef.current;
     if (!canHideHeader || !header || !status) return;
     return attachRoborabHeader(header, status, {
-      scrollSelector: '.app-main, .app-main .chat-scroll',
+      scrollSelector: 'html, .app-main, .app-main .chat-scroll',
       paused: () => document.documentElement.dataset.kb === 'open',
       onGlass: setHeaderGlass,
     });
@@ -299,9 +300,15 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
-      <div className="app-viewport" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+      <div
+        className="app-viewport"
+        data-document-scroll={documentScroll ? '' : undefined}
+        hidden={locked}
+        aria-hidden={locked}
+        {...(locked ? { inert: true } : {})}
+      >
+        <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
         <div className="app-shell">
-          <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
           <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
             <div className="top-in rr-header-row">
               <span className="wordmark rr-wordmark">РОБОРАБ</span>

@@ -1,5 +1,6 @@
 'use client';
 
+import { usesDocumentScroll } from '@/lib/client/scroller';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computeLive, computeStatic, fromPayload, momentFromEpoch, type DashboardInput, type StaticModel } from '@/lib/calc';
@@ -97,19 +98,19 @@ function onStepPage(step: TourStep, pathname: string): boolean {
   return pathname === step.path;
 }
 
-/** Ближайший прокручиваемый предок, кроме страницы: область main, список чата, область окна. */
+/** Ближайший прокручиваемый предок или документ в установленном приложении. */
 function scrollBox(el: HTMLElement): HTMLElement | null {
   for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
     const o = getComputedStyle(p).overflowY;
     if ((o === 'auto' || o === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
   }
-  return null;
+  return usesDocumentScroll() ? document.documentElement : null;
 }
 
 /**
  * Показывает элемент в его прокручиваемой области (main, список чата, область окна): целиком, у
- * середины области; высокий элемент встаёт верхом. Страница сама не прокручивается, шапка и
- * панель вкладок стоят на месте. need: высота карточки с зазором; если карточке негде встать ни
+ * середины области; высокий элемент встаёт верхом. need: высота карточки с зазором;
+ * если карточке негде встать ни
  * над элементом, ни под ним (на телефоне она высотой больше трети окна), элемент поднимается к
  * верху области, и карточка встаёт под ним, не закрывая его.
  */
@@ -117,9 +118,9 @@ function reveal(el: HTMLElement, need = 0): void {
   if (el.closest('nav.tabs, header.top')) return;
   const box = scrollBox(el);
   if (!box) return;
-  const b = box.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
   const vh = window.innerHeight;
+  const b = box === document.documentElement ? { top: 0, bottom: vh, height: vh } : box.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
   const header = document.querySelector('header.top')?.getBoundingClientRect().bottom ?? 0;
   const top0 = Math.max(MARGIN, header + MARGIN / 2);
   const below = r.bottom + PAD + GAP + need <= vh - MARGIN;
