@@ -2304,7 +2304,7 @@
     justify-content: safe center;
     gap: 28px;
     /* симметричные поля: блок строго по центру */
-    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom) - var(--rr-safe-bottom-credit, 0px));
+    padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--rr-safe-bottom));
     background: var(--color-violet);
     color: var(--a-ink);
   }
@@ -2432,7 +2432,7 @@
     max-width: 360px;
     min-height: 100%;
     margin-inline: auto;
-    padding: calc(var(--safe-top) + 20px) 12px calc(var(--safe-bottom) - var(--rr-safe-bottom-credit, 0px) + 16px);
+    padding: calc(var(--safe-top) + 20px) 12px calc(var(--rr-safe-bottom) + 16px);
     color: var(--color-white);
     animation: pin-in 220ms ease both;
   }

@@ -1,4 +1,4 @@
-import { computeKeyboard, standaloneBottomCredit } from './viewport';
+import { computeKeyboard } from './viewport';
 
 /**
  * Экранная клавиатура на телефоне. Слушает window.visualViewport (resize и scroll), фокус в
@@ -79,19 +79,10 @@ export function watchKeyboard(): () => void {
       coarse: coarse.matches,
     });
 
-    // Высота visualViewport нужна экрану входа. У тачбара другая рамка: при закрытой клавиатуре
-    // она берёт высоту раскладочного окна, даже если Safari сообщает укороченный visualViewport.
+    // Высота visualViewport при закрытой клавиатуре нужна экрану входа.
     if (iosStandalone !== undefined && (standalone.matches || iosStandalone)) {
       if (!g.open && g.vvh !== null && g.vvh >= innerH - 80 && (vv?.offsetTop ?? 0) < 2) {
-        const visibleHeight = Math.min(innerH, g.vvh);
-        const styles = window.getComputedStyle(root);
-        const safeTop = Number.parseFloat(styles.getPropertyValue('--safe-top')) || 0;
-        const safeBottom = Number.parseFloat(styles.getPropertyValue('--safe-bottom')) || 0;
-        const fullPortrait = window.screen.height > window.screen.width && Math.abs(window.screen.width - window.innerWidth) <= 2;
-        const layoutHeight = root.clientHeight || visibleHeight;
-        const credit = fullPortrait ? standaloneBottomCredit(window.screen.height, layoutHeight, safeTop, safeBottom) : 0;
-        root.style.setProperty('--standalone-height', `${visibleHeight}px`);
-        root.style.setProperty('--rr-safe-bottom-credit', `${credit}px`);
+        root.style.setProperty('--standalone-height', `${Math.min(innerH, g.vvh)}px`);
       }
     }
     if (g.vvh === null) root.style.removeProperty('--vvh');
@@ -163,6 +154,5 @@ export function watchKeyboard(): () => void {
     root.style.removeProperty('--kb');
     root.style.removeProperty('--vv-top');
     root.style.removeProperty('--standalone-height');
-    root.style.removeProperty('--rr-safe-bottom-credit');
   };
 }

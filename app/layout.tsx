@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Manrope, Montserrat } from 'next/font/google';
 import { KeyboardViewport } from '@/components/KeyboardViewport';
 import { THEME } from '@/lib/theme';
+import { RoborabViewport } from './roborab-viewport';
 import './globals.css';
 import './roborab-ui.css';
 
@@ -39,8 +40,7 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
   },
-  // Режим установленного приложения совпадает с eyesfitness. iOS сохраняет его при добавлении ярлыка.
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'НДС' },
+  appleWebApp: { capable: true, title: 'НДС' },
   other: { 'apple-mobile-web-app-capable': 'yes' },
   formatDetection: { telephone: false },
 };
@@ -48,7 +48,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover',
+  // Установленное приложение использует системную область iOS и всю доступную высоту.
+  viewportFit: 'auto',
   // Экранная клавиатура уменьшает раскладочный вьюпорт только у Chrome на Android. Safari на iOS и
   // установленное на экран приложение этого не умеют: у них уменьшается лишь visualViewport, и высоту
   // оболочки задаёт --vvh (lib/client/keyboard.ts), а не 100vh или 100dvh.
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ru" className={`${montserrat.variable} ${manrope.variable}`}>
       <body>
+        <RoborabViewport />
         <KeyboardViewport />
         {children}
       </body>

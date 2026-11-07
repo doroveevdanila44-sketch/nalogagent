@@ -31,7 +31,7 @@ function viewportReport(): string {
     `Видимая область ${px(vv?.height)} · сдвиг ${px(vv?.offsetTop)} · масштаб ${vv?.scale ?? '—'}`,
     `Высоты CSS ${heights}`,
     `Край приложения ${px(frame?.bottom)} · край плитки ${px(dock?.bottom)}`,
-    `Отступы iOS ${css.getPropertyValue('--safe-top').trim()} / ${css.getPropertyValue('--safe-bottom').trim()} · поправка ${css.getPropertyValue('--rr-safe-bottom-credit').trim() || '0px'}`,
+    `Отступы iOS ${css.getPropertyValue('--safe-top').trim()} / ${css.getPropertyValue('--safe-bottom').trim()} · для тачбара ${css.getPropertyValue('--rr-safe-bottom').trim()}`,
     `Статус-бар ${statusBar?.content ?? 'авто'} · прокрутка ${px(scrollY)}`,
   ].join('\n');
 }
