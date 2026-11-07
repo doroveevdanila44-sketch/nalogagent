@@ -1,0 +1,33 @@
+/* Цвет верхней кромки для системного статус-бара установленного приложения. */
+.rr-native-status { display: none; }
+
+@media (max-width: 899px) and (display-mode: standalone) {
+  html:not(.tour-open):has(.rr-native-status:not([hidden])) {
+    --rr-native-status-color: var(--rr-violet);
+  }
+
+  html:not(.tour-open):has(.rr-native-status:not([hidden]) ~ .rr-header[data-rr-header-hidden]) {
+    --rr-native-status-color: var(--rr-bg);
+  }
+
+  html:not(.tour-open):has(.rr-native-status:not([hidden])),
+  html:not(.tour-open):has(.rr-native-status:not([hidden])) body {
+    background-color: var(--rr-native-status-color);
+  }
+
+  /* WebKit может брать цвет с закреплённой кромки. Размытие рисуется отдельным слоем. */
+  html:not(.tour-open) .rr-native-status:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 42;
+    height: 12px;
+    background-color: var(--rr-native-status-color);
+    pointer-events: none;
+  }
+
+  .rr-native-status:has(~ .rr-header[data-rr-header-hidden]) {
+    -webkit-mask-image: linear-gradient(#000 40%, transparent);
+    mask-image: linear-gradient(#000 40%, transparent);
+  }
+}

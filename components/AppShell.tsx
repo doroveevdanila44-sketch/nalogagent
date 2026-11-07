@@ -38,7 +38,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const onboardingChecked = useRef(false);
   const authLook = locked || sheet === 'changePin';
   const canHideHeader = online && !locked && sheet === 'none' && !tourOpen;
-  useThemeColor(authLook ? THEME_AUTH : canHideHeader && headerGlass ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
+  useThemeColor(authLook ? THEME_AUTH : canHideHeader && headerGlass ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : null);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -301,6 +301,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     <>
       <div className="app-viewport" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
         <div className="app-shell">
+          <div className="rr-native-status" hidden={authLook} aria-hidden="true" />
           <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
           <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
             <div className="top-in rr-header-row">
