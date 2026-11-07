@@ -76,7 +76,7 @@ test('Телефон 390: поле чата растёт до шести стр�
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
 
   const one = await fieldBox(page);
-  expect(one.h).toBe(38);
+  expect(one.h).toBe(44);
   expect(one.overflowY).toBe('hidden');
 
   // поле это textarea, у чата нет form и нет других полей ввода
@@ -127,10 +127,10 @@ test('Телефон 390: поле чата растёт до шести стр�
   expect(sendMany.h).toBe(sendBefore.h);
   expect(Math.abs(sendMany.bottom - many.bottom)).toBeLessThanOrEqual(0.5);
 
-  // отправка кнопкой: поле возвращается к 38 px, фокус остаётся, текст ушёл целиком
+  // отправка кнопкой: поле возвращается к 44 px, фокус остаётся, текст ушёл целиком
   await page.getByRole('button', { name: 'Отправить' }).click();
   await expect(field(page)).toHaveValue('');
-  expect((await fieldBox(page)).h).toBe(38);
+  expect((await fieldBox(page)).h).toBe(44);
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
   await expect(page.locator('.msg.me').first()).toContainText('строка 1');
   await expect(page.locator('.typing')).toHaveCount(0);
@@ -427,7 +427,7 @@ test('Телефон 390: подсказки не раскрываются ни 
 test.describe('Компьютер', () => {
   test.use({ viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false });
 
-  test('Enter отправляет, Shift+Enter переносит строку, после отправки поле 38 px и фокус в поле', async ({ page }) => {
+  test('Enter отправляет, Shift+Enter переносит строку, после отправки поле 44 px и фокус в поле', async ({ page }) => {
     await resetChat();
     await firstLogin(page, PIN);
     await field(page).waitFor();
@@ -444,7 +444,7 @@ test.describe('Компьютер', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('.msg.me').first()).toContainText('Первая строка');
     await expect(field(page)).toHaveValue('');
-    expect((await fieldBox(page)).h).toBe(38);
+    expect((await fieldBox(page)).h).toBe(44);
     expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('TEXTAREA');
     await expect(page.locator('.typing')).toHaveCount(0);
 

@@ -36,9 +36,6 @@ const SUGGESTIONS: { text: string; whatIf?: boolean }[] = [
 
 type Pending = { key: number; text: string };
 
-/** Высота поля в одну строку; потолок (шесть строк) задан в CSS как max-height, дальше прокрутка внутри */
-const FIELD_MIN = 38;
-
 /** Сколько пикселей подряд в одну сторону считается листанием, после которого меняется блок подсказок */
 const SCROLL_STEP = 24;
 
@@ -63,7 +60,7 @@ const holdFocus = (e: PointerEvent | MouseEvent) => e.preventDefault();
  * не вызывается blur(), фокус с поля не снимается ни при прокрутке, ни при нажатии на сообщения,
  * кнопки и подсказки. Список прокручивается только свой собственный (scrollTop), не окно.
  *
- * Поле ввода как в приложении Claude: textarea растёт от 38 px до шести строк, дальше внутренняя
+ * Поле ввода как в приложении Claude: textarea растёт от одной до шести строк, дальше внутренняя
  * прокрутка. На компьютере Enter отправляет, Shift+Enter переносит строку; на телефоне Enter
  * переносит строку, отправка только кнопкой. Без родительского form и без других полей ввода на
  * экране: так Safari не рисует над клавиатурой стрелки «вверх, вниз» (см. DECISIONS.md).
@@ -226,17 +223,19 @@ export function ChatView() {
   const fit = useCallback(() => {
     const el = fieldRef.current;
     if (!el) return;
+    const style = getComputedStyle(el);
+    const min = parseFloat(style.minHeight);
     // Пустое поле всегда в одну строку: длинная подсказка-placeholder на узком экране переносится
     // и иначе раздула бы высоту
     if (el.value === '') {
-      el.style.height = `${FIELD_MIN}px`;
+      el.style.height = `${min}px`;
       el.style.overflowY = 'hidden';
       return;
     }
     el.style.height = 'auto';
-    const max = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
+    const max = parseFloat(style.maxHeight) || Infinity;
     const full = el.scrollHeight + (el.offsetHeight - el.clientHeight);
-    el.style.height = `${Math.max(FIELD_MIN, Math.min(full, max))}px`;
+    el.style.height = `${Math.max(min, Math.min(full, max))}px`;
     el.style.overflowY = full > max ? 'auto' : 'hidden';
   }, []);
 
@@ -408,8 +407,8 @@ export function ChatView() {
             ))}
             {sending ? (
               <>
-                <div className="msg me">{sending.text}</div>
-                <div className="msg" aria-label="Агент печатает">
+                <div className="msg me rr-message rr-message--user">{sending.text}</div>
+                <div className="msg rr-message" aria-label="Агент печатает">
                   <span className="typing" aria-hidden="true">
                     <i />
                     <i />
@@ -482,7 +481,7 @@ export function ChatView() {
             {sendError}
           </p>
         ) : null}
-        <div className="composer" data-tour="chat-input">
+        <div className="composer rr-composer" data-tour="chat-input">
           <textarea
             ref={fieldRef}
             rows={1}
@@ -508,12 +507,16 @@ export function ChatView() {
           />
           <button
             type="button"
+            className="rr-composer-control rr-composer-send"
+            aria-label="Отправить"
             onPointerDown={down}
             onMouseDown={down}
             onClick={() => press(draft)}
             disabled={!draft.trim() || Boolean(sending)}
           >
-            Отправить
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
           </button>
         </div>
       </div>

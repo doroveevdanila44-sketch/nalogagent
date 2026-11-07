@@ -240,11 +240,12 @@ describe('форма и поверхности (DESIGN.md, раздел 4)', () 
   });
 
   it('кнопки, метки и вкладки круглые, поля формы 20 px', () => {
-    for (const sel of ['.btn', '.act', '.composer button', '.chip', '.pill']) {
+    for (const sel of ['.btn', '.act', '.chip', '.pill']) {
       const m = new RegExp(`(?:^|\\n)\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
       expect(m, sel).not.toBeNull();
       expect(m![1], sel).toMatch(/border-radius:\s*(?:999px|var\(--rr-control-radius\))/);
     }
+    expect(shellCss).toMatch(/\.rr-composer \.rr-composer-control \{[^}]*border-radius:\s*50%/);
     const field = /\n\s*\.field input \{([^}]*)\}/.exec(css);
     expect(field![1]).toMatch(/border-radius:\s*20px/);
   });
@@ -254,7 +255,7 @@ describe('форма и поверхности (DESIGN.md, раздел 4)', () 
     expect(shellCss).toMatch(/--rr-dock-inset:\s*16px/);
     expect(shellCss).toMatch(/--rr-glass-filter:\s*blur\(20px\) saturate\(1\.7\)/);
     expect(shellCss).toMatch(/rgb\(255 255 255 \/ 0\.5\)/);
-    expect(shellCss).toMatch(/rgb\(255 255 255 \/ 0\.94\)/);
+    expect(shellCss).toMatch(/--rr-glass-active-fill:\s*rgb\(255 255 255 \/ 0\.94\)/);
     expect(shellCss).toMatch(/\.rr-tab-label \{[^}]*clip-path:\s*inset\(50%\)/);
     expect(css).toMatch(/--tabs-h:\s*var\(--rr-dock-space\)/);
   });

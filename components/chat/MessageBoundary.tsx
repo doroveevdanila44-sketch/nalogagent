@@ -31,7 +31,7 @@ export class MessageBoundary extends Component<
     if (!this.state.failed) return this.props.children;
     const { turn } = this.props;
     return (
-      <div className={turn.role === 'user' ? 'msg me' : 'msg'} data-testid="msg-fallback">
+      <div className={turn.role === 'user' ? 'msg me rr-message rr-message--user' : 'msg rr-message'} data-testid="msg-fallback">
         {typeof turn.text === 'string' ? turn.text : ''}
       </div>
     );

@@ -120,13 +120,13 @@ export function Message({
   disabled?: boolean;
   locked?: boolean;
 }) {
-  if (turn.role === 'user') return <div className="msg me">{turn.text}</div>;
+  if (turn.role === 'user') return <div className="msg me rr-message rr-message--user">{turn.text}</div>;
 
   const paragraphs = turn.text.split(/\n{2,}/).filter(Boolean);
   const pick = (text: string) => onPick?.(text, turn.id);
   const submitForm = onSubmitForm ? (v: FleetFormSubmit) => onSubmitForm(v, turn.id) : undefined;
   return (
-    <div className="msg">
+    <div className="msg rr-message">
       {turn.understood ? (
         <Understood
           card={turn.understood}

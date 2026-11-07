@@ -1,4 +1,4 @@
-/* Общая оболочка приложений РОБОРАБ. Источник: RoborabSite/design/app-shell.css. */
+/* Общая оболочка приложений РОБОРАБ. Стандарт: ROBORAB-UI-STANDARD.md. Источник: RoborabSite/design/app-shell.css. */
 :root {
   --rr-violet: #6a2cf0;
   --rr-lime: #cdf200;
@@ -20,10 +20,14 @@
   --rr-control-radius: 999px;
   --rr-dock-size: 68px;
   --rr-dock-gap: 10px;
+  --rr-dock-tile-width: min(var(--rr-dock-size), calc((100% - 4 * var(--rr-dock-gap)) / 5));
   --rr-dock-inset: 16px;
   --rr-dock-space: calc(var(--rr-dock-size) + 2 * var(--rr-dock-inset) + var(--rr-safe-bottom));
   --rr-rail-width: 236px;
   --rr-glass-fill: rgb(255 255 255 / 0.5);
+  --rr-glass-active-fill: rgb(255 255 255 / 0.94);
+  --rr-glass-light-filter: blur(9px) saturate(1.3);
+  --rr-glass-surface: rgb(255 255 255 / 0.76);
   --rr-glass-tint: linear-gradient(160deg, rgb(106 44 240 / 0.23), transparent 72%);
   --rr-glass-edge: rgb(255 255 255 / 0.75);
   --rr-glass-filter: blur(20px) saturate(1.7);
@@ -55,6 +59,7 @@
   letter-spacing: -.02em;
   text-transform: uppercase;
   white-space: nowrap;
+  justify-self: start;
 }
 
 .rr-header-action {
@@ -133,7 +138,7 @@
 
 @media (max-width: 899px) {
   .rr-dock .rr-tab {
-    flex: 0 1 var(--rr-dock-size);
+    flex: 0 1 var(--rr-dock-tile-width);
     height: var(--rr-dock-size);
     min-height: var(--rr-dock-size);
     border: 1px solid var(--rr-glass-edge);
@@ -152,7 +157,7 @@
   }
 
   .rr-dock .rr-tab[aria-current="page"] {
-    background: rgb(255 255 255 / 0.94);
+    background: var(--rr-glass-active-fill);
     color: var(--rr-violet);
   }
 
@@ -170,8 +175,9 @@
   }
 
   @media (prefers-reduced-transparency: reduce) {
-    .rr-dock .rr-tab {
-      background-color: #fff;
+    .rr-dock .rr-tab,
+    .rr-dock .rr-tab[aria-current="page"] {
+      background: #fff;
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }
@@ -225,4 +231,173 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rr-tab { transition: none; }
+}
+
+/* Общая строка ввода сообщений и её круглые кнопки. */
+.rr-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--rr-glass-edge);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgb(106 44 240 / .14), transparent 65%), rgb(255 255 255 / .92);
+  box-shadow: var(--rr-glass-shadow);
+}
+
+.rr-composer:focus-within { border-color: var(--rr-violet); }
+
+.rr-composer textarea {
+  flex: 1;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--rr-control-height);
+  max-height: 148px;
+  margin: 0;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--rr-ink);
+  font: 500 16px/22px var(--rr-font);
+}
+
+.rr-composer textarea::placeholder {
+  color: rgb(27 11 66 / 0.64);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rr-composer .rr-composer-control {
+  display: grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  padding: 0;
+  width: var(--rr-control-height);
+  height: var(--rr-control-height);
+  border: 1px solid var(--rr-glass-edge);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgb(255 255 255 / .72), transparent 75%), rgb(106 44 240 / .14);
+  color: var(--rr-violet);
+}
+
+.rr-composer .rr-composer-control.rr-composer-send {
+  background: linear-gradient(145deg, rgb(255 255 255 / .20), transparent 65%), rgb(106 44 240 / .88);
+  color: #fff;
+}
+
+.rr-composer .rr-composer-control svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rr-composer .rr-composer-control:disabled { opacity: .5; cursor: default; }
+.rr-composer .rr-composer-control:focus-visible { outline: 2px solid var(--rr-violet); outline-offset: 2px; }
+.rr-composer .rr-composer-control.mic.on { background: var(--rr-lime); color: var(--rr-ink); }
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .rr-composer {
+    background-color: var(--rr-glass-fill);
+    -webkit-backdrop-filter: var(--rr-glass-filter);
+    backdrop-filter: var(--rr-glass-filter);
+  }
+  .rr-composer .rr-composer-control {
+    -webkit-backdrop-filter: var(--rr-glass-light-filter);
+    backdrop-filter: var(--rr-glass-light-filter);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .rr-composer { background: #fff; }
+  .rr-composer, .rr-composer .rr-composer-control {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Сообщения одного типа имеют одинаковое стекло во всех чатах. */
+.rr-message {
+  border: 1px solid var(--rr-glass-edge);
+  border-radius: 28px 28px 28px 10px;
+  background: #fff;
+  color: var(--rr-ink);
+  font: 500 16px/24px var(--rr-font);
+}
+
+:is(.rr-message.rr-message--user, .user .rr-message) {
+  border-color: rgb(255 255 255 / 0.35);
+  border-radius: 28px 28px 10px 28px;
+  background: var(--rr-violet);
+  color: #fff;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .rr-message {
+    background: var(--rr-glass-surface);
+    -webkit-backdrop-filter: var(--rr-glass-filter);
+    backdrop-filter: var(--rr-glass-filter);
+    box-shadow: var(--rr-glass-shadow);
+  }
+
+  :is(.rr-message.rr-message--user, .user .rr-message) { background: rgb(106 44 240 / 0.78); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .rr-message {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :is(.rr-message.rr-message--user, .user .rr-message) { background: var(--rr-violet); }
+}
+
+/* Основная кнопка без модификаторов во всех приложениях. */
+:is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--rr-control-height);
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--rr-control-radius);
+  background: var(--rr-violet);
+  color: #fff;
+  box-shadow: none;
+  font: normal 800 15px/1 var(--rr-display);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .4s var(--rr-ease), color .4s var(--rr-ease), border-color .4s var(--rr-ease), transform .4s var(--rr-ease);
+}
+
+@media (hover: hover) {
+  :is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])):hover:not(:disabled) {
+    background: var(--rr-lime);
+    color: var(--rr-ink);
+    filter: none;
+    transform: translateY(-3px) rotate(-1.5deg) scale(1.04);
+  }
+}
+
+:is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])):disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])) { transition: none; }
+  :is([class="btn"], [class="button"]):not(:where(.auth-screen *, [hidden])):hover:not(:disabled) { transform: none; }
 }
