@@ -298,37 +298,45 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
-      <div className="app-shell" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
-        <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
-        <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
-          <div className="top-in rr-header-row">
-            <span className="wordmark rr-wordmark">РОБОРАБ</span>
-            <div className="top-actions">
-              <button
-                type="button"
-                className="icon-btn rr-header-action"
-                data-tour="menu-button"
-                aria-label="Меню"
-                aria-haspopup="dialog"
-                onClick={() => setSheet('menu')}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="5" r="1" />
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="12" cy="19" r="1" />
-                </svg>
-              </button>
+      <div className="app-viewport" hidden={locked} aria-hidden={locked} {...(locked ? { inert: true } : {})}>
+        <div className="app-shell">
+          <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
+          <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
+            <div className="top-in rr-header-row">
+              <span className="wordmark rr-wordmark">РОБОРАБ</span>
+              <div className="top-actions">
+                <button
+                  type="button"
+                  className="icon-btn rr-header-action"
+                  data-tour="menu-button"
+                  aria-label="Меню"
+                  aria-haspopup="dialog"
+                  onClick={() => setSheet('menu')}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="5" r="1" />
+                    <circle cx="12" cy="12" r="1" />
+                    <circle cx="12" cy="19" r="1" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-          {!online && (
-            <div className="offline-banner" role="status">
-              Нет сети
-            </div>
-          )}
-        </header>
+            {!online && (
+              <div className="offline-banner" role="status">
+                Нет сети
+              </div>
+            )}
+          </header>
 
-        <div className="app-body">
-          <main className="wrap app-main" ref={mainRef}>{children}</main>
+          <div className="app-body">
+            <main className="wrap app-main" ref={mainRef}>{children}</main>
+          </div>
+
+          {/* Сюда выводятся окна расчёта, проверки и передачи: при блокировке они прячутся со страницей */}
+          <div id="overlay-root" />
+
+          {/* При блокировке на PIN обучение прячется вместе со страницей и возвращается после ввода PIN */}
+          <Tour open={tourOpen} mode={tourMode} onClose={closeTour} onMenu={toggleMenuForTour} />
         </div>
 
         <nav className="tabs rr-dock rr-rail" aria-label="Разделы">
@@ -355,12 +363,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             </svg>,
           )}
         </nav>
-
-        {/* Сюда выводятся окна расчёта, проверки и передачи: при блокировке они прячутся со страницей */}
-        <div id="overlay-root" />
-
-        {/* При блокировке на PIN обучение прячется вместе со страницей и возвращается после ввода PIN */}
-        <Tour open={tourOpen} mode={tourMode} onClose={closeTour} onMenu={toggleMenuForTour} />
       </div>
 
       {sheet === 'menu' && !locked && (

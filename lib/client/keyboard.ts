@@ -41,7 +41,7 @@ export function resetPageScroll(): void {
   if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
   const root = document.scrollingElement;
   if (root && root.scrollTop !== 0) root.scrollTop = 0;
-  for (const el of document.querySelectorAll<HTMLElement>('.app-shell, .app-body, .chat-root, .app-main:has(> .chat-root)')) {
+  for (const el of document.querySelectorAll<HTMLElement>('.app-viewport, .app-shell, .app-body, .chat-root, .app-main:has(> .chat-root)')) {
     if (el.scrollTop !== 0) el.scrollTop = 0;
   }
 }
@@ -79,8 +79,8 @@ export function watchKeyboard(): () => void {
       coarse: coarse.matches,
     });
 
-    // Фиксируем высоту установленного окна после закрытия клавиатуры. Промежуточный resize при blur
-    // не должен поднять нижнюю панель. Лишний нижний inset снимаем только при характерном сбое iOS.
+    // Высота visualViewport нужна экрану входа. У тачбара другая рамка: при закрытой клавиатуре
+    // она берёт высоту раскладочного окна, даже если Safari сообщает укороченный visualViewport.
     if (iosStandalone !== undefined && (standalone.matches || iosStandalone)) {
       if (!g.open && g.vvh !== null && g.vvh >= innerH - 80 && (vv?.offsetTop ?? 0) < 2) {
         const visibleHeight = Math.min(innerH, g.vvh);
@@ -88,7 +88,8 @@ export function watchKeyboard(): () => void {
         const safeTop = Number.parseFloat(styles.getPropertyValue('--safe-top')) || 0;
         const safeBottom = Number.parseFloat(styles.getPropertyValue('--safe-bottom')) || 0;
         const fullPortrait = window.screen.height > window.screen.width && Math.abs(window.screen.width - window.innerWidth) <= 2;
-        const credit = fullPortrait ? standaloneBottomCredit(window.screen.height, visibleHeight, safeTop, safeBottom) : 0;
+        const layoutHeight = root.clientHeight || visibleHeight;
+        const credit = fullPortrait ? standaloneBottomCredit(window.screen.height, layoutHeight, safeTop, safeBottom) : 0;
         root.style.setProperty('--standalone-height', `${visibleHeight}px`);
         root.style.setProperty('--rr-safe-bottom-credit', `${credit}px`);
       }

@@ -162,7 +162,7 @@ describe('полоса под часами и шапка', () => {
 
   it('на экранах входа и PIN html и body фиолетовые, а страница приложения лиловая (--bg)', () => {
     expect(css).toMatch(/html:has\(\.auth-screen\),\s*html:has\(\.auth-screen\) body \{\s*background:\s*var\(--color-violet\)/);
-    expect(rule('.app-shell')).toMatch(/background:\s*var\(--color-bg\)/);
+    expect(rule('.app-viewport')).toMatch(/background:\s*var\(--color-bg\)/);
   });
 
   it('режим отображения не влияет на цвета: в стилях нет правил для display-mode (установленное приложение красится так же)', () => {

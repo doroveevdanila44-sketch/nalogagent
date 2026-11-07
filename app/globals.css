@@ -204,37 +204,32 @@
   }
 
   /* ===== Каркас =====
-     Оболочка занимает высоту окна. На телефоне шапка уходит вверх поверх содержимого, а нижняя панель
-     закреплена в оболочке. Прокручивается область main или список сообщений. Страница (html и body) не прокручивается вообще. Высота оболочки это
-     высота видимой области --vvh (lib/client/keyboard.ts, из window.visualViewport), а не 100vh и
-     не 100dvh: Safari на iOS и установленное на экран приложение при открытой клавиатуре
-     уменьшают только visualViewport, 100dvh у них не меняется, и поле ввода оказывалось под
-     клавиатурой. 100dvh остаётся запасным значением, пока скрипт не отработал или visualViewport нет. */
-  html:has(.app-shell, .auth-screen),
-  html:has(.app-shell, .auth-screen) body {
+     Как в eyesfitness, рамка следует за окном, а нижняя навигация лежит рядом с прокручиваемым
+     содержимым. Высота видимой области нужна только пока клавиатура занимает часть окна. */
+  html:has(.app-viewport, .auth-screen),
+  html:has(.app-viewport, .auth-screen) body {
     height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
   }
-  .app-shell[hidden] {
+  .app-viewport[hidden] {
     display: none;
+  }
+  .app-viewport {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--color-bg);
   }
   .app-shell {
     display: flex;
     flex-direction: column;
     height: 100%;
-    height: var(--standalone-height, 100dvh);
     overflow: hidden;
     position: relative;
-    /* страница приложения лиловая (--bg), карточки на ней белые; html и body за ней цвета шапки */
-    background: var(--color-bg);
   }
-  /* Клавиатура открыта: Safari на iOS мог сдвинуть видимую область вниз по странице (--vv-top). Оболочка
-     (высота --vvh) встаёт ровно на видимую область: шапка остаётся под часами, а не уезжает выше
-     видимой части, и чат не виден за значками статус-бара. Сдвиг через top, а не transform: у
-     fixed-окон внутри оболочки (меню, панель расчёта, обучение) остаётся прежний контейнер. */
-  html[data-kb='open'] .app-shell {
+  html[data-kb='open'] .app-viewport {
     height: var(--vvh, 100dvh);
-    position: relative;
     top: var(--vv-top, 0px);
   }
   .app-body {
@@ -4804,8 +4799,8 @@
   }
 }
 
-/* Нижняя навигация привязана к оболочке, высота которой учитывает клавиатуру iOS. */
-.tabs.rr-dock { position: absolute; }
+/* Нижняя навигация закреплена в рамке окна, отдельно от списка. */
+.app-viewport > .tabs.rr-dock { position: absolute; }
 
 @media (max-width: 899px) {
   html[data-kb='open'] .tabs.rr-dock,

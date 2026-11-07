@@ -118,6 +118,17 @@ test('Оболочка: прокрутка на экранах агента, д�
   });
   expect(await boxOf(page, '.composer'), 'поле ввода не двигается при прокрутке списка').toEqual(composerBefore);
 
+  // Установленный iOS иногда сообщает укороченный visualViewport. Старая высота экрана
+  // входа не должна сдвигать рабочий экран и навигацию.
+  const dock = page.locator('nav.tabs');
+  const dockAtRest = await dock.boundingBox();
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--standalone-height', `${window.innerHeight - 59}px`);
+  });
+  expect(await dock.boundingBox()).toEqual(dockAtRest);
+  expect(await dock.evaluate((el) => el.parentElement?.classList.contains('app-viewport'))).toBe(true);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--standalone-height'));
+
   // дашборд
   await page.getByRole('link', { name: 'Дашборд' }).click();
   await expect(page.getByRole('heading', { name: /Группа на/ })).toBeVisible();
