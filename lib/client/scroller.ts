@@ -1,8 +1,14 @@
-/**
- * Прокручиваемая область приложения. Страница (html и body) не прокручивается: шапка и нижняя
- * панель вкладок стоят на месте, прокручивается только main (.app-main). Всё, что раньше трогало
- * прокрутку окна (положение при возврате, подсветка элемента в обучении), работает с ней.
- */
+/** Страницы установленного приложения прокручивают окно. Чат прокручивается отдельно. */
+export function usesDocumentScroll(): boolean {
+  return typeof document !== 'undefined'
+    && Boolean(document.querySelector('.app-viewport[data-document-scroll]:not([hidden])'))
+    && !document.querySelector('.auth-screen')
+    && window.matchMedia('(max-width: 899px) and (display-mode: standalone)').matches;
+}
+
 export function appScroller(): HTMLElement | null {
-  return typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.app-main');
+  if (typeof document === 'undefined') return null;
+  return usesDocumentScroll()
+    ? document.scrollingElement as HTMLElement | null
+    : document.querySelector<HTMLElement>('.app-main');
 }

@@ -48,8 +48,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // Установленное приложение использует системную область iOS и всю доступную высоту.
-  viewportFit: 'auto',
+  // Страница покрывает системную область, чтобы стекло было видно под часами.
+  viewportFit: 'cover',
   // Экранная клавиатура уменьшает раскладочный вьюпорт только у Chrome на Android. Safari на iOS и
   // установленное на экран приложение этого не умеют: у них уменьшается лишь visualViewport, и высоту
   // оболочки задаёт --vvh (lib/client/keyboard.ts), а не 100vh или 100dvh.

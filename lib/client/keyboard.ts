@@ -1,4 +1,5 @@
 import { computeKeyboard } from './viewport';
+import { usesDocumentScroll } from './scroller';
 
 /**
  * Экранная клавиатура на телефоне. Слушает window.visualViewport (resize и scroll), фокус в
@@ -38,6 +39,7 @@ function isTextField(el: Element | null): boolean {
  * разделах main), поэтому их сдвиг, который мог оставить scrollIntoView, тоже снимается.
  */
 export function resetPageScroll(): void {
+  if (usesDocumentScroll()) return;
   if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
   const root = document.scrollingElement;
   if (root && root.scrollTop !== 0) root.scrollTop = 0;
