@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, LOCKED_EVENT, UNLOCKED_EVENT, setCsrf } from '@/lib/client/api';
-import { PAGE_BG_APP, THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
+import { THEME_APP, THEME_AUTH, useThemeColor } from '@/lib/client/theme-color';
 import { copyViewportDiagnostics } from '@/lib/client/viewport-diagnostics';
 import { attachRoborabHeader } from '@/app/roborab-header.js';
 import { PinPad, type PinResult } from './auth/PinPad';
@@ -27,7 +27,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const router = useRouter();
   const [locked, setLocked] = useState(false);
   const [online, setOnline] = useState(true);
-  const [headerGlass, setHeaderGlass] = useState(false);
   const [sheet, setSheet] = useState<'none' | 'menu' | 'changePin'>('none');
   // PIN устройства заблокирован после пяти ошибок: на экране PIN слева появляется «Войти по паролю»
   const [pinBlocked, setPinBlocked] = useState(false);
@@ -38,7 +37,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
   const onboardingChecked = useRef(false);
   const authLook = locked || sheet === 'changePin';
   const canHideHeader = online && !locked && sheet === 'none' && !tourOpen;
-  useThemeColor(authLook ? THEME_AUTH : canHideHeader && headerGlass ? PAGE_BG_APP : THEME_APP, authLook ? THEME_AUTH : PAGE_BG_APP);
+  useThemeColor(authLook ? THEME_AUTH : canHideHeader ? null : THEME_APP, authLook ? THEME_AUTH : null);
   const pendingServerLock = useRef(false);
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -171,7 +170,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
     return attachRoborabHeader(header, status, {
       scrollSelector: 'html, .app-main, .app-main .chat-scroll',
       paused: () => document.documentElement.dataset.kb === 'open',
-      onGlass: setHeaderGlass,
     });
   }, [canHideHeader, pathname]);
 
@@ -307,8 +305,8 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
         aria-hidden={locked}
         {...(locked ? { inert: true } : {})}
       >
-        <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
         <div className="app-shell">
+          <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
           <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
             <div className="top-in rr-header-row">
               <span className="wordmark rr-wordmark">РОБОРАБ</span>

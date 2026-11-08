@@ -4828,8 +4828,10 @@
   .app-shell .sheet-bar { top: var(--header-clearance); }
 }
 
-/* В установленном приложении страницы прокручиваются как в Beauty Box. Чат оставляет свой список. */
+/* В установленном приложении шапка и стекло стоят в открытой оболочке, как в eyesfitness. */
 @media (max-width: 899px) and (display-mode: standalone) {
+  html:not([data-kb='open']):not(:has(.auth-screen)):has(.app-viewport:not([hidden])),
+  html:not([data-kb='open']) body:not(:has(.auth-screen)):has(.app-viewport:not([hidden])),
   html:not(:has(.auth-screen)):has(.app-viewport[data-document-scroll]:not([hidden])),
   body:not(:has(.auth-screen)):has(.app-viewport[data-document-scroll]:not([hidden])) {
     height: auto;
@@ -4837,16 +4839,20 @@
     scroll-padding-top: var(--header-h);
   }
 
+  html:not([data-kb='open']) .app-viewport:not([hidden]),
   .app-viewport[data-document-scroll]:not([hidden]) {
-    height: auto;
-    min-height: 100dvh;
-    top: auto;
+    display: contents;
+  }
+
+  html:not([data-kb='open']) .app-viewport:not([data-document-scroll]) > .app-shell {
+    height: 100dvh;
     overflow: visible;
   }
 
   .app-viewport[data-document-scroll] > .app-shell {
     display: block;
     height: auto;
+    min-height: 100dvh;
     overflow: visible;
   }
 
@@ -4855,15 +4861,20 @@
     padding-top: 24px;
   }
 
+  html:not([data-kb='open']) .app-shell > .top,
   .app-viewport[data-document-scroll] .app-shell > .top {
     position: sticky;
-    inset: 0 0 auto;
+  }
+
+  /* Список сообщений проходит под стеклом. Отступ первой строки уже задан в .chat-scroll. */
+  html:not([data-kb='open']) .app-viewport:not([data-document-scroll]) .app-shell > .top {
+    margin-bottom: calc(0px - var(--header-h));
   }
 
   .app-viewport > .tabs.rr-dock { position: fixed; }
 }
 
-/* Стекло привязано к окну. В режиме клавиатуры видимая область может сместиться. */
+/* При открытой клавиатуре Safari может сдвинуть видимую область вниз. */
 @media (max-width: 899px) {
-  .app-viewport > .rr-scroll-status { top: var(--vv-top, 0px); }
+  .app-shell > .rr-scroll-status { top: var(--vv-top, 0px); }
 }
