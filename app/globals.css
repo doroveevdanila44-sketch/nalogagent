@@ -4874,7 +4874,9 @@
   .app-viewport > .tabs.rr-dock { position: fixed; }
 }
 
-/* При открытой клавиатуре Safari может сдвинуть видимую область вниз. */
+/* Стекло лежит у края окна независимо от контейнера прокрутки. */
+body > .rr-scroll-status[hidden] { display: none; }
+
 @media (max-width: 899px) {
-  .app-shell > .rr-scroll-status { top: var(--vv-top, 0px); }
+  body > .rr-scroll-status { top: var(--vv-top, 0px); }
 }

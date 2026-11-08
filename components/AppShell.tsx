@@ -298,6 +298,7 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
 
   return (
     <>
+      <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" hidden={authLook} />
       <div
         className="app-viewport"
         data-document-scroll={documentScroll ? '' : undefined}
@@ -306,7 +307,6 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
         {...(locked ? { inert: true } : {})}
       >
         <div className="app-shell">
-          <div ref={statusRef} className="rr-scroll-status" aria-hidden="true" />
           <header className="top rr-header" ref={headerRef} data-rr-scroll-header="">
             <div className="top-in rr-header-row">
               <span className="wordmark rr-wordmark">РОБОРАБ</span>
