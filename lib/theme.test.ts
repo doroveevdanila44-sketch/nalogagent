@@ -39,11 +39,11 @@ function contrast(a: string, b: string): number {
 describe('палитра РОБОРАБ v3', () => {
   it('значения совпадают с docs/DESIGN.md', () => {
     expect(PALETTE).toMatchObject({
-      violet: '#6A2CF0',
-      deep: '#25104F',
-      ink: '#1B0B42',
-      lime: '#CDF200',
-      bg: '#F5F2FC',
+      violet: '#141414',
+      deep: '#232323',
+      ink: '#141414',
+      lime: '#B79BFF',
+      bg: '#F4F4F2',
       white: '#FFFFFF',
       bblue: '#0957E8',
       sky: '#5AA9FF',
@@ -62,7 +62,7 @@ describe('палитра РОБОРАБ v3', () => {
   it('производные mute, line, soft: rgb с прозрачностью в CSS равен сплошному цвету на белом в lib/theme.ts', () => {
     const css = read('app/globals.css');
     const ALPHA = { mute: 0.64, line: 0.12, soft: 0.07 } as const;
-    const BASE = { mute: [27, 11, 66], line: [27, 11, 66], soft: [106, 44, 240] } as const;
+    const BASE = { mute: [20, 20, 20], line: [20, 20, 20], soft: [123, 77, 255] } as const;
     for (const [key, name] of Object.entries(CSS_ALPHA_TOKEN)) {
       const m = css.match(new RegExp(`--color-${name}:\\s*rgb\\((\\d+) (\\d+) (\\d+) / ([0-9.]+)\\)`));
       expect(m, `нет токена --color-${name}`).not.toBeNull();
@@ -85,15 +85,15 @@ describe('палитра РОБОРАБ v3', () => {
 
   it('цвета юрлиц: Альфа, Бета, Дельта, Гамма, Эпсилон', () => {
     expect(ENTITY_COLORS).toEqual({
-      alfa: '#6A2CF0',
-      beta: '#CDF200',
+      alfa: '#141414',
+      beta: '#B79BFF',
       delta: '#5AA9FF',
-      gamma: '#1B0B42',
+      gamma: '#141414',
       epsilon: '#0957E8',
     });
     // сид кладёт в базу те же цвета, интерфейс берёт по id и не зависит от того, обновлена ли база
     for (const e of SEED_ENTITIES) expect(e.color).toBe(ENTITY_COLORS[e.id]);
-    expect(entityColor({ id: 'alfa', color: '#000000' })).toBe('#6A2CF0');
+    expect(entityColor({ id: 'alfa', color: '#000000' })).toBe('#141414');
     expect(entityColor({ id: 'новое', color: '#123456' })).toBe('#123456');
   });
 });
@@ -147,7 +147,7 @@ describe('полоса под часами и шапка', () => {
   };
 
   it('общая фиолетовая шапка со скруглением снизу, html и body в приложении светлые', () => {
-    expect(shellCss).toMatch(/--rr-violet:\s*#6a2cf0/i);
+    expect(shellCss).toMatch(/--rr-violet:\s*#141414/i);
     expect(shellCss).toMatch(/--rr-header-radius:\s*28px/);
     expect(shellCss).toMatch(/\.rr-header\s*\{[^}]*background:\s*var\(--rr-violet\)/);
     expect(read('components/AppShell.tsx')).not.toContain('top-title');

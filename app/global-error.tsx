@@ -23,8 +23,8 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           padding: 24,
           textAlign: 'center',
           fontFamily: 'Manrope, system-ui, -apple-system, "Segoe UI", sans-serif',
-          background: '#F5F2FC',
-          color: '#1B0B42',
+          background: '#F4F4F2',
+          color: '#141414',
         }}
       >
         <h1
@@ -38,7 +38,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             margin: 0,
           }}
         >Что-то пошло не так</h1>
-        <p style={{ margin: 0, color: 'rgba(27,11,66,.64)', maxWidth: '32ch', lineHeight: 1.45 }}>
+        <p style={{ margin: 0, color: 'rgba(20,20,20,.64)', maxWidth: '32ch', lineHeight: 1.45 }}>
           Приложение не открылось. Повторите через несколько секунд.
         </p>
         <button
@@ -49,7 +49,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             padding: '0 20px',
             border: 0,
             borderRadius: 999,
-            background: '#6A2CF0',
+            background: '#141414',
             color: '#fff',
             font: 'inherit',
             fontFamily: 'Montserrat, Manrope, system-ui, sans-serif',

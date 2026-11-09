@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#6A2CF0"/>
+  <rect width="512" height="512" fill="#141414"/>
   <g fill="none" stroke-width="48" stroke-linecap="butt" stroke-linejoin="miter" transform="skewX(-10) translate(46 0)">
-    <path d="M178 394 V138 H292 A82 82 0 0 1 292 302 H178" stroke="#CDF200"/>
+    <path d="M178 394 V138 H292 A82 82 0 0 1 292 302 H178" stroke="#B79BFF"/>
   </g>
 </svg>

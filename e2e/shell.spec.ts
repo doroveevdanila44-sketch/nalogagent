@@ -147,11 +147,11 @@ test('Оболочка: прокрутка на экранах агента, д�
   await expect(status).toHaveCSS('opacity', '1');
   await expect(status).toHaveCSS('backdrop-filter', 'blur(9px) saturate(1.3)');
   await expect(status).toHaveCSS('mask-image', /45%.*100%/);
-  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#f5f2fc$/i);
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#f4f4f2$/i);
   await scrollMain(page, 180);
   await expect(header).toBeVisible();
   await expect(status).toHaveCSS('opacity', '0');
-  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#6a2cf0$/i);
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', /^#141414$/i);
   await expect.poll(async () => (await boxOf(page, 'header.top'))?.y).toBe(0);
   await page.evaluate(() => document.documentElement.style.removeProperty('--rr-safe-top'));
 

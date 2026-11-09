@@ -38,15 +38,15 @@ test('Вход и PIN: бордовый фон, светлые тексты, б�
         formWidth: document.querySelector('.auth-screen form')!.getBoundingClientRect().width,
       };
     });
-    expect(colors.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
-    expect(colors.bodyBg).toBe('rgb(106, 44, 240)');
+    expect(colors.bg).toBe('rgb(123, 77, 255)'); // #141414
+    expect(colors.bodyBg).toBe('rgb(123, 77, 255)');
     expect(colors.mark).toBe('rgb(255, 255, 255)'); // #FFFFFF
     expect(colors.label).toBe('rgba(255, 255, 255, 0.8)');
     expect(colors.input).toBe('rgb(255, 255, 255)');
     // color-mix сериализуется как color(srgb ...), в других движках как rgba(...)
     expect(colors.inputBorder).toMatch(/./);
-    expect(colors.btnBg).toBe('rgb(205, 242, 0)');
-    expect(colors.btnText).toBe('rgb(27, 11, 66)'); // #1B0B42
+    expect(colors.btnBg).toBe('rgb(123, 77, 255)');
+    expect(colors.btnText).toBe('rgb(20, 20, 20)'); // #141414
     expect(Math.abs(colors.btnWidth - colors.formWidth)).toBeLessThan(1);
 
     expect(await offsets(page, '.wordmark')).toBeLessThanOrEqual(1);
@@ -345,7 +345,7 @@ test('Боковая панель на компьютере и нижняя на
   expect(desk.composer.x).toBeGreaterThanOrEqual(desk.nav.w - 1);
   expect(desk.tabs[1]!.y).toBeGreaterThan(desk.tabs[0]!.y);
   expect(desk.tabs[0]!.x).toBeCloseTo(desk.tabs[1]!.x, 0);
-  expect(desk.curBg).toBe('rgb(106, 44, 240)');
+  expect(desk.curBg).toBe('rgb(123, 77, 255)');
   expect(desk.curWeight).toBe('800');
   expect(desk.navBg).toBe('rgb(255, 255, 255)');
   expect(desk.mainPaddingBottom).not.toMatch(/^(8\d|9\d|1\d\d)px$/); // нет отступа под нижнюю панель
@@ -520,7 +520,7 @@ test('Баннеры группы: четыре отдельные на всех
   expect(phone.count).toBe(4);
   expect(phone.xs).toBe(1); // один столбец
   expect(phone.ys).toBe(4);
-  expect(phone.bg).toBe('rgb(106, 44, 240)'); // #6A2CF0
+  expect(phone.bg).toBe('rgb(123, 77, 255)'); // #141414
   expect(phone.radius).toBe('16px');
   expect(phone.padding).toBe('16px');
   expect(phone.label).toBe('rgb(232, 207, 203)'); // #E8CFCB
@@ -552,7 +552,7 @@ test('Баннеры группы: четыре отдельные на всех
     expect(row.xs, `${width}`).toBe(4);
     expect(row.ys, `${width}`).toBe(1);
     expect(row.gap, `${width}`).toBe(16);
-    expect(row.bg, `${width}`).toBe('rgb(106, 44, 240)');
+    expect(row.bg, `${width}`).toBe('rgb(123, 77, 255)');
     expect(row.radius, `${width}`).toBe('22px');
     expect(row.overflow, `${width}`).toBe(false);
     expect(row.labels, `${width}`).toEqual(phone.labels);

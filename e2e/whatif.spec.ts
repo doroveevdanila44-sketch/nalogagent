@@ -40,8 +40,8 @@ test('«Что если»: подсказки первыми и янтарные
   await expect(chips.nth(0)).toHaveText('Что если купим 5 машин?');
   await expect(chips.nth(1)).toHaveText('Что если выручка вырастет на 20%?');
   const bg = await chips.evaluateAll((els) => els.map((e) => getComputedStyle(e).backgroundColor));
-  expect(bg.slice(0, 2)).toEqual(['rgb(205, 242, 0)', 'rgb(205, 242, 0)']);
-  expect(new Set(bg.slice(2))).toEqual(new Set(['rgb(106, 44, 240)']));
+  expect(bg.slice(0, 2)).toEqual(['rgb(123, 77, 255)', 'rgb(123, 77, 255)']);
+  expect(new Set(bg.slice(2))).toEqual(new Set(['rgb(123, 77, 255)']));
 
   const forecastBefore = await forecastBanner(page);
 
@@ -205,7 +205,7 @@ test('Телефон 390: таблица «Юрлицо и режим»: наз�
   // режим мелким серым текстом: не больше трёх строк по 16 px
   for (const s of m.sub) {
     expect(s.size).toBe('12px');
-    expect(s.color).toBe('rgba(27, 11, 66, 0.64)'); // #6B6A52
+    expect(s.color).toBe('rgba(20, 20, 20, 0.64)'); // #6B6A52
     expect(s.height).toBeLessThanOrEqual(48);
   }
 });

@@ -17,7 +17,7 @@ export function attachRoborabHeader(header, status, options = {}) {
     glassTheme = glass;
     if (options.onGlass) options.onGlass(glass);
     else {
-      const color = glass ? '#f5f2fc' : '#6a2cf0';
+      const color = glass ? '#f4f4f2' : '#141414';
       for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.content = color;
     }
   }

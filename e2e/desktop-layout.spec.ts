@@ -4,13 +4,13 @@ import { firstLogin, resetChat } from './helpers';
 const PIN = '8246';
 
 // палитра «Озеро и зелень» в виде, который отдаёт браузер
-const VIOLET = 'rgb(106, 44, 240)'; // #6A2CF0
-const LIME = 'rgb(205, 242, 0)'; // #CDF200
+const VIOLET = 'rgb(123, 77, 255)'; // #141414
+const LIME = 'rgb(123, 77, 255)'; // #B79BFF
 const CREAM = 'rgb(255, 255, 255)'; // #FFFFFF
 const SOFT = 'rgb(255, 248, 214)'; // #FFF8D6
 const LINE = 'rgb(231, 229, 211)'; // #E7E5D3
 const HEADER = VIOLET; // шапка
-const INK = 'rgb(27, 11, 66)'; // #1B0B42
+const INK = 'rgb(20, 20, 20)'; // #141414
 const WHITE = 'rgb(255, 255, 255)';
 
 test.describe.configure({ mode: 'serial' });

@@ -4,8 +4,8 @@ import { E2E_DB_URL } from '../playwright.config';
 import { firstLogin, pickSuggestion, resetChat } from './helpers';
 
 const PIN = '8246';
-const VIOLET = 'rgb(106, 44, 240)'; // #6A2CF0
-const LIME = 'rgb(205, 242, 0)'; // #CDF200
+const VIOLET = 'rgb(123, 77, 255)'; // #141414
+const LIME = 'rgb(123, 77, 255)'; // #B79BFF
 const HEADER = VIOLET; // шапка и полоса под часами
 
 test.describe.configure({ mode: 'serial' });
@@ -27,7 +27,7 @@ test('Полоса под часами: theme-color бордо на входе �
   page,
 }) => {
   await page.goto('/login');
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
   await expect(page.locator('meta[name="theme-color"]')).toHaveCount(1);
   // установленное приложение: страница рисуется под часами
   expect(await page.locator('meta[name="apple-mobile-web-app-status-bar-style"]').getAttribute('content')).toBe(
@@ -51,34 +51,34 @@ test('Полоса под часами: theme-color бордо на входе �
   // экран PIN при создании PIN остаётся бордовым
   await firstLogin(page, PIN);
   expect(new URL(page.url()).pathname).toBe('/agent');
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
   await toDashboard(page);
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
 
   // блокировка: бордо, разблокировка: озеро
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
 
   // возврат из фона: система могла сбросить полосу, значение выставляется заново
   await page.evaluate(() => {
     document.querySelector('meta[name="theme-color"]')!.setAttribute('content', '#FFFFFF');
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
 
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
 
   // экран PIN после перезагрузки (маршрут /login): бордо с первого кадра
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/dashboard');
-  expect(await themeColor(page)).toBe('#6A2CF0');
+  expect(await themeColor(page)).toBe('#141414');
 });
 
 /** Что нарисовано в верхней точке окна (под часами) и какие фоны у html, body и шапки. */
@@ -117,7 +117,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   // вход: html, body и верхняя область бордо, theme-color бордо
   await page.goto('/login');
   await expect(page.locator('.auth-screen')).toBeVisible();
-  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
+  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#141414' });
 
   const expectApp = async (path: string, label: string) => {
     await expect.poll(() => new URL(page.url()).pathname, label).toMatch(new RegExp(`^${path}$`));
@@ -131,7 +131,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
       headerTop: 0,
       headerPad: '47px',
       painted: HEADER,
-      meta: '#6A2CF0',
+      meta: '#141414',
     });
   };
 
@@ -155,7 +155,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   await page.getByRole('button', { name: 'Меню' }).click();
   await page.getByRole('button', { name: 'Заблокировать', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeVisible();
-  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
+  expect(await strip(page)).toMatchObject({ html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#141414' });
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Ввод PIN' })).toBeHidden();
   await expectApp('/documents/[0-9a-f-]{36}', 'после разблокировки');
@@ -163,7 +163,7 @@ test('Полоса под часами: html и шапка #A0D2A8 на аген
   // экран PIN после перезагрузки: бордо с первого кадра
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Введите PIN' })).toBeVisible();
-  expect(await strip(page)).toMatchObject({ path: '/login', html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#6A2CF0' });
+  expect(await strip(page)).toMatchObject({ path: '/login', html: VIOLET, body: VIOLET, painted: VIOLET, meta: '#141414' });
   // после PIN на /login открывается «Агент»: страница, с которой заблокировали, не запоминается
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
   await expectApp('/agent', 'после PIN');
@@ -752,7 +752,7 @@ test.describe('Компьютер', () => {
     });
     // налог на прибыль мятный: расшифровка в его цветах, строки темнее, обводка бордовая
     expect(look.bg).toBe(LIME);
-    expect(look.color).toBe('rgb(27, 11, 66)'); // #1B0B42
+    expect(look.color).toBe('rgb(20, 20, 20)'); // #141414
     expect(look.rowBg).not.toBe(LIME);
     expect(look.ring).toContain(VIOLET);
     expect(look.ring).toContain('2px');

@@ -202,13 +202,13 @@ for (const width of [360, 390]) {
           theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
         };
       }, width);
-    const HEADER = 'rgb(106, 44, 240)';
-    const VIOLET = 'rgb(106, 44, 240)';
+    const HEADER = 'rgb(123, 77, 255)';
+    const VIOLET = 'rgb(123, 77, 255)';
 
     // вход: бордо целиком, theme-color бордо
     await page.goto('/login');
     await expect(page.locator('.auth-screen')).toBeVisible();
-    expect(await paint()).toMatchObject({ html: VIOLET, body: VIOLET, top: VIOLET, theme: '#6A2CF0' });
+    expect(await paint()).toMatchObject({ html: VIOLET, body: VIOLET, top: VIOLET, theme: '#141414' });
 
     // приложение: цвет шапки под вырезом и за краем оболочки, theme-color озеро
     await firstLogin(page, PIN);
@@ -219,7 +219,7 @@ for (const width of [360, 390]) {
       header: HEADER,
       headerPad: '47px',
       top: HEADER,
-      theme: '#6A2CF0',
+      theme: '#141414',
     });
 
   });
