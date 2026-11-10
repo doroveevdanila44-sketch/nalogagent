@@ -40,8 +40,8 @@ test('«Что если»: подсказки первыми и янтарные
   await expect(chips.nth(0)).toHaveText('Что если купим 5 машин?');
   await expect(chips.nth(1)).toHaveText('Что если выручка вырастет на 20%?');
   const bg = await chips.evaluateAll((els) => els.map((e) => getComputedStyle(e).backgroundColor));
-  expect(bg.slice(0, 2)).toEqual(['rgb(123, 77, 255)', 'rgb(123, 77, 255)']);
-  expect(new Set(bg.slice(2))).toEqual(new Set(['rgb(123, 77, 255)']));
+  expect(bg.slice(0, 2)).toEqual(['rgb(10, 132, 255)', 'rgb(10, 132, 255)']);
+  expect(new Set(bg.slice(2))).toEqual(new Set(['rgb(10, 132, 255)']));
 
   const forecastBefore = await forecastBanner(page);
 

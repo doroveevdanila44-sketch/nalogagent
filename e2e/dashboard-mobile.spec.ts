@@ -4,8 +4,8 @@ import { E2E_DB_URL } from '../playwright.config';
 import { firstLogin, pickSuggestion, resetChat } from './helpers';
 
 const PIN = '8246';
-const VIOLET = 'rgb(123, 77, 255)'; // #141414
-const LIME = 'rgb(123, 77, 255)'; // #B79BFF
+const VIOLET = 'rgb(10, 132, 255)'; // #141414
+const LIME = 'rgb(10, 132, 255)'; // #4DA3FF
 const HEADER = VIOLET; // шапка и полоса под часами
 
 test.describe.configure({ mode: 'serial' });

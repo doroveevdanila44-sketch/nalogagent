@@ -11,8 +11,8 @@ const PIN = '8246';
 const SHOTS = '.data/shots';
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const VIOLET = 'rgb(123, 77, 255)'; // #141414
-const LEMON = 'rgb(123, 77, 255)'; // lime
+const VIOLET = 'rgb(10, 132, 255)'; // #141414
+const LEMON = 'rgb(10, 132, 255)'; // lime
 
 test.describe.configure({ mode: 'serial' });
 

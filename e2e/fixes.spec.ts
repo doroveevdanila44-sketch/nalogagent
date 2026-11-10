@@ -202,8 +202,8 @@ for (const width of [360, 390]) {
           theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
         };
       }, width);
-    const HEADER = 'rgb(123, 77, 255)';
-    const VIOLET = 'rgb(123, 77, 255)';
+    const HEADER = 'rgb(10, 132, 255)';
+    const VIOLET = 'rgb(10, 132, 255)';
 
     // вход: бордо целиком, theme-color бордо
     await page.goto('/login');
