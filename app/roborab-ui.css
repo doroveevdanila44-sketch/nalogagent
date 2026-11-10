@@ -24,14 +24,14 @@
   --rr-dock-inset: 16px;
   --rr-dock-space: calc(var(--rr-dock-size) + 2 * var(--rr-dock-inset) + var(--rr-safe-bottom));
   --rr-rail-width: 236px;
-  --rr-glass-fill: rgb(255 255 255 / 0.5);
-  --rr-glass-active-fill: rgb(255 255 255 / 0.94);
-  --rr-glass-light-filter: blur(9px) saturate(1.3);
-  --rr-glass-surface: rgb(255 255 255 / 0.76);
-  --rr-glass-tint: linear-gradient(160deg, rgb(10 132 255 / 0.23), transparent 72%);
-  --rr-glass-edge: rgb(255 255 255 / 0.75);
-  --rr-glass-filter: blur(20px) saturate(1.7);
-  --rr-glass-shadow: 0 10px 24px -14px rgb(0 0 0 / 0.3);
+  --rr-glass-fill: rgb(244 246 249 / 0.78);
+  --rr-glass-active-fill: #141414;
+  --rr-glass-light-filter: blur(30px) saturate(.9);
+  --rr-glass-surface: rgb(244 246 249 / 0.78);
+  --rr-glass-tint: linear-gradient(rgb(244 246 249 / 0.78), rgb(244 246 249 / 0.78));
+  --rr-glass-edge: rgb(255 255 255 / 0.38);
+  --rr-glass-filter: blur(30px) saturate(.9);
+  --rr-glass-shadow: 0 6px 22px -10px rgb(10 30 70 / 0.28);
 }
 
 .rr-header {
@@ -143,7 +143,7 @@
     min-height: var(--rr-dock-size);
     border: 1px solid var(--rr-glass-edge);
     border-radius: 26px;
-    background: var(--rr-glass-tint), rgb(255 255 255 / 0.9);
+    background: var(--rr-glass-fill);
     box-shadow: var(--rr-glass-shadow);
     pointer-events: auto;
   }
@@ -158,7 +158,7 @@
 
   .rr-dock .rr-tab[aria-current="page"] {
     background: var(--rr-glass-active-fill);
-    color: var(--rr-violet);
+    color: #fff;
   }
 
   .rr-dock .rr-tab-label {
@@ -241,7 +241,7 @@
   padding: 6px;
   border: 1px solid var(--rr-glass-edge);
   border-radius: 28px;
-  background: linear-gradient(135deg, rgb(10 132 255 / .14), transparent 65%), rgb(255 255 255 / .92);
+  background: var(--rr-glass-fill);
   box-shadow: var(--rr-glass-shadow);
 }
 
@@ -283,12 +283,12 @@
   height: var(--rr-control-height);
   border: 1px solid var(--rr-glass-edge);
   border-radius: 50%;
-  background: linear-gradient(145deg, rgb(255 255 255 / .72), transparent 75%), rgb(10 132 255 / .14);
+  background: rgb(255 255 255 / .55);
   color: var(--rr-violet);
 }
 
 .rr-composer .rr-composer-control.rr-composer-send {
-  background: linear-gradient(145deg, rgb(255 255 255 / .20), transparent 65%), rgb(10 132 255 / .88);
+  background: #141414;
   color: #fff;
 }
 
@@ -339,7 +339,7 @@
 :is(.rr-message.rr-message--user, .user .rr-message) {
   border-color: rgb(255 255 255 / 0.35);
   border-radius: 28px 28px 10px 28px;
-  background: var(--rr-violet);
+  background: #0a84ff;
   color: #fff;
 }
 
@@ -351,7 +351,7 @@
     box-shadow: var(--rr-glass-shadow);
   }
 
-  :is(.rr-message.rr-message--user, .user .rr-message) { background: rgb(10 132 255 / 0.78); }
+  :is(.rr-message.rr-message--user, .user .rr-message) { background: #0a84ff; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 6px 18px -8px rgb(0 60 160 / .5); }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -361,7 +361,7 @@
     backdrop-filter: none;
   }
 
-  :is(.rr-message.rr-message--user, .user .rr-message) { background: var(--rr-violet); }
+  :is(.rr-message.rr-message--user, .user .rr-message) { background: #0a84ff; }
 }
 
 /* Основная кнопка без модификаторов во всех приложениях. */
