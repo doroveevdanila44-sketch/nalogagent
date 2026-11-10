@@ -5,7 +5,7 @@ const PIN = '8246';
 
 // палитра «Озеро и зелень» в виде, который отдаёт браузер
 const VIOLET = 'rgb(10, 132, 255)'; // #141414
-const LIME = 'rgb(10, 132, 255)'; // #4DA3FF
+const LIME = 'rgb(10, 132, 255)'; // #0A84FF
 const CREAM = 'rgb(255, 255, 255)'; // #FFFFFF
 const SOFT = 'rgb(255, 248, 214)'; // #FFF8D6
 const LINE = 'rgb(231, 229, 211)'; // #E7E5D3

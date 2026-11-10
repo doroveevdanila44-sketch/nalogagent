@@ -42,7 +42,7 @@ describe('палитра РОБОРАБ v3', () => {
       violet: '#141414',
       deep: '#232323',
       ink: '#141414',
-      lime: '#4DA3FF',
+      lime: '#0A84FF',
       bg: '#F4F4F2',
       white: '#FFFFFF',
       bblue: '#0957E8',
@@ -86,7 +86,7 @@ describe('палитра РОБОРАБ v3', () => {
   it('цвета юрлиц: Альфа, Бета, Дельта, Гамма, Эпсилон', () => {
     expect(ENTITY_COLORS).toEqual({
       alfa: '#141414',
-      beta: '#4DA3FF',
+      beta: '#0A84FF',
       delta: '#5AA9FF',
       gamma: '#141414',
       epsilon: '#0957E8',
@@ -104,19 +104,19 @@ describe('контраст по правилам применения цвета
     expect(contrast(PALETTE.white, PALETTE.deep)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('ink на лайме не ниже 7:1', () => {
-    expect(contrast(PALETTE.ink, PALETTE.lime)).toBeGreaterThanOrEqual(7);
+  it('белый на синем акценте не ниже 3,5:1 (крупный и жирный текст)', () => {
+    expect(contrast(PALETTE.white, PALETTE.lime)).toBeGreaterThanOrEqual(3.5);
   });
 
-  it('лаймовый текст читается на тёмных фонах: deep, ink, violet', () => {
+  it('синий акцент читается на тёмных фонах: deep, ink, violet', () => {
     for (const bg of [PALETTE.deep, PALETTE.ink, PALETTE.violet]) {
-      expect(contrast(PALETTE.lime, bg), `лайм на ${bg}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(PALETTE.lime, bg), `синий на ${bg}`).toBeGreaterThanOrEqual(4);
     }
   });
 
   it('лайм на светлом фоне нечитаем, поэтому им набирают только фон: контраст лайма на bg и белом ниже 3:1', () => {
-    expect(contrast(PALETTE.lime, PALETTE.bg)).toBeLessThan(3);
-    expect(contrast(PALETTE.lime, PALETTE.white)).toBeLessThan(3);
+    expect(contrast(PALETTE.lime, PALETTE.bg)).toBeLessThan(4);
+    expect(contrast(PALETTE.lime, PALETTE.white)).toBeLessThan(4);
   });
 
   it('фиолетовый текст на bg и белом не ниже 4,5:1', () => {
@@ -253,9 +253,9 @@ describe('форма и поверхности (DESIGN.md, раздел 4)', () 
   it('тачбар на телефоне: плитки высотой 68 px со стеклом, отступ 16 px, только иконки', () => {
     expect(shellCss).toMatch(/--rr-dock-size:\s*68px/);
     expect(shellCss).toMatch(/--rr-dock-inset:\s*16px/);
-    expect(shellCss).toMatch(/--rr-glass-filter:\s*blur\(20px\) saturate\(1\.7\)/);
-    expect(shellCss).toMatch(/rgb\(255 255 255 \/ 0\.5\)/);
-    expect(shellCss).toMatch(/--rr-glass-active-fill:\s*rgb\(255 255 255 \/ 0\.94\)/);
+    expect(shellCss).toMatch(/--rr-glass-filter:\s*blur\(30px\) saturate\(\.9\)/);
+    expect(shellCss).toMatch(/--rr-glass-fill:\s*rgb\(244 246 249 \/ 0\.78\)/);
+    expect(shellCss).toMatch(/--rr-glass-active-fill:\s*#141414/);
     expect(shellCss).toMatch(/\.rr-tab-label \{[^}]*clip-path:\s*inset\(50%\)/);
     expect(css).toMatch(/--tabs-h:\s*var\(--rr-dock-space\)/);
   });

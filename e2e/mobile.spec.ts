@@ -469,7 +469,7 @@ test.describe('Компьютер', () => {
     const bg = () => chip.evaluate((e) => getComputedStyle(e).backgroundColor);
     expect(await bg()).toBe('rgb(10, 132, 255)'); // #141414
     await chip.hover();
-    await expect.poll(bg).toBe('rgb(10, 132, 255)'); // #4DA3FF
+    await expect.poll(bg).toBe('rgb(10, 132, 255)'); // #0A84FF
 
     // нажатие: фон тот же, лёгкое уменьшение до 0,97
     await page.mouse.down();
