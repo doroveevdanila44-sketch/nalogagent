@@ -311,6 +311,20 @@ export function AppShell({ children, csrf, idleMinutes, backgroundSeconds }: Pro
             <div className="top-in rr-header-row">
               <span className="wordmark rr-wordmark">РОБОРАБ</span>
               <div className="top-actions">
+                {/* Чат РОБОРАБ открывается в новой вкладке: строгая политика CSP не пускает чужие фреймы к налоговым данным */}
+                <a
+                  className="icon-btn rr-header-action"
+                  href="https://roborabaichat.vercel.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Чат с РОБОРАБ"
+                  title="Чат с РОБОРАБ"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    <path d="M8 10h.01M12 10h.01M16 10h.01" />
+                  </svg>
+                </a>
                 <button
                   type="button"
                   className="icon-btn rr-header-action"
